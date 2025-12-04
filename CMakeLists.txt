@@ -7,8 +7,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SRC_FILES
-  src/Engine.cpp
-  src/Application.cpp
+  src/core/Engine.cpp
+  src/core/Application.cpp
+  src/input/InputManager.cpp
 )
 
 include_directories(include)
