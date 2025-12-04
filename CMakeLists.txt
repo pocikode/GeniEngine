@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 
 project(OrbisEngine)
 
-set(CMAKE_C_STANDARD 17)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SRC_FILES
@@ -15,6 +15,8 @@ set(SRC_FILES
   src/render/Material.cpp
   src/render/Mesh.cpp
   src/render/RenderQueue.cpp
+  src/scene/GameObject.cpp
+  src/scene/Scene.cpp
 )
 
 include_directories(include)
