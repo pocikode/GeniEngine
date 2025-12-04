@@ -13,6 +13,8 @@ set(SRC_FILES
   src/graphics/ShaderProgram.cpp
   src/graphics/GraphicsAPI.cpp
   src/render/Material.cpp
+  src/render/Mesh.cpp
+  src/render/RenderQueue.cpp
 )
 
 include_directories(include)

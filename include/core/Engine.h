@@ -1,6 +1,7 @@
 #pragma once
 #include "graphics/GraphicsAPI.h"
 #include "input/InputManager.h"
+#include "render/RenderQueue.h"
 #include <chrono>
 #include <memory>
 
@@ -32,6 +33,7 @@ class Engine
     Application *GetApplication();
     InputManager &GetInputManager();
     GraphicsAPI &GetGraphicsAPI();
+    RenderQueue &GetRenderQueue();
 
   private:
     std::unique_ptr<Application> m_application;
@@ -39,6 +41,7 @@ class Engine
     GLFWwindow *m_window = nullptr;
     InputManager m_inputManager;
     GraphicsAPI m_graphicsAPI;
+    RenderQueue m_renderQueue;
 };
 
 } // namespace Orbis
