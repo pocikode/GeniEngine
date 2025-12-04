@@ -1,5 +1,6 @@
 #pragma once
 #include "glm/ext/vector_float3.hpp"
+#include "scene/Component.h"
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
@@ -20,6 +21,8 @@ class GameObject
     bool IsAlive() const;
     void MarkForDestroy();
 
+    void AddComponent(Component *component);
+
     glm::vec3 GetPosition() const;
     void SetPosition(glm::vec3 &pos);
 
@@ -39,6 +42,7 @@ class GameObject
     std::string m_name;
     GameObject *m_parent = nullptr;
     std::vector<std::unique_ptr<GameObject>> m_children;
+    std::vector<std::unique_ptr<Component>> m_components;
     bool m_isAlive = true;
 
     glm::vec3 m_position = glm::vec3(0.0f);

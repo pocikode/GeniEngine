@@ -19,6 +19,8 @@ set(SRC_FILES
   src/render/RenderQueue.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
+  src/scene/Component.cpp
+  src/scene/components/MeshComponent.cpp
 )
 
 include_directories(include)
