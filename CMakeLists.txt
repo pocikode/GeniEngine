@@ -22,6 +22,7 @@ set(SRC_FILES
   src/scene/Component.cpp
   src/scene/components/MeshComponent.cpp
   src/scene/components/CameraComponent.cpp
+  src/scene/components/PlayerControllerComponent.cpp
 )
 
 include_directories(include)

@@ -1,5 +1,6 @@
 #include "core/Engine.h"
 #include "core/Application.h"
+#include "glm/ext/vector_float2.hpp"
 #include "graphics/GraphicsAPI.h"
 #include "render/RenderQueue.h"
 #include "scene/components/CameraComponent.h"
@@ -21,6 +22,28 @@ void keyCallback(GLFWwindow *window, int key, int, int action, int)
     {
         inputManager.SetKeyPressed(key, false);
     }
+}
+
+void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
+{
+    auto &inputManager = Orbis::Engine::GetInstance().GetInputManager();
+    if (action == GLFW_PRESS)
+    {
+        inputManager.SetMouseButtonPressed(button, true);
+    }
+    else if (action == GLFW_FALSE)
+    {
+        inputManager.SetMouseButtonPressed(button, false);
+    }
+}
+
+void mouseCursorCallback(GLFWwindow *window, double xpos, double ypos)
+{
+    auto &inputManager = Orbis::Engine::GetInstance().GetInputManager();
+    inputManager.SetMousePositionOld(inputManager.GetMousePositionCurrent());
+
+    glm::vec2 currentPos(static_cast<float>(xpos), static_cast<float>(ypos));
+    inputManager.SetMousePositionCurrent(currentPos);
 }
 
 Engine &Engine::GetInstance()
@@ -54,6 +77,9 @@ bool Engine::Init(int width, int height)
     }
 
     glfwSetKeyCallback(m_window, keyCallback);
+    glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
+    glfwSetCursorPosCallback(m_window, mouseCursorCallback);
+
     glfwMakeContextCurrent(m_window);
 
     if (glewInit() != GLEW_OK)
@@ -109,6 +135,8 @@ void Engine::Run()
         m_renderQueue.Draw(m_graphicsAPI, cameraData);
 
         glfwSwapBuffers(m_window);
+
+        m_inputManager.SetMousePositionOld(m_inputManager.GetMousePositionCurrent());
     }
 }
 
