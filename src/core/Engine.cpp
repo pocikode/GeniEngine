@@ -67,6 +67,7 @@ bool Engine::Init(int width, int height)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 
     m_window = glfwCreateWindow(width, height, "OrbisEngine", nullptr, nullptr);
     if (!m_window)
@@ -75,6 +76,18 @@ bool Engine::Init(int width, int height)
         glfwTerminate();
         return false;
     }
+
+    // Get the actual framebuffer size (in physical pixels)
+    int fbWidth, fbHeight;
+    glfwGetFramebufferSize(m_window, &fbWidth, &fbHeight);
+
+    // Get the window size (in logical pixels)
+    int winWidth, winHeight;
+    glfwGetWindowSize(m_window, &winWidth, &winHeight);
+
+    // Calculate DPI scale factor
+    float scaleX = static_cast<float>(fbWidth) / static_cast<float>(winWidth);
+    float scaleY = static_cast<float>(fbHeight) / static_cast<float>(winHeight);
 
     glfwSetKeyCallback(m_window, keyCallback);
     glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
@@ -88,6 +101,9 @@ bool Engine::Init(int width, int height)
         return false;
     }
 
+    // Set viewport to match framebuffer size (handles DPI scaling)
+    glViewport(0, 0, fbWidth, fbHeight);
+
     m_graphicsAPI.Init();
     return m_application->Init();
 }
@@ -99,12 +115,12 @@ void Engine::Run()
         return;
     }
 
-    m_lastTimePoint = std::chrono::high_resolution_clock::now();
+    m_lastTimePoint = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(m_window) && !m_application->NeedsToBeClosed())
     {
         glfwPollEvents();
 
-        auto now = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::steady_clock::now();
         float deltaTime = std::chrono::duration<float>(now - m_lastTimePoint).count();
         m_lastTimePoint = now;
 
@@ -113,10 +129,10 @@ void Engine::Run()
         m_graphicsAPI.SetClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         m_graphicsAPI.ClearBuffers();
 
-        int width = 0;
-        int height = 0;
-        glfwGetWindowSize(m_window, &width, &height);
-        float aspect = static_cast<float>(width) / static_cast<float>(height);
+        int fbWidth = 0;
+        int fbHeight = 0;
+        glfwGetFramebufferSize(m_window, &fbWidth, &fbHeight);
+        float aspect = static_cast<float>(fbWidth) / static_cast<float>(fbHeight);
 
         CameraData cameraData;
         if (m_currentScene)
