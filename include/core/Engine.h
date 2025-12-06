@@ -1,6 +1,7 @@
 #pragma once
 #include "graphics/GraphicsAPI.h"
 #include "input/InputManager.h"
+#include "io/FileSystem.h"
 #include "render/RenderQueue.h"
 #include "scene/Scene.h"
 #include <chrono>
@@ -35,6 +36,7 @@ class Engine
     InputManager &GetInputManager();
     GraphicsAPI &GetGraphicsAPI();
     RenderQueue &GetRenderQueue();
+    FileSystem &GetFileSystem();
 
     void SetScene(Scene *scene);
     Scene *GetScene();
@@ -47,6 +49,7 @@ class Engine
     InputManager m_inputManager;
     GraphicsAPI m_graphicsAPI;
     RenderQueue m_renderQueue;
+    FileSystem m_fileSystem;
 };
 
 } // namespace Orbis

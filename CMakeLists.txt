@@ -8,6 +8,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
+configure_file(
+  ${PROJECT_SOURCE_DIR}/config.h.in
+  ${PROJECT_BINARY_DIR}/config.h
+)
+
 set(SRC_FILES
   src/core/Engine.cpp
   src/core/Application.cpp
@@ -23,6 +29,7 @@ set(SRC_FILES
   src/scene/components/MeshComponent.cpp
   src/scene/components/CameraComponent.cpp
   src/scene/components/PlayerControllerComponent.cpp
+  src/io/FileSystem.cpp
 )
 
 include_directories(include)
@@ -46,6 +53,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+# stb
+include_directories(thirdparty/stb)
+
 target_link_libraries(
   ${PROJECT_NAME}
   ${GLFW_LIBRARIES}
@@ -57,9 +67,17 @@ if(APPLE)
     target_link_libraries(${PROJECT_NAME} "-framework OpenGL")
 endif()
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_BINARY_DIR})
+
 target_link_directories(
   ${PROJECT_NAME}
   PUBLIC
   ${GLFW_LIBRARY_DIRS}
   ${GLEW_LIBRARY_DIRS}
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD 
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${ASSETS_DIR}
+  ${CMAKE_BINARY_DIR}/assets
 )

@@ -6,6 +6,7 @@
 #include "graphics/ShaderProgram.h"
 #include "graphics/VertexLayout.h"
 #include "input/InputManager.h"
+#include "io/FileSystem.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
 #include "render/RenderQueue.h"
