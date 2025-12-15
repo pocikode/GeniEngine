@@ -1,6 +1,7 @@
 #pragma once
 #include "graphics/VertexLayout.h"
 #include <GL/glew.h>
+#include <memory>
 #include <stdint.h>
 #include <vector>
 
@@ -17,6 +18,8 @@ class Mesh
 
     void Bind();
     void Draw();
+
+    static std::shared_ptr<Mesh> Load(const std::string &path);
 
   private:
     GLuint m_VAO = 0;

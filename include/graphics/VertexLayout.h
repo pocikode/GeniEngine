@@ -12,6 +12,10 @@ struct VertexElement
     GLuint size;     // number of components
     GLuint type;     // data type (e.g. GL_FLOAT)
     uint32_t offset; // bytes offset
+
+    static constexpr int PositionIndex = 0;
+    static constexpr int ColorIndex = 1;
+    static constexpr int UVIndex = 2;
 };
 
 struct VertexLayout

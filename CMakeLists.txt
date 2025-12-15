@@ -45,13 +45,16 @@ pkg_check_modules(GLEW REQUIRED glew)
 include_directories(${GLEW_INCLUDE_DIRS})
 
 # glm
-add_subdirectory(thirdparty/glm)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm)
 
 # stb
-include_directories(thirdparty/stb)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 
 # nlohmann json
-add_subdirectory(thirdparty/nlohmann_json)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann_json)
+
+# cgltf
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf)
 
 target_link_libraries(
   ${PROJECT_NAME}
