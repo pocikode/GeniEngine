@@ -1,5 +1,6 @@
 #pragma once
 #include "glm/ext/quaternion_float.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include "scene/Component.h"
 #include <cstddef>
 #include <glm/gtc/quaternion.hpp>
@@ -50,6 +51,7 @@ class GameObject
 
     glm::mat4 GetLocalTransform() const;
     glm::mat4 GetWorldTransform() const;
+    glm::vec3 GetWorldPosition() const;
 
   protected:
     GameObject() = default;

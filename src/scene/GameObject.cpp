@@ -2,6 +2,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
 #include "glm/gtc/quaternion.hpp"
 
 namespace Geni
@@ -113,6 +114,12 @@ glm::mat4 GameObject::GetWorldTransform() const
     }
 
     return GetLocalTransform();
+}
+
+glm::vec3 GameObject::GetWorldPosition() const
+{
+    glm::vec4 hom = GetWorldTransform() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    return glm::vec3(hom) / hom.w;
 }
 
 } // namespace Geni

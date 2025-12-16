@@ -1,5 +1,6 @@
 #include "core/Engine.h"
 #include "core/Application.h"
+#include "core/Common.h"
 #include "glm/ext/vector_float2.hpp"
 #include "graphics/GraphicsAPI.h"
 #include "render/RenderQueue.h"
@@ -7,6 +8,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <vector>
 
 namespace Geni
 {
@@ -135,6 +137,8 @@ void Engine::Run()
         float aspect = static_cast<float>(fbWidth) / static_cast<float>(fbHeight);
 
         CameraData cameraData;
+        std::vector<LightData> lights;
+
         if (m_currentScene)
         {
             if (auto cameraObj = m_currentScene->GetMainCamera())
@@ -147,9 +151,11 @@ void Engine::Run()
                     cameraData.projectionMatrix = cameraComponent->GetProjectionMatrix(aspect);
                 }
             }
+
+            lights = m_currentScene->CollectLights();
         }
 
-        m_renderQueue.Draw(m_graphicsAPI, cameraData);
+        m_renderQueue.Draw(m_graphicsAPI, cameraData, lights);
 
         glfwSwapBuffers(m_window);
 

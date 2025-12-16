@@ -43,11 +43,11 @@ void PlayerControllerComponent::Update(float deltaTime)
     // left/right movement
     if (inputManager.IsKeyPressed(GLFW_KEY_A))
     {
-        position += right * m_moveSpeed * deltaTime;
+        position -= right * m_moveSpeed * deltaTime;
     }
     if (inputManager.IsKeyPressed(GLFW_KEY_D))
     {
-        position -= right * m_moveSpeed * deltaTime;
+        position += right * m_moveSpeed * deltaTime;
     }
     if (inputManager.IsKeyPressed(GLFW_KEY_W))
     {
