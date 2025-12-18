@@ -25,6 +25,8 @@ class GameObject
     GameObject *GetParent();
     bool SetParent(GameObject *parent);
     Scene *GetScene();
+    void SetActive(bool active);
+    bool IsActive() const;
     bool IsAlive() const;
     void MarkForDestroy();
 
@@ -43,6 +45,8 @@ class GameObject
 
         return nullptr;
     }
+
+    GameObject *FindChildByName(const std::string &name);
 
     glm::vec3 GetPosition() const;
     void SetPosition(const glm::vec3 &pos);
@@ -73,6 +77,7 @@ class GameObject
     glm::vec3 m_position = glm::vec3(0.0f);
     glm::quat m_rotation = glm::quat(1.0, 0.0, 0.0f, 0.0f);
     glm::vec3 m_scale = glm::vec3(1.0f);
+    bool m_active = true;
 
     friend class Scene;
 };

@@ -29,6 +29,7 @@ set(SRC_FILES
   src/scene/components/CameraComponent.cpp
   src/scene/components/PlayerControllerComponent.cpp
   src/scene/components/LightComponent.cpp
+  src/scene/components/AnimationComponent.cpp
   src/io/FileSystem.cpp
 )
 
