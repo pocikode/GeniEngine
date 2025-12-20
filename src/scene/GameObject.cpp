@@ -122,8 +122,14 @@ GameObject *GameObject::FindChildByName(const std::string &name)
 
 void GameObject::AddComponent(Component *component)
 {
+    if (!component)
+    {
+        return;
+    }
+
     m_components.emplace_back(component);
     component->m_owner = this;
+    component->Init();
 }
 
 glm::vec3 GameObject::GetPosition() const

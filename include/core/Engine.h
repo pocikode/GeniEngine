@@ -3,6 +3,7 @@
 #include "graphics/Texture.h"
 #include "input/InputManager.h"
 #include "io/FileSystem.h"
+#include "physics/PhysicsManager.h"
 #include "render/RenderQueue.h"
 #include "scene/Scene.h"
 #include <chrono>
@@ -39,6 +40,7 @@ class Engine
     RenderQueue &GetRenderQueue();
     FileSystem &GetFileSystem();
     TextureManager &GetTextureManager();
+    PhysicsManager &GetPhysicsManager();
 
     void SetScene(Scene *scene);
     Scene *GetScene();
@@ -53,6 +55,7 @@ class Engine
     RenderQueue m_renderQueue;
     FileSystem m_fileSystem;
     TextureManager m_textureManager;
+    PhysicsManager m_physicsManager;
 };
 
 } // namespace Geni

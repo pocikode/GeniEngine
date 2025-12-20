@@ -30,7 +30,11 @@ set(SRC_FILES
   src/scene/components/PlayerControllerComponent.cpp
   src/scene/components/LightComponent.cpp
   src/scene/components/AnimationComponent.cpp
+  src/scene/components/PhysicsComponent.cpp
   src/io/FileSystem.cpp
+  src/physics/PhysicsManager.cpp
+  src/physics/Collider.cpp
+  src/physics/RigidBody.cpp
 )
 
 include_directories(include)
@@ -58,12 +62,23 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann_json)
 # cgltf
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf)
 
+# bullet3
+option(BUILD_UNIT_TESTS OFF)
+option(BUILD_BULLET2_DEMOS OFF)
+option(BUILD_EXTRAS OFF)
+option(BUILD_SHARED_LIBS OFF)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/bullet3)
+target_include_directories(${PROJECT_NAME} PRIVATE thirdparty/bullet3/src)
+
 target_link_libraries(
   ${PROJECT_NAME}
   ${GLFW_LIBRARIES}
   ${GLEW_LIBRARIES}
   glm::glm
   nlohmann_json::nlohmann_json
+  LinearMath
+  BulletCollision
+  BulletDynamics
 )
 
 if(APPLE)

@@ -1,4 +1,5 @@
 #pragma once
+#include "glm/ext/vector_float3.hpp"
 #include "graphics/VertexLayout.h"
 #include <GL/glew.h>
 #include <memory>
@@ -19,8 +20,7 @@ class Mesh
     void Bind();
     void Draw();
 
-    static std::shared_ptr<Mesh> CreateCube();
-    // static std::shared_ptr<Mesh> Load(const std::string &path);
+    static std::shared_ptr<Mesh> CreateBox(const glm::vec3 &extents = glm::vec3(1.0f));
 
   private:
     GLuint m_VAO = 0;
