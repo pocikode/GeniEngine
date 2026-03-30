@@ -33,4 +33,16 @@ glm::mat4 CameraComponent::GetProjectionMatrix(float aspect) const
     return glm::perspective(glm::radians(m_fov), aspect, m_nearPlane, m_farPlane);
 }
 
+glm::vec3 CameraComponent::GetFront() const
+{
+    glm::mat4 view = GetViewMatrix();
+    return -glm::normalize(glm::vec3(view[0][2], view[1][2], view[2][2]));
+}
+
+glm::vec3 CameraComponent::GetUp() const
+{
+    glm::mat4 view = GetViewMatrix();
+    return glm::normalize(glm::vec3(view[0][1], view[1][1], view[2][1]));
+}
+
 } // namespace Geni

@@ -2,6 +2,15 @@
 #include "core/Common.h"
 #include "scene/GameObject.h"
 #include "scene/components/LightComponent.h"
+#include "scene/components/AudioComponent.h"
+#include "scene/components/MeshComponent.h"
+#include "scene/components/CameraComponent.h"
+#include "scene/components/PhysicsComponent.h"
+#include "scene/components/AnimationComponent.h"
+#include "scene/components/PlayerControllerComponent.h"
+#include "core/Engine.h"
+#include "io/FileSystem.h"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -39,6 +48,12 @@ GameObject *Scene::CreateObject(const std::string &name, GameObject *parent)
     SetParent(obj, parent);
 
     return obj;
+}
+
+void Scene::AddObject(GameObject *obj, GameObject *parent)
+{
+    obj->m_scene = this;
+    SetParent(obj, parent);
 }
 
 bool Scene::SetParent(GameObject *obj, GameObject *parent)
@@ -191,6 +206,145 @@ void Scene::CollectLightsRecursive(GameObject *obj, std::vector<LightData> &out)
     {
         CollectLightsRecursive(child.get(), out);
     }
+}
+
+static void LoadGameObjectRecursive(Scene *scene, GameObject *parent, const nlohmann::json &j)
+{
+    std::string name = j.value("name", "GameObject");
+    GameObject *obj = nullptr;
+
+    // Check if it's a prefab/gltf
+    if (j.contains("prefab"))
+    {
+        obj = GameObject::LoadGLTF(j["prefab"].get<std::string>());
+        if (obj)
+        {
+            obj->SetName(name);
+            scene->AddObject(obj, parent);
+        }
+    }
+    else
+    {
+        obj = scene->CreateObject(name, parent);
+    }
+
+    if (!obj) return;
+
+    if (j.contains("position"))
+    {
+        auto pos = j["position"];
+        obj->SetPosition(glm::vec3(pos[0], pos[1], pos[2]));
+    }
+    if (j.contains("rotation"))
+    {
+        auto rot = j["rotation"];
+        obj->SetRotation(glm::quat(rot[3], rot[0], rot[1], rot[2])); // w, x, y, z usually in glm, but from JSON might be x,y,z,w. Assuming x,y,z,w here. Let's use glm::quat(w,x,y,z)
+    }
+    if (j.contains("scale"))
+    {
+        auto scale = j["scale"];
+        obj->SetScale(glm::vec3(scale[0], scale[1], scale[2]));
+    }
+
+    if (j.contains("active"))
+    {
+        obj->SetActive(j["active"].get<bool>());
+    }
+
+    if (j.contains("components"))
+    {
+        for (const auto &compJson : j["components"])
+        {
+            std::string type = compJson["type"].get<std::string>();
+            if (type == "CameraComponent")
+            {
+                auto *cam = new CameraComponent();
+                obj->AddComponent(cam);
+                if (compJson.contains("fov")) cam->SetFov(compJson["fov"].get<float>());
+                if (compJson.contains("near")) cam->SetNear(compJson["near"].get<float>());
+                if (compJson.contains("far")) cam->SetFar(compJson["far"].get<float>());
+                if (compJson.value("main", false))
+                {
+                    scene->SetMainCamera(obj);
+                }
+            }
+            else if (type == "LightComponent")
+            {
+                auto *light = new LightComponent();
+                obj->AddComponent(light);
+                if (compJson.contains("color"))
+                {
+                    auto color = compJson["color"];
+                    light->SetColor(glm::vec3(color[0], color[1], color[2]));
+                }
+            }
+            else if (type == "AudioComponent")
+            {
+                auto *audio = new AudioComponent();
+                obj->AddComponent(audio);
+                if (compJson.contains("path"))
+                {
+                    audio->Load(compJson["path"].get<std::string>());
+                }
+                if (compJson.contains("looping"))
+                {
+                    audio->SetLooping(compJson["looping"].get<bool>());
+                }
+                if (compJson.value("playOnAwake", false))
+                {
+                    audio->Play();
+                }
+            }
+        }
+    }
+
+    if (j.contains("children"))
+    {
+        for (const auto &childJson : j["children"])
+        {
+            LoadGameObjectRecursive(scene, obj, childJson);
+        }
+    }
+}
+
+Scene *Scene::Load(const std::string &path)
+{
+    auto &fs = Engine::GetInstance().GetFileSystem();
+    std::string text = fs.LoadAssetFileText(path);
+    if (text.empty())
+    {
+        return nullptr;
+    }
+
+    nlohmann::json j;
+    try
+    {
+        j = nlohmann::json::parse(text);
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
+
+    Scene *scene = new Scene();
+
+    try
+    {
+        if (j.contains("objects"))
+        {
+            for (const auto &objJson : j["objects"])
+            {
+                LoadGameObjectRecursive(scene, nullptr, objJson);
+            }
+        }
+    }
+    catch (...)
+    {
+        delete scene;
+        return nullptr;
+    }
+
+    return scene;
 }
 
 } // namespace Geni
