@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.28)
 
 project(GeniEngine)
 
@@ -31,6 +31,8 @@ set(SRC_FILES
   src/scene/components/LightComponent.cpp
   src/scene/components/AnimationComponent.cpp
   src/scene/components/PhysicsComponent.cpp
+  src/scene/components/AudioComponent.cpp
+  src/audio/AudioManager.cpp
   src/io/FileSystem.cpp
   src/physics/PhysicsManager.cpp
   src/physics/Collider.cpp
@@ -55,6 +57,9 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm)
 
 # stb
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
+
+# miniaudio
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/miniaudio)
 
 # nlohmann json
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann_json)

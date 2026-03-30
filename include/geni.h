@@ -17,6 +17,8 @@
 #include "scene/Component.h"
 #include "scene/GameObject.h"
 #include "scene/Scene.h"
+#include "audio/AudioManager.h"
+#include "scene/components/AudioComponent.h"
 #include "scene/components/AnimationComponent.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"

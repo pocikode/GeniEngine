@@ -108,6 +108,7 @@ bool Engine::Init(int width, int height)
 
     m_graphicsAPI.Init();
     m_physicsManager.Init();
+    m_audioManager.Init();
     return m_application->Init();
 }
 
@@ -152,6 +153,12 @@ void Engine::Run()
                     cameraData.viewMatrix = cameraComponent->GetViewMatrix();
                     cameraData.projectionMatrix = cameraComponent->GetProjectionMatrix(aspect);
                     cameraData.position = cameraObj->GetWorldPosition();
+
+                    // Update audio listener
+                    m_audioManager.SetListenerPosition(cameraData.position.x, cameraData.position.y, cameraData.position.z);
+                    glm::vec3 forward = cameraComponent->GetFront();
+                    glm::vec3 up = cameraComponent->GetUp();
+                    m_audioManager.SetListenerDirection(forward.x, forward.y, forward.z, up.x, up.y, up.z);
                 }
             }
 
@@ -175,6 +182,7 @@ void Engine::Destroy()
         glfwTerminate();
         m_window = nullptr;
     }
+    m_audioManager.Destroy();
 }
 
 void Engine::SetApplication(Application *app)
@@ -215,6 +223,11 @@ TextureManager &Engine::GetTextureManager()
 PhysicsManager &Engine::GetPhysicsManager()
 {
     return m_physicsManager;
+}
+
+AudioManager *Engine::GetAudioManager()
+{
+    return &m_audioManager;
 }
 
 void Engine::SetScene(Scene *scene)

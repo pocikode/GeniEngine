@@ -6,6 +6,7 @@
 #include "physics/PhysicsManager.h"
 #include "render/RenderQueue.h"
 #include "scene/Scene.h"
+#include "audio/AudioManager.h"
 #include <chrono>
 #include <memory>
 
@@ -41,6 +42,7 @@ class Engine
     FileSystem &GetFileSystem();
     TextureManager &GetTextureManager();
     PhysicsManager &GetPhysicsManager();
+    AudioManager *GetAudioManager();
 
     void SetScene(Scene *scene);
     Scene *GetScene();
@@ -56,6 +58,7 @@ class Engine
     FileSystem m_fileSystem;
     TextureManager m_textureManager;
     PhysicsManager m_physicsManager;
+    AudioManager m_audioManager;
 };
 
 } // namespace Geni

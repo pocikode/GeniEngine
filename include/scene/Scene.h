@@ -20,6 +20,7 @@ class Scene
     bool SetParent(GameObject *obj, GameObject *parent);
 
     GameObject *CreateObject(const std::string &name, GameObject *parent = nullptr);
+    void AddObject(GameObject *obj, GameObject *parent = nullptr);
 
     template <typename T, typename = typename std::enable_if_t<std::is_base_of_v<GameObject, T>>>
     T *CreateObject(const std::string &name, GameObject *parent = nullptr)
@@ -36,6 +37,8 @@ class Scene
     GameObject *GetMainCamera();
 
     std::vector<LightData> CollectLights();
+
+    static Scene *Load(const std::string &path);
 
   private:
     void CollectLightsRecursive(GameObject *obj, std::vector<LightData> &out);
