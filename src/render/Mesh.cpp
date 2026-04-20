@@ -68,6 +68,33 @@ Mesh::Mesh(const VertexLayout &layout, std::vector<float> &vertices)
     m_vertexCount = (vertices.size() * sizeof(float)) / m_vertexLayout.stride;
 }
 
+Mesh::Mesh(const VertexLayout &layout, std::vector<float> &vertices, GLenum drawMode)
+    : m_drawMode(drawMode)
+{
+    m_vertexLayout = layout;
+    auto &graphicsAPI = Engine::GetInstance().GetGraphicsAPI();
+
+    m_VBO = graphicsAPI.CreateVertexBuffer(vertices);
+
+    glGenVertexArrays(1, &m_VAO);
+    glBindVertexArray(m_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+
+    for (auto &element : m_vertexLayout.elements)
+    {
+        glVertexAttribPointer(
+            element.index, element.size, element.type, GL_FALSE, m_vertexLayout.stride,
+            (void *)(uintptr_t)element.offset
+        );
+        glEnableVertexAttribArray(element.index);
+    }
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    m_vertexCount = (vertices.size() * sizeof(float)) / m_vertexLayout.stride;
+}
+
 void Mesh::Bind()
 {
     glBindVertexArray(m_VAO);
@@ -77,11 +104,11 @@ void Mesh::Draw()
 {
     if (m_indexCount > 0)
     {
-        glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, 0);
+        glDrawElements(m_drawMode, m_indexCount, GL_UNSIGNED_INT, 0);
     }
     else
     {
-        glDrawArrays(GL_TRIANGLES, 0, m_vertexCount);
+        glDrawArrays(m_drawMode, 0, m_vertexCount);
     }
 }
 
@@ -182,6 +209,30 @@ std::shared_ptr<Mesh> Mesh::CreateBox(const glm::vec3 &extents)
 
     auto result = std::make_shared<Geni::Mesh>(vertexLayout, vertices, indices);
     return result;
+}
+
+std::shared_ptr<Mesh> Mesh::CreateLines(const std::vector<glm::vec3> &positions,
+                                        const std::vector<glm::vec3> &colors)
+{
+    std::vector<float> vertices;
+    vertices.reserve(positions.size() * 6);
+
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        vertices.push_back(positions[i].x);
+        vertices.push_back(positions[i].y);
+        vertices.push_back(positions[i].z);
+        vertices.push_back(colors[i].x);
+        vertices.push_back(colors[i].y);
+        vertices.push_back(colors[i].z);
+    }
+
+    VertexLayout layout;
+    layout.elements.push_back({VertexElement::PositionIndex, 3, GL_FLOAT, 0});
+    layout.elements.push_back({VertexElement::ColorIndex, 3, GL_FLOAT, 3 * sizeof(float)});
+    layout.stride = 6 * sizeof(float);
+
+    return std::make_shared<Mesh>(layout, vertices, GL_LINES);
 }
 
 // std::shared_ptr<Mesh> Mesh::Load(const std::string &path)

@@ -7,7 +7,9 @@
 #include "render/RenderQueue.h"
 #include "scene/Scene.h"
 #include <chrono>
+#include <glm/ext/vector_int2.hpp>
 #include <memory>
+#include <string>
 
 struct GLFWwindow;
 
@@ -34,6 +36,7 @@ class Engine
     void Destroy();
 
     void SetApplication(Application *app);
+    void SetWindowTitle(const std::string &title);
     Application *GetApplication();
     InputManager &GetInputManager();
     GraphicsAPI &GetGraphicsAPI();
@@ -44,6 +47,9 @@ class Engine
 
     void SetScene(Scene *scene);
     Scene *GetScene();
+
+    GLFWwindow *GetWindow();
+    glm::ivec2 GetFramebufferSize();
 
   private:
     std::unique_ptr<Application> m_application;
@@ -56,6 +62,7 @@ class Engine
     FileSystem m_fileSystem;
     TextureManager m_textureManager;
     PhysicsManager m_physicsManager;
+    std::string m_windowTitle = "GeniEngine";
 };
 
 } // namespace Geni

@@ -20,7 +20,7 @@ void keyCallback(GLFWwindow *window, int key, int, int action, int)
     {
         inputManager.SetKeyPressed(key, true);
     }
-    else if (action == GLFW_FALSE)
+    else if (action == GLFW_RELEASE)
     {
         inputManager.SetKeyPressed(key, false);
     }
@@ -33,7 +33,7 @@ void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
     {
         inputManager.SetMouseButtonPressed(button, true);
     }
-    else if (action == GLFW_FALSE)
+    else if (action == GLFW_RELEASE)
     {
         inputManager.SetMouseButtonPressed(button, false);
     }
@@ -46,6 +46,11 @@ void mouseCursorCallback(GLFWwindow *window, double xpos, double ypos)
 
     glm::vec2 currentPos(static_cast<float>(xpos), static_cast<float>(ypos));
     inputManager.SetMousePositionCurrent(currentPos);
+}
+
+void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    Geni::Engine::GetInstance().GetInputManager().SetScrollDelta(static_cast<float>(yoffset));
 }
 
 Engine &Engine::GetInstance()
@@ -71,7 +76,7 @@ bool Engine::Init(int width, int height)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 
-    m_window = glfwCreateWindow(width, height, "GeniEngine", nullptr, nullptr);
+    m_window = glfwCreateWindow(width, height, m_windowTitle.c_str(), nullptr, nullptr);
     if (!m_window)
     {
         std::cout << "Error creating window" << std::endl;
@@ -94,6 +99,7 @@ bool Engine::Init(int width, int height)
     glfwSetKeyCallback(m_window, keyCallback);
     glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
     glfwSetCursorPosCallback(m_window, mouseCursorCallback);
+    glfwSetScrollCallback(m_window, scrollCallback);
 
     glfwMakeContextCurrent(m_window);
 
@@ -160,9 +166,12 @@ void Engine::Run()
 
         m_renderQueue.Draw(m_graphicsAPI, cameraData, lights);
 
+        m_application->Render();
+
         glfwSwapBuffers(m_window);
 
         m_inputManager.SetMousePositionOld(m_inputManager.GetMousePositionCurrent());
+        m_inputManager.ResetScrollDelta();
     }
 }
 
@@ -225,6 +234,23 @@ void Engine::SetScene(Scene *scene)
 Scene *Engine::GetScene()
 {
     return m_currentScene.get();
+}
+
+void Engine::SetWindowTitle(const std::string &title)
+{
+    m_windowTitle = title;
+}
+
+GLFWwindow *Engine::GetWindow()
+{
+    return m_window;
+}
+
+glm::ivec2 Engine::GetFramebufferSize()
+{
+    int w, h;
+    glfwGetFramebufferSize(m_window, &w, &h);
+    return {w, h};
 }
 
 } // namespace Geni

@@ -28,12 +28,17 @@ class InputManager
     void SetMousePositionCurrent(const glm::vec2 &pos);
     const glm::vec2 &GetMousePositionCurrent() const;
 
+    void SetScrollDelta(float delta);
+    float GetScrollDelta() const;
+    void ResetScrollDelta();
+
   private:
     friend class Engine;
     std::array<bool, 256> m_keys = {false};
     std::array<bool, 16> m_mouseKeys = {false};
     glm::vec2 m_mousePositionOld = glm::vec2(0.0f);
     glm::vec2 m_mousePositionCurrent = glm::vec2(0.0f);
+    float m_scrollDelta = 0.0f;
 };
 
 } // namespace Geni

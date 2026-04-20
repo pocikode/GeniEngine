@@ -63,4 +63,19 @@ const glm::vec2 &InputManager::GetMousePositionCurrent() const
     return m_mousePositionCurrent;
 }
 
+void InputManager::SetScrollDelta(float delta)
+{
+    m_scrollDelta = delta;
+}
+
+float InputManager::GetScrollDelta() const
+{
+    return m_scrollDelta;
+}
+
+void InputManager::ResetScrollDelta()
+{
+    m_scrollDelta = 0.0f;
+}
+
 } // namespace Geni

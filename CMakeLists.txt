@@ -31,24 +31,26 @@ set(SRC_FILES
   src/scene/components/LightComponent.cpp
   src/scene/components/AnimationComponent.cpp
   src/scene/components/PhysicsComponent.cpp
+  src/scene/components/OrbitCameraComponent.cpp
   src/io/FileSystem.cpp
   src/physics/PhysicsManager.cpp
   src/physics/Collider.cpp
   src/physics/RigidBody.cpp
 )
 
-include_directories(include)
-add_library(${PROJECT_NAME} ${SRC_FILES})
-
 find_package(PkgConfig REQUIRED)
 
 # glfw
 pkg_check_modules(GLFW REQUIRED glfw3)
-include_directories(${GLFW_INCLUDE_DIRS})
 
 # glew
 pkg_check_modules(GLEW REQUIRED glew)
-include_directories(${GLEW_INCLUDE_DIRS})
+
+add_library(${PROJECT_NAME} ${SRC_FILES})
+
+target_include_directories(${PROJECT_NAME} PUBLIC include)
+target_include_directories(${PROJECT_NAME} PUBLIC ${GLEW_INCLUDE_DIRS} ${GLFW_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf)
 
 # glm
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm)
@@ -72,17 +74,19 @@ target_include_directories(${PROJECT_NAME} PRIVATE thirdparty/bullet3/src)
 
 target_link_libraries(
   ${PROJECT_NAME}
-  ${GLFW_LIBRARIES}
-  ${GLEW_LIBRARIES}
-  glm::glm
-  nlohmann_json::nlohmann_json
-  LinearMath
-  BulletCollision
-  BulletDynamics
+  PUBLIC
+    glm::glm
+    nlohmann_json::nlohmann_json
+  PRIVATE
+    ${GLFW_LIBRARIES}
+    ${GLEW_LIBRARIES}
+    LinearMath
+    BulletCollision
+    BulletDynamics
 )
 
 if(APPLE)
-    target_link_libraries(${PROJECT_NAME} "-framework OpenGL")
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework OpenGL")
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_BINARY_DIR})
