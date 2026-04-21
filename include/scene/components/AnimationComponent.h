@@ -55,6 +55,7 @@ class AnimationComponent : public Component
     void SetClip(AnimationClip *clip);
     void RegisterClip(const std::string &name, const std::shared_ptr<AnimationClip> &clip);
     void Play(const std::string &name, bool loop = true);
+    void PlayFirst(bool loop = true);
 
   private:
     void BuildBindings();

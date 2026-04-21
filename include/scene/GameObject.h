@@ -47,6 +47,7 @@ class GameObject
     }
 
     GameObject *FindChildByName(const std::string &name);
+    const std::vector<std::unique_ptr<GameObject>> &GetChildren() const;
 
     glm::vec3 GetPosition() const;
     void SetPosition(const glm::vec3 &pos);

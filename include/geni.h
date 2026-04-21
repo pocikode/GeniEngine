@@ -17,6 +17,7 @@
 #include "scene/Component.h"
 #include "scene/GameObject.h"
 #include "scene/Scene.h"
+#include "scene/Skeleton.h"
 #include "scene/components/AnimationComponent.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
@@ -24,3 +25,4 @@
 #include "scene/components/OrbitCameraComponent.h"
 #include "scene/components/PhysicsComponent.h"
 #include "scene/components/PlayerControllerComponent.h"
+#include "scene/components/SkinnedMeshComponent.h"

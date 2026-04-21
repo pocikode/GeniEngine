@@ -6,8 +6,10 @@
 #include "graphics/VertexLayout.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
+#include "scene/Skeleton.h"
 #include "scene/components/AnimationComponent.h"
 #include "scene/components/MeshComponent.h"
+#include "scene/components/SkinnedMeshComponent.h"
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -120,6 +122,11 @@ GameObject *GameObject::FindChildByName(const std::string &name)
     return nullptr;
 }
 
+const std::vector<std::unique_ptr<GameObject>> &GameObject::GetChildren() const
+{
+    return m_children;
+}
+
 void GameObject::AddComponent(Component *component)
 {
     if (!component)
@@ -194,11 +201,14 @@ glm::vec3 GameObject::GetWorldPosition() const
     return glm::vec3(hom) / hom.w;
 }
 
-void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::path &folder)
-{
-    auto object = parent->GetScene()->CreateObject(node->name, parent);
+using NodeMap = std::unordered_map<cgltf_node *, GameObject *>;
 
-    // handling transformation
+static void ParseGLTFHierarchy(cgltf_node *node, GameObject *parent, NodeMap &nodeMap)
+{
+    const char *name = node->name ? node->name : "node";
+    auto object = parent->GetScene()->CreateObject(name, parent);
+    nodeMap[node] = object;
+
     if (node->has_matrix)
     {
         auto mat = glm::make_mat4(node->matrix);
@@ -227,9 +237,49 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
         }
     }
 
-    // if has meshes
+    for (cgltf_size ci = 0; ci < node->children_count; ++ci)
+    {
+        ParseGLTFHierarchy(node->children[ci], object, nodeMap);
+    }
+}
+
+static std::shared_ptr<Skeleton> BuildSkeletonFromSkin(cgltf_skin *skin, const NodeMap &nodeMap)
+{
+    auto skeleton = std::make_shared<Skeleton>();
+
+    for (cgltf_size ji = 0; ji < skin->joints_count; ++ji)
+    {
+        cgltf_node *jointNode = skin->joints[ji];
+        auto it = nodeMap.find(jointNode);
+        GameObject *jointObj = (it == nodeMap.end()) ? nullptr : it->second;
+
+        glm::mat4 ibm(1.0f);
+        if (skin->inverse_bind_matrices)
+        {
+            float raw[16] = {};
+            cgltf_accessor_read_float(skin->inverse_bind_matrices, ji, raw, 16);
+            ibm = glm::make_mat4(raw);
+        }
+
+        skeleton->AddJoint(jointObj, ibm);
+    }
+
+    return skeleton;
+}
+
+static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std::filesystem::path &folder,
+                            const std::shared_ptr<Material> &skinnedMaterial)
+{
+    GameObject *object = nodeMap.at(node);
+
     if (node->mesh)
     {
+        std::shared_ptr<Skeleton> skeleton;
+        if (node->skin)
+        {
+            skeleton = BuildSkeletonFromSkin(node->skin, nodeMap);
+        }
+
         for (cgltf_size pi = 0; pi < node->mesh->primitives_count; ++pi)
         {
             auto &primitive = node->mesh->primitives[pi];
@@ -250,7 +300,8 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
             };
 
             VertexLayout vertexLayout;
-            cgltf_accessor *accessors[4] = {nullptr, nullptr, nullptr, nullptr};
+            // Enough slots for all supported attrs: pos/color/uv/normal/joints/weights.
+            cgltf_accessor *accessors[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
             for (cgltf_size ai = 0; ai < primitive.attributes_count; ++ai)
             {
@@ -296,6 +347,26 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
                     accessors[VertexElement::NormalIndex] = acc;
                     element.index = VertexElement::NormalIndex;
                     element.size = 3;
+                }
+                break;
+                case cgltf_attribute_type_joints: {
+                    if (attr.index != 0)
+                    {
+                        continue;
+                    }
+                    accessors[VertexElement::JointsIndex] = acc;
+                    element.index = VertexElement::JointsIndex;
+                    element.size = 4;
+                }
+                break;
+                case cgltf_attribute_type_weights: {
+                    if (attr.index != 0)
+                    {
+                        continue;
+                    }
+                    accessors[VertexElement::WeightsIndex] = acc;
+                    element.index = VertexElement::WeightsIndex;
+                    element.size = 4;
                 }
                 break;
                 default:
@@ -350,8 +421,16 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
                 mesh = std::make_shared<Mesh>(vertexLayout, vertices);
             }
 
-            auto mat = std::make_shared<Material>();
-            mat->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
+            std::shared_ptr<Material> mat;
+            if (skeleton)
+            {
+                mat = skinnedMaterial;
+            }
+            else
+            {
+                mat = std::make_shared<Material>();
+                mat->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
+            }
 
             if (primitive.material)
             {
@@ -360,31 +439,32 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
                 {
                     auto pbr = gltfMat->pbr_metallic_roughness;
                     auto texture = pbr.base_color_texture.texture;
-                    if (texture && texture->image)
+                    if (texture && texture->image && texture->image->uri)
                     {
-                        if (texture->image->uri)
-                        {
-                            auto path = folder / std::string(texture->image->uri);
-                            auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
-                            mat->SetParam("baseColorTexture", tex);
-                        }
+                        auto path = folder / std::string(texture->image->uri);
+                        auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
+                        mat->SetParam("baseColorTexture", tex);
                     }
                 }
                 else if (gltfMat->has_pbr_specular_glossiness)
                 {
                     auto pbr = gltfMat->pbr_specular_glossiness;
                     auto texture = pbr.diffuse_texture.texture;
-                    if (texture && texture->image)
+                    if (texture && texture->image && texture->image->uri)
                     {
-                        if (texture->image->uri)
-                        {
-                            auto path = folder / std::string(texture->image->uri);
-                            auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
-                            mat->SetParam("baseColorTexture", tex);
-                        }
+                        auto path = folder / std::string(texture->image->uri);
+                        auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
+                        mat->SetParam("baseColorTexture", tex);
                     }
                 }
+            }
 
+            if (skeleton)
+            {
+                object->AddComponent(new SkinnedMeshComponent(mat, mesh, skeleton));
+            }
+            else
+            {
                 object->AddComponent(new MeshComponent(mat, mesh));
             }
         }
@@ -392,7 +472,7 @@ void ParseGLTFNode(cgltf_node *node, GameObject *parent, const std::filesystem::
 
     for (cgltf_size ci = 0; ci < node->children_count; ++ci)
     {
-        ParseGLTFNode(node->children[ci], object, folder);
+        ParseGLTFMeshes(node->children[ci], nodeMap, folder, skinnedMaterial);
     }
 }
 
@@ -464,10 +544,30 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
     auto resultObject = Engine::GetInstance().GetScene()->CreateObject("Result");
     auto scene = &data->scenes[0];
 
+    // Pass 1: build node hierarchy as GameObjects and record cgltf_node → GameObject mapping.
+    NodeMap nodeMap;
     for (cgltf_size i = 0; i < scene->nodes_count; ++i)
     {
-        auto node = scene->nodes[i];
-        ParseGLTFNode(node, resultObject, relativeFolderPath);
+        ParseGLTFHierarchy(scene->nodes[i], resultObject, nodeMap);
+    }
+
+    // Load the skinned material once — it's reused for every skinned primitive in this file.
+    // If the asset is missing the loader silently falls back to the default (unlit) shader.
+    std::shared_ptr<Material> skinnedMaterial;
+    if (data->skins_count > 0)
+    {
+        skinnedMaterial = Material::Load("materials/skinned.mat");
+        if (!skinnedMaterial)
+        {
+            skinnedMaterial = std::make_shared<Material>();
+            skinnedMaterial->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
+        }
+    }
+
+    // Pass 2: attach mesh / skinned-mesh components.
+    for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+    {
+        ParseGLTFMeshes(scene->nodes[i], nodeMap, relativeFolderPath, skinnedMaterial);
     }
 
     std::vector<std::shared_ptr<AnimationClip>> clips;

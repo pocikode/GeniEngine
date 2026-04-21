@@ -16,6 +16,7 @@ struct RenderCommand
     Mesh *mesh = nullptr;
     Material *material = nullptr;
     glm::mat4 modelMatrix;
+    const std::vector<glm::mat4> *bonePalette = nullptr;
 };
 
 class RenderQueue

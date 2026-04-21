@@ -17,6 +17,8 @@ struct VertexElement
     static constexpr int ColorIndex = 1;
     static constexpr int UVIndex = 2;
     static constexpr int NormalIndex = 3;
+    static constexpr int JointsIndex = 4;
+    static constexpr int WeightsIndex = 5;
 };
 
 struct VertexLayout

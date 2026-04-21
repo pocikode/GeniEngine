@@ -25,7 +25,9 @@ set(SRC_FILES
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
   src/scene/Component.cpp
+  src/scene/Skeleton.cpp
   src/scene/components/MeshComponent.cpp
+  src/scene/components/SkinnedMeshComponent.cpp
   src/scene/components/CameraComponent.cpp
   src/scene/components/PlayerControllerComponent.cpp
   src/scene/components/LightComponent.cpp

@@ -82,7 +82,7 @@ void AnimationComponent::Play(const std::string &name, bool loop)
     {
         m_time = 0.0f;
         m_isPlaying = true;
-        m_looping = true;
+        m_looping = loop;
     }
     else
     {
@@ -92,9 +92,21 @@ void AnimationComponent::Play(const std::string &name, bool loop)
             SetClip(it->second.get());
             m_time = 0.0f;
             m_isPlaying = true;
-            m_looping = true;
+            m_looping = loop;
         }
     }
+}
+
+void AnimationComponent::PlayFirst(bool loop)
+{
+    if (m_clips.empty())
+    {
+        return;
+    }
+    SetClip(m_clips.begin()->second.get());
+    m_time = 0.0f;
+    m_isPlaying = true;
+    m_looping = loop;
 }
 
 glm::vec3 AnimationComponent::Interpolate(const std::vector<KeyFrameVec3> &keys, float time)

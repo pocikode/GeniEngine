@@ -22,6 +22,12 @@ void RenderQueue::Draw(GraphicsAPI &graphicsAPI, const CameraData &cameraData, c
         shaderProgram->SetUniform("uProjection", cameraData.projectionMatrix);
         shaderProgram->SetUniform("uCameraPos", cameraData.position);
 
+        if (command.bonePalette && !command.bonePalette->empty())
+        {
+            shaderProgram->SetUniform("uBones", command.bonePalette->data(),
+                                      static_cast<int>(command.bonePalette->size()));
+        }
+
         if (!lights.empty())
         {
             auto &light = lights[0];
