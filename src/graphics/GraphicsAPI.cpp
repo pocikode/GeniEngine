@@ -106,6 +106,7 @@ const std::shared_ptr<ShaderProgram> &GraphicsAPI::GetDefaultShaderProgram()
         in vec3 vFragPos;
 
         uniform sampler2D baseColorTexture;
+        uniform vec4 uBaseColorFactor;
         uniform Light uLight;
         uniform vec3 uCameraPos;
 
@@ -125,10 +126,11 @@ const std::shared_ptr<ShaderProgram> &GraphicsAPI::GetDefaultShaderProgram()
             float specularStrength = 0.5;
             vec3 specular = specularStrength * spec * uLight.color;
 
-            vec3 result = diffuse + specular;
+            // Ambient so unlit materials without a dynamic light still render visible.
+            vec3 result = vec3(0.2) + diffuse + specular;
 
-            vec4 texColor = texture(baseColorTexture, vUV);
-            FragColor = texColor * vec4(result, 1.0);
+            vec4 texColor = texture(baseColorTexture, vUV) * uBaseColorFactor;
+            FragColor = vec4(texColor.rgb * result, texColor.a);
         })";
 
         m_defaultShaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);

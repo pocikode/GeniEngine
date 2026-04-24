@@ -69,6 +69,12 @@ void ShaderProgram::SetUniform(const std::string &name, const glm::vec3 &value)
     glUniform3fv(loc, 1, glm::value_ptr(value));
 }
 
+void ShaderProgram::SetUniform(const std::string &name, const glm::vec4 &value)
+{
+    auto loc = GetUniformLocation(name);
+    glUniform4fv(loc, 1, glm::value_ptr(value));
+}
+
 void ShaderProgram::SetTexture(const std::string &name, Texture *texture)
 {
     auto loc = GetUniformLocation(name);

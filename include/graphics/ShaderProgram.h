@@ -1,6 +1,7 @@
 #pragma once
 #include <GL/glew.h>
 #include <glm/mat4x4.hpp>
+#include <glm/vec4.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -25,6 +26,7 @@ class ShaderProgram
     void SetUniform(const std::string &name, const glm::mat4 &mat);
     void SetUniform(const std::string &name, const glm::mat4 *matrices, int count);
     void SetUniform(const std::string &name, const glm::vec3 &value);
+    void SetUniform(const std::string &name, const glm::vec4 &value);
     void SetTexture(const std::string &name, Texture *texture);
 
   private:

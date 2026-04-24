@@ -4,6 +4,7 @@
 #include "glm/ext/vector_float3.hpp"
 #include "graphics/Texture.h"
 #include "graphics/VertexLayout.h"
+#include "graphics/ShaderProgram.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
 #include "scene/Skeleton.h"
@@ -11,8 +12,11 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/SkinnedMeshComponent.h"
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -24,6 +28,9 @@
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
+
+// stb_image implementation lives in Texture.cpp; only declare the API here.
+#include <stb_image.h>
 
 namespace Geni
 {
@@ -268,7 +275,7 @@ static std::shared_ptr<Skeleton> BuildSkeletonFromSkin(cgltf_skin *skin, const N
 }
 
 static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std::filesystem::path &folder,
-                            const std::shared_ptr<Material> &skinnedMaterial)
+                            const std::shared_ptr<ShaderProgram> &skinnedShader)
 {
     GameObject *object = nodeMap.at(node);
 
@@ -421,42 +428,128 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                 mesh = std::make_shared<Mesh>(vertexLayout, vertices);
             }
 
-            std::shared_ptr<Material> mat;
-            if (skeleton)
+            // Each primitive gets its own material instance so per-primitive textures
+            // don't clobber each other on a shared material object.
+            std::shared_ptr<Material> mat = std::make_shared<Material>();
+            if (skeleton && skinnedShader)
             {
-                mat = skinnedMaterial;
+                mat->SetShaderProgram(skinnedShader);
             }
             else
             {
-                mat = std::make_shared<Material>();
                 mat->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
             }
+
+            // Returns true if a real base-color texture was loaded; false otherwise.
+            auto LoadTexture = [&](cgltf_texture *texture) -> bool {
+                if (!texture || !texture->image)
+                    return false;
+                auto *image = texture->image;
+
+                // .glb and some .gltf files embed images inline via a buffer_view.
+                if (image->buffer_view)
+                {
+                    auto *bv = image->buffer_view;
+                    const auto *imgData =
+                        static_cast<const unsigned char *>(bv->buffer->data) + bv->offset;
+                    int w, h, ch;
+                    unsigned char *pixels = stbi_load_from_memory(imgData, (int)bv->size, &w, &h, &ch, 0);
+                    if (pixels)
+                    {
+                        auto tex = std::make_shared<Texture>(w, h, ch, pixels);
+                        stbi_image_free(pixels);
+                        mat->SetParam("baseColorTexture", tex);
+                        return true;
+                    }
+                    return false;
+                }
+
+                if (!image->uri)
+                    return false;
+
+                // glTF spec allows data URIs as a way to embed images inline in .gltf JSON.
+                if (std::strncmp(image->uri, "data:", 5) == 0)
+                {
+                    const char *comma = std::strchr(image->uri, ',');
+                    if (!comma)
+                        return false;
+
+                    // "data:<mime>;base64,..." — only the base64 form is supported by cgltf.
+                    if (comma - image->uri < 7 || std::strncmp(comma - 7, ";base64", 7) != 0)
+                        return false;
+
+                    void *decoded = nullptr;
+                    cgltf_options opt = {};
+                    // Size unknown up front; base64 expands to ~3/4 of the encoded length, so
+                    // this is an upper bound that cgltf will write the actual bytes into.
+                    cgltf_size decodedSize = static_cast<cgltf_size>(std::strlen(comma + 1)) * 3 / 4;
+                    if (cgltf_load_buffer_base64(&opt, decodedSize, comma + 1, &decoded) !=
+                            cgltf_result_success ||
+                        !decoded)
+                    {
+                        return false;
+                    }
+
+                    int w, h, ch;
+                    unsigned char *pixels = stbi_load_from_memory(
+                        static_cast<unsigned char *>(decoded), (int)decodedSize, &w, &h, &ch, 0);
+                    std::free(decoded);
+                    if (!pixels)
+                        return false;
+                    auto tex = std::make_shared<Texture>(w, h, ch, pixels);
+                    stbi_image_free(pixels);
+                    mat->SetParam("baseColorTexture", tex);
+                    return true;
+                }
+
+                // External file referenced by URI. URL-decode first so `%20` etc. resolve
+                // to real characters — cgltf_decode_uri mutates the buffer in place.
+                std::string uriCopy(image->uri);
+                cgltf_decode_uri(uriCopy.data());
+                uriCopy.resize(std::strlen(uriCopy.c_str()));
+
+                auto path = folder / uriCopy;
+                auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
+                if (tex)
+                {
+                    mat->SetParam("baseColorTexture", tex);
+                    return true;
+                }
+                return false;
+            };
+
+            // Default to white factor so sampling `baseColorTexture * uBaseColorFactor`
+            // passes the texture through untouched when no factor is specified.
+            glm::vec4 baseColorFactor(1.0f, 1.0f, 1.0f, 1.0f);
+            bool hasTexture = false;
 
             if (primitive.material)
             {
                 auto gltfMat = primitive.material;
                 if (gltfMat->has_pbr_metallic_roughness)
                 {
-                    auto pbr = gltfMat->pbr_metallic_roughness;
-                    auto texture = pbr.base_color_texture.texture;
-                    if (texture && texture->image && texture->image->uri)
-                    {
-                        auto path = folder / std::string(texture->image->uri);
-                        auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
-                        mat->SetParam("baseColorTexture", tex);
-                    }
+                    const auto &pbr = gltfMat->pbr_metallic_roughness;
+                    baseColorFactor = glm::vec4(pbr.base_color_factor[0], pbr.base_color_factor[1],
+                                                pbr.base_color_factor[2], pbr.base_color_factor[3]);
+                    hasTexture = LoadTexture(pbr.base_color_texture.texture);
                 }
                 else if (gltfMat->has_pbr_specular_glossiness)
                 {
-                    auto pbr = gltfMat->pbr_specular_glossiness;
-                    auto texture = pbr.diffuse_texture.texture;
-                    if (texture && texture->image && texture->image->uri)
-                    {
-                        auto path = folder / std::string(texture->image->uri);
-                        auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
-                        mat->SetParam("baseColorTexture", tex);
-                    }
+                    const auto &sg = gltfMat->pbr_specular_glossiness;
+                    baseColorFactor = glm::vec4(sg.diffuse_factor[0], sg.diffuse_factor[1],
+                                                sg.diffuse_factor[2], sg.diffuse_factor[3]);
+                    hasTexture = LoadTexture(sg.diffuse_texture.texture);
                 }
+            }
+
+            mat->SetParam("uBaseColorFactor", baseColorFactor);
+            // Bind a 1x1 white fallback so sampling the texture yields (1,1,1,1) and the
+            // factor alone drives the color. Without this, GLSL samples an unbound unit
+            // and returns black, masking the factor entirely.
+            if (!hasTexture)
+            {
+                mat->SetParam("baseColorTexture",
+                              Engine::GetInstance().GetTextureManager().GetWhiteTexture());
             }
 
             if (skeleton)
@@ -472,7 +565,7 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
 
     for (cgltf_size ci = 0; ci < node->children_count; ++ci)
     {
-        ParseGLTFMeshes(node->children[ci], nodeMap, folder, skinnedMaterial);
+        ParseGLTFMeshes(node->children[ci], nodeMap, folder, skinnedShader);
     }
 }
 
@@ -551,23 +644,22 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
         ParseGLTFHierarchy(scene->nodes[i], resultObject, nodeMap);
     }
 
-    // Load the skinned material once — it's reused for every skinned primitive in this file.
-    // If the asset is missing the loader silently falls back to the default (unlit) shader.
-    std::shared_ptr<Material> skinnedMaterial;
+    // Load the skinned shader once — shared across all skinned primitives; each primitive
+    // gets its own Material instance (so textures don't clobber each other).
+    std::shared_ptr<ShaderProgram> skinnedShader;
     if (data->skins_count > 0)
     {
-        skinnedMaterial = Material::Load("materials/skinned.mat");
-        if (!skinnedMaterial)
-        {
-            skinnedMaterial = std::make_shared<Material>();
-            skinnedMaterial->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
-        }
+        auto skinnedMat = Material::Load("materials/skinned.mat");
+        if (skinnedMat)
+            skinnedShader = skinnedMat->GetShaderProgramShared();
+        if (!skinnedShader)
+            skinnedShader = Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram();
     }
 
     // Pass 2: attach mesh / skinned-mesh components.
     for (cgltf_size i = 0; i < scene->nodes_count; ++i)
     {
-        ParseGLTFMeshes(scene->nodes[i], nodeMap, relativeFolderPath, skinnedMaterial);
+        ParseGLTFMeshes(scene->nodes[i], nodeMap, relativeFolderPath, skinnedShader);
     }
 
     std::vector<std::shared_ptr<AnimationClip>> clips;

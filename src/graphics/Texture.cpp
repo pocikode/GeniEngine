@@ -90,4 +90,14 @@ std::shared_ptr<Texture> TextureManager::GetOrLoadTexture(const std::string &pat
     return texture;
 }
 
+std::shared_ptr<Texture> TextureManager::GetWhiteTexture()
+{
+    if (!m_whiteTexture)
+    {
+        unsigned char pixels[4] = {255, 255, 255, 255};
+        m_whiteTexture = std::make_shared<Texture>(1, 1, 4, pixels);
+    }
+    return m_whiteTexture;
+}
+
 } // namespace Geni

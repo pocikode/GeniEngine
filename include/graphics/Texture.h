@@ -29,9 +29,14 @@ class TextureManager
 {
   public:
     std::shared_ptr<Texture> GetOrLoadTexture(const std::string &path);
+    // 1x1 opaque white texture. Useful as a fallback when a material has a base
+    // color factor but no base color texture, so the shader can still sample
+    // `baseColorTexture * baseColorFactor` without branching.
+    std::shared_ptr<Texture> GetWhiteTexture();
 
   private:
     std::unordered_map<std::string, std::shared_ptr<Texture>> m_textures;
+    std::shared_ptr<Texture> m_whiteTexture;
 };
 
 } // namespace Geni
