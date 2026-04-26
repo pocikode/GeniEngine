@@ -40,13 +40,11 @@ set(SRC_FILES
   src/physics/RigidBody.cpp
 )
 
-find_package(PkgConfig REQUIRED)
-
 # glfw
-pkg_check_modules(GLFW REQUIRED glfw3)
+find_package(glfw3 CONFIG REQUIRED)
 
 # glew
-pkg_check_modules(GLEW REQUIRED glew)
+find_package(GLEW REQUIRED)
 
 add_library(${PROJECT_NAME} ${SRC_FILES})
 
@@ -80,8 +78,8 @@ target_link_libraries(
     glm::glm
     nlohmann_json::nlohmann_json
   PRIVATE
-    ${GLFW_LIBRARIES}
-    ${GLEW_LIBRARIES}
+    glfw
+    GLEW::GLEW
     LinearMath
     BulletCollision
     BulletDynamics
@@ -93,12 +91,7 @@ endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_BINARY_DIR})
 
-target_link_directories(
-  ${PROJECT_NAME}
-  PUBLIC
-  ${GLFW_LIBRARY_DIRS}
-  ${GLEW_LIBRARY_DIRS}
-)
+# No need for link directories with find_package targets
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD 
   COMMAND ${CMAKE_COMMAND} -E copy_directory
