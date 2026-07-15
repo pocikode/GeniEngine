@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #if defined(_WIN32)
@@ -39,13 +40,28 @@ std::filesystem::path FileSystem::GetExecutableFolder() const
 std::filesystem::path FileSystem::GetAssetsFolder() const
 {
 #if defined(ASSETS_ROOT)
+    // ASSETS_ROOT is an absolute path baked in at build time (the build host's
+    // source assets/ folder) so the app can run straight from the build tree.
+    // On any other machine it may reference a drive that exists but is not ready
+    // (an empty card reader, optical, or removable drive). The throwing overload
+    // of exists() raises std::filesystem_error ("The device is not ready") in
+    // that case, which — uncaught — aborts the process on startup. Use the
+    // non-throwing overload so a bad/unreachable ASSETS_ROOT simply falls through
+    // to the executable-relative assets folder that ships next to the binary.
+    std::error_code ec;
     auto path = std::filesystem::path(std::string(ASSETS_ROOT));
-    if (std::filesystem::exists(path))
+    if (std::filesystem::exists(path, ec))
     {
         return path;
     }
 #endif
-    return std::filesystem::weakly_canonical(GetExecutableFolder() / "assets");
+    std::error_code canonEc;
+    auto assets = std::filesystem::weakly_canonical(GetExecutableFolder() / "assets", canonEc);
+    if (canonEc)
+    {
+        assets = GetExecutableFolder() / "assets";
+    }
+    return assets;
 }
 
 std::vector<char> FileSystem::LoadFile(const std::filesystem::path &path)
