@@ -16,11 +16,9 @@ add_executable(geni_tests
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
   SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.frag
-    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bad_set.frag
-    ${PROJECT_SOURCE_DIR}/src/render/shaders/default.vert
-    ${PROJECT_SOURCE_DIR}/src/render/shaders/default.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bad_set.slang
+    ${PROJECT_SOURCE_DIR}/src/render/shaders/default.slang
 )
 target_include_directories(geni_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/doctest)
 target_link_libraries(geni_tests PRIVATE GeniEngine)

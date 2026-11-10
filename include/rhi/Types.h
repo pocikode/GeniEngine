@@ -149,7 +149,7 @@ enum class BindingType : uint8_t
     DynamicUniformBuffer,
     // Read-only structured data: clustered light grid and light list.
     StorageBuffer,
-    // A texture and a sampler bound together (GLSL `sampler2D`).
+    // A texture and a sampler bound together (Slang `Sampler2D`).
     SampledTexture,
 };
 

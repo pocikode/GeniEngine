@@ -3,8 +3,9 @@
 # Builds samples/<name> as an executable linked against the engine. If the sample has an
 # assets/ folder it is copied next to the executable, and its source location is passed
 # in as GENI_SAMPLE_ASSETS_DIR so that edits show up without a rebuild when running from
-# the build tree. Shaders under assets/shaders are compiled to SPIR-V into the copy next
-# to the executable, where FileSystem::ResolveAssetPath finds them.
+# the build tree. Slang shaders under assets/ are compiled to SPIR-V into the copy next
+# to the executable, where FileSystem::ResolveAssetPath finds them; they can import the
+# engine's modules (geni.standard, geni.frame, ...).
 function(geni_add_sample name)
   add_executable(${name} ${ARGN})
   target_link_libraries(${name} PRIVATE GeniEngine)
@@ -18,7 +19,7 @@ function(geni_add_sample name)
       COMMAND ${CMAKE_COMMAND} -E copy_directory "${assets}" "$<TARGET_FILE_DIR:${name}>/assets"
     )
 
-    file(GLOB_RECURSE shaders CONFIGURE_DEPENDS RELATIVE "${assets}" "${assets}/*.vert" "${assets}/*.frag")
+    file(GLOB_RECURSE shaders CONFIGURE_DEPENDS RELATIVE "${assets}" "${assets}/*.slang")
     if(shaders)
       set(compiled "${CMAKE_CURRENT_BINARY_DIR}/compiled_assets")
       geni_compile_shaders(${name} SOURCE_DIR "${assets}" OUTPUT_DIR "${compiled}" SOURCES ${shaders})

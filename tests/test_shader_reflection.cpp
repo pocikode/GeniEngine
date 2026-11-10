@@ -1,6 +1,7 @@
 #include "render/ShaderInterface.h"
 #include "render/ShaderReflection.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <doctest/doctest.h>
 
@@ -65,6 +66,23 @@ TEST_SUITE("shader reflection")
         const Geni::ShaderBinding *frame = merged.Find(Geni::ShaderInterface::FrameSet, 0);
         REQUIRE(frame != nullptr);
         CHECK(frame->size == sizeof(Geni::ShaderInterface::FrameUniforms));
+        // Slang lays the block out from geni/frame.slang; it must match the C++ struct.
+        using Frame = Geni::ShaderInterface::FrameUniforms;
+        auto offsetOf = [&](const char *name) -> int64_t {
+            for (const auto &member : frame->members)
+            {
+                if (member.name == name)
+                {
+                    return member.offset;
+                }
+            }
+            return -1;
+        };
+        CHECK(offsetOf("view") == offsetof(Frame, view));
+        CHECK(offsetOf("cameraPosition") == offsetof(Frame, cameraPosition));
+        CHECK(offsetOf("shadowMatrices") == offsetof(Frame, shadowMatrices));
+        CHECK(offsetOf("cascadeSplits") == offsetof(Frame, cascadeSplits));
+        CHECK(offsetOf("screenParams") == offsetof(Frame, screenParams));
         CHECK(Geni::rhi::HasFlag(frame->stages, ShaderStage::Vertex));
         CHECK(Geni::rhi::HasFlag(frame->stages, ShaderStage::Fragment));
 

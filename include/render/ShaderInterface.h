@@ -5,32 +5,32 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-// The contract between the renderer and every shader. Shaders are GLSL 450, compiled
-// offline to SPIR-V (cmake/GeniShaders.cmake), and use three descriptor sets:
+// The contract between the renderer and every shader. Shaders are Slang, compiled
+// offline to SPIR-V (cmake/GeniShaders.cmake, docs/design/0003-slang-shaders.md), and use
+// three descriptor sets:
 //
-//   set 0  per frame     binding 0: uniform Frame  (FrameUniforms)
-//                        binding 1: readonly buffer Lights       (GpuLight[])
-//                        binding 2: readonly buffer ClusterGrid  (ClusterRange[])
-//                        binding 3: readonly buffer ClusterLights (uint[])
-//                        bindings 4-7: the four cascade depth maps
-//   set 1  per material  binding N: one uniform block of material parameters, any name,
+//   set 0  per frame     binding 0: ConstantBuffer<Frame>            (FrameUniforms)
+//                        binding 1: StructuredBuffer<GpuLight>       (GpuLight[])
+//                        binding 2: StructuredBuffer<ClusterRange>   (ClusterRange[])
+//                        binding 3: StructuredBuffer<uint>           (cluster light indices)
+//                        bindings 4-7: the four cascade depth maps (Sampler2D)
+//   set 1  per material  binding N: one ConstantBuffer of material parameters, any name,
 //                                   whose member names match Material::SetParam names
-//                        binding M: sampler2D textures, matched by name to
+//                        binding M: Sampler2D textures, matched by name to
 //                                   Material::SetParam(name, texture)
-//   set 2  per draw      binding 0: uniform Bones (BoneUniforms, skinned meshes only)
+//   set 2  per draw      binding 0: ConstantBuffer<Bones> (BoneUniforms, skinned meshes only)
+//
+// Sets 0 and 2 are declared once in the engine modules (geni/frame.slang,
+// geni/lighting.slang, geni/skinning.slang); shaders import them instead of redeclaring.
 //
 // The per-instance model matrix is not a uniform: it arrives as vertex attributes 6-9
-// (four vec4 columns), read once per instance. Every draw is instanced; a single object
+// (four float4 columns), read once per instance. Every draw is instanced; a single object
 // is an instance count of one.
 //
 // Vertex inputs use the locations in VertexElement (graphics/VertexLayout.h), which only
 // covers mesh attributes 0-5; 6-9 are reserved for the instance transform. Clip space has
 // Y up and depth 0..1; CameraComponent's OpenGL-style projection is converted by the
-// renderer, so shaders just compute projection * view * model * position.
-//
-//   layout(set = 0, binding = 0) uniform Frame { ... } uFrame;
-//   layout(set = 2, binding = 0) uniform Bones { mat4 bones[128]; } uBones;
-//   layout(location = 6) in vec4 aInstance0; // .. 9
+// renderer, so shaders just compute mul(projection, mul(view, mul(model, position))).
 namespace Geni::ShaderInterface
 {
 

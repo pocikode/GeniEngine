@@ -241,7 +241,7 @@ TEST_SUITE("clustered lighting")
         CHECK(sizeof(ShaderInterface::GpuLight) == 64);
         CHECK(sizeof(ShaderInterface::ClusterRange) == 8);
 
-        // The members after the arrays must sit where the GLSL block puts them.
+        // The members after the arrays must sit where the std140 Frame block puts them.
         using Frame = ShaderInterface::FrameUniforms;
         CHECK(offsetof(Frame, cameraPosition) == 256);
         CHECK(offsetof(Frame, shadowMatrices) == 352);

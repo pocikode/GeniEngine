@@ -185,7 +185,7 @@ Each has a default so work is never blocked. Change them before the milestone th
 |---|---|---|
 | Scripting language | Lua | M6 |
 | Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
-| Shader language: GLSL or Slang | Decided in M1: GLSL 450, compiled offline with glslang. Revisit with the WebGPU backend | M8 |
+| Shader language: GLSL or Slang | Decided before M3: Slang, compiled offline to SPIR-V by a pinned `slangc`; the same sources compile to WGSL for M8 (`docs/design/0003-slang-shaders.md`) | M3 |
 | Anti-aliasing: MSAA or TAA | Decided in M2: 4x MSAA, configurable (`docs/design/0002-renderer-v1.md`); TAA revisited with M5 camera-relative rendering | M2 |
 | Licence and contribution terms | Keep the current licence | M6 |
 

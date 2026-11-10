@@ -11,7 +11,7 @@
 namespace Geni
 {
 
-// A vertex + fragment shader pair compiled to SPIR-V, with what the renderer needs to know
+// A vertex + fragment shader pair (Slang, compiled to SPIR-V), with what the renderer needs to know
 // about it: the material parameters and textures it reads (set 1) and its vertex inputs.
 // Pipelines are made from it on demand by the Renderer, one per vertex layout.
 class Shader
@@ -35,8 +35,9 @@ class Shader
         const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode, size_t fragmentBytes,
         const std::string &name
     );
-    // Loads "<vertexPath>.spv" and "<fragmentPath>.spv" from the assets folder, as compiled
-    // by geni_compile_shaders. The paths are the GLSL sources' asset paths.
+    // Loads "<vertexPath>.vert.spv" and "<fragmentPath>.frag.spv" from the assets folder, as
+    // compiled by geni_compile_shaders from the vertexMain / fragmentMain entry points. The
+    // paths are the Slang sources' asset paths; both may name the same file.
     static std::shared_ptr<Shader> Load(const std::string &vertexPath, const std::string &fragmentPath);
 
     Shader(const Shader &) = delete;

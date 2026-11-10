@@ -25,7 +25,7 @@ include(cmake/GeniSubmodules.cmake)
 geni_require_submodules(glm nlohmann_json cgltf bullet3 VulkanMemoryAllocator SPIRV-Reflect)
 
 # Vulkan: the loader and headers (Vulkan SDK, Homebrew vulkan-headers + vulkan-loader, or
-# apt libvulkan-dev), plus glslangValidator for offline shader compilation.
+# apt libvulkan-dev). Shaders are compiled offline by a pinned slangc (cmake/GeniShaders.cmake).
 find_package(Vulkan REQUIRED)
 include(cmake/GeniShaders.cmake)
 
@@ -105,15 +105,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 geni_embed_shaders(${PROJECT_NAME}
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/builtin_shaders
   SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.frag
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow_skinned.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.frag
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.frag
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.vert
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow_skinned.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.slang
 )
 
 # glm

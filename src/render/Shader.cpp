@@ -94,16 +94,19 @@ std::shared_ptr<Shader> Shader::Create(
 std::shared_ptr<Shader> Shader::Load(const std::string &vertexPath, const std::string &fragmentPath)
 {
     auto &fs = Engine::GetInstance().GetFileSystem();
-    const auto vertexBytes = fs.LoadAssetFile(vertexPath + ".spv");
-    const auto fragmentBytes = fs.LoadAssetFile(fragmentPath + ".spv");
+    const std::string vertexFile = vertexPath + ".vert.spv";
+    const std::string fragmentFile = fragmentPath + ".frag.spv";
+    const auto vertexBytes = fs.LoadAssetFile(vertexFile);
+    const auto fragmentBytes = fs.LoadAssetFile(fragmentFile);
     for (const auto *missing :
-         {vertexBytes.empty() ? &vertexPath : nullptr, fragmentBytes.empty() ? &fragmentPath : nullptr})
+         {vertexBytes.empty() ? &vertexFile : nullptr, fragmentBytes.empty() ? &fragmentFile : nullptr})
     {
         if (missing)
         {
             GENI_LOG_ERROR(
-                "Compiled shader '%s.spv' not found. Shaders are compiled at build time: list the "
-                "source with geni_compile_shaders (cmake/GeniShaders.cmake)",
+                "Compiled shader '%s' not found. Shaders are compiled at build time: list the "
+                "source with geni_compile_shaders (cmake/GeniShaders.cmake), and give it a "
+                "vertexMain or fragmentMain entry point",
                 missing->c_str()
             );
         }

@@ -7,6 +7,7 @@
     "glfw",
     "glsl",
     "glslang",
+    "slangc",
     "lavapipe",
     "MoltenVK",
     "spirv",

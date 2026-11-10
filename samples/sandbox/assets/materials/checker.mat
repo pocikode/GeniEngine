@@ -1,7 +1,7 @@
 {
   "shader": {
-    "vertex": "shaders/lit.vert",
-    "fragment": "shaders/lit.frag"
+    "vertex": "shaders/lit.slang",
+    "fragment": "shaders/lit.slang"
   },
   "params": {
     "textures": [

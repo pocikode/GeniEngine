@@ -5,9 +5,34 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <string>
 
 namespace Geni
 {
+
+namespace
+{
+// Slang names a block's type after its layout (`Material_std140`); report the declared
+// struct name (`Material`).
+std::string BlockTypeName(const SpvReflectDescriptorBinding &b)
+{
+    if (!b.type_description || !b.type_description->type_name)
+    {
+        return {};
+    }
+    std::string name = b.type_description->type_name;
+    for (const char *suffix : {"_std140", "_std430"})
+    {
+        const size_t length = std::char_traits<char>::length(suffix);
+        if (name.size() > length && name.compare(name.size() - length, length, suffix) == 0)
+        {
+            name.erase(name.size() - length);
+            break;
+        }
+    }
+    return name;
+}
+} // namespace
 
 const ShaderBinding *ShaderReflection::Find(uint32_t set, uint32_t binding) const
 {
@@ -50,10 +75,7 @@ bool ReflectSpirv(
         if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
         {
             binding.kind = ShaderBindingKind::UniformBlock;
-            if (b->type_description && b->type_description->type_name)
-            {
-                binding.blockName = b->type_description->type_name;
-            }
+            binding.blockName = BlockTypeName(*b);
             binding.size = b->block.size;
             for (uint32_t m = 0; m < b->block.member_count; ++m)
             {
@@ -64,10 +86,7 @@ bool ReflectSpirv(
         else if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER)
         {
             binding.kind = ShaderBindingKind::StorageBuffer;
-            if (b->type_description && b->type_description->type_name)
-            {
-                binding.blockName = b->type_description->type_name;
-            }
+            binding.blockName = BlockTypeName(*b);
             binding.size = b->block.size;
         }
         else if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
@@ -78,7 +97,7 @@ bool ReflectSpirv(
         {
             char text[160];
             std::snprintf(
-                text, sizeof(text), "'%s' (set %u, binding %u) is neither a uniform block nor a sampler2D",
+                text, sizeof(text), "'%s' (set %u, binding %u) is neither a uniform block nor a Sampler2D",
                 binding.name.c_str(), binding.set, binding.binding
             );
             error = text;
@@ -193,7 +212,7 @@ bool ValidateShaderInterface(const ShaderReflection &reflection, std::string &er
             if (b.kind != ShaderBindingKind::UniformBlock && b.kind != ShaderBindingKind::SampledTexture)
             {
                 std::snprintf(
-                    text, sizeof(text), "'%s' (set 1, binding %u) must be a uniform block or a sampler2D",
+                    text, sizeof(text), "'%s' (set 1, binding %u) must be a uniform block (ConstantBuffer) or a Sampler2D",
                     b.name.c_str(), b.binding
                 );
                 error = text;
