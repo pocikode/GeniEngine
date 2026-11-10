@@ -4,5 +4,3 @@
 /vcpkg_installed
 geni_crash_*.log
 imgui.ini
-tests/reference/*.png
-tests/reference/*.jpg
