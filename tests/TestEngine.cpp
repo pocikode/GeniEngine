@@ -58,7 +58,7 @@ RecordingApp &RequireEngine()
     }
 
     REQUIRE_MESSAGE(
-        g_app != nullptr, "could not start the engine: gpu tests need a display and an OpenGL 3.3 context "
+        g_app != nullptr, "could not start the engine: gpu tests need a display and a Vulkan 1.1 device "
                           "(run `ctest -LE gpu` to skip them)"
     );
     return *g_app;

@@ -10,19 +10,23 @@ add_executable(geni_tests
   test_engine_loop.cpp
   test_gltf.cpp
   test_rhi.cpp
+  test_shader_reflection.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
   SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.vert
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bad_set.frag
+    ${PROJECT_SOURCE_DIR}/src/render/shaders/default.vert
+    ${PROJECT_SOURCE_DIR}/src/render/shaders/default.frag
 )
 target_include_directories(geni_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/doctest)
 target_link_libraries(geni_tests PRIVATE GeniEngine)
 target_compile_definitions(geni_tests PRIVATE GENI_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 set_target_properties(geni_tests PROPERTIES ENABLE_EXPORTS ON)
 
-# Test suites whose name starts with "gpu" need a window and an OpenGL 3.3 context.
+# Test suites whose name starts with "gpu" need a window and a Vulkan 1.1 device.
 # Everything else runs anywhere. `ctest -LE gpu` skips the ones that need a GPU.
 add_test(NAME unit COMMAND geni_tests --test-suite-exclude=gpu*)
 add_test(NAME gpu COMMAND geni_tests --test-suite=gpu*)

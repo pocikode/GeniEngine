@@ -1,8 +1,7 @@
 #include "render/RenderQueue.h"
 #include "core/Profiler.h"
-#include "graphics/GraphicsAPI.h"
-#include "graphics/ShaderProgram.h"
 #include "render/Material.h"
+#include "render/Renderer.h"
 
 namespace Geni
 {
@@ -12,41 +11,23 @@ void RenderQueue::Submit(const RenderCommand &command)
     m_commands.push_back(command);
 }
 
-void RenderQueue::Draw(GraphicsAPI &graphicsAPI, const CameraData &cameraData, const std::vector<LightData> &lights)
+void RenderQueue::Draw(Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData,
+                       const std::vector<LightData> &lights)
 {
     GENI_PROFILE_SCOPE("RenderQueue::Draw");
 
+    renderer.BeginFrame(cameraData, lights);
     m_lastDrawCallCount = 0;
     for (auto &command : m_commands)
     {
-        if (!command.material || !command.mesh || !command.material->GetShaderProgram())
+        if (!command.material || !command.mesh)
         {
             continue;
         }
-
-        graphicsAPI.BindMaterial(command.material);
-        auto shaderProgram = command.material->GetShaderProgram();
-        shaderProgram->SetUniform("uModel", command.modelMatrix);
-        shaderProgram->SetUniform("uView", cameraData.viewMatrix);
-        shaderProgram->SetUniform("uProjection", cameraData.projectionMatrix);
-        shaderProgram->SetUniform("uCameraPos", cameraData.position);
-
-        if (command.bonePalette && !command.bonePalette->empty())
+        if (renderer.DrawMesh(cmd, *command.mesh, *command.material, command.modelMatrix, command.bonePalette))
         {
-            shaderProgram->SetUniform("uBones", command.bonePalette->data(),
-                                      static_cast<int>(command.bonePalette->size()));
+            ++m_lastDrawCallCount;
         }
-
-        if (!lights.empty())
-        {
-            auto &light = lights[0];
-            shaderProgram->SetUniform("uLight.color", light.color);
-            shaderProgram->SetUniform("uLight.position", light.position);
-        }
-
-        graphicsAPI.BindMesh(command.mesh);
-        graphicsAPI.DrawMesh(command.mesh);
-        ++m_lastDrawCallCount;
     }
 
     m_commands.clear();

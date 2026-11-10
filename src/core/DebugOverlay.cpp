@@ -4,15 +4,15 @@
 
 #if defined(GENI_ENABLE_IMGUI)
 
+#include "rhi/Device.h"
 #include <backends/imgui_impl_glfw.h>
-#include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 #include <vector>
 
 namespace Geni
 {
 
-bool DebugOverlay::Init(GLFWwindow *window)
+bool DebugOverlay::Init(GLFWwindow *window, rhi::Device *device)
 {
     if (m_initialized)
     {
@@ -28,19 +28,20 @@ bool DebugOverlay::Init(GLFWwindow *window)
     ImGui::StyleColorsDark();
 
     // install_callbacks = true chains to the callbacks Engine::Init registered earlier.
-    if (!ImGui_ImplGlfw_InitForOpenGL(window, true))
+    if (!device || !ImGui_ImplGlfw_InitForVulkan(window, true))
     {
         ImGui::DestroyContext();
         return false;
     }
 
-    if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
+    if (!device->InitImGui())
     {
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
         return false;
     }
 
+    m_device = device;
     m_initialized = true;
     return true;
 }
@@ -52,9 +53,10 @@ void DebugOverlay::Shutdown()
         return;
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
+    m_device->ShutdownImGui();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+    m_device = nullptr;
     m_initialized = false;
     m_frameStarted = false;
 }
@@ -71,7 +73,7 @@ void DebugOverlay::BeginFrame()
         return;
     }
 
-    ImGui_ImplOpenGL3_NewFrame();
+    m_device->NewImGuiFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     m_frameStarted = true;
@@ -82,7 +84,7 @@ void DebugOverlay::BeginFrame()
     }
 }
 
-void DebugOverlay::Render(const FrameStats &stats)
+void DebugOverlay::Render(const FrameStats &stats, rhi::CommandList *cmd)
 {
     if (!m_initialized || !m_frameStarted)
     {
@@ -100,7 +102,10 @@ void DebugOverlay::Render(const FrameStats &stats)
     }
 
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (cmd)
+    {
+        m_device->RenderImGui(*cmd);
+    }
     m_frameStarted = false;
 }
 
@@ -209,7 +214,7 @@ bool DebugOverlay::WantsKeyboard() const
 namespace Geni
 {
 
-bool DebugOverlay::Init(GLFWwindow *)
+bool DebugOverlay::Init(GLFWwindow *, rhi::Device *)
 {
     return false;
 }
@@ -227,7 +232,7 @@ void DebugOverlay::BeginFrame()
 {
 }
 
-void DebugOverlay::Render(const FrameStats &)
+void DebugOverlay::Render(const FrameStats &, rhi::CommandList *)
 {
 }
 

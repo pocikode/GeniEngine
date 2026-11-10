@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GL/glew.h>
+#include "rhi/Handle.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -8,21 +8,42 @@
 namespace Geni
 {
 
+// An 8-bit color texture with a full mip chain, sampled with the renderer's default
+// (trilinear, repeating) sampler. Every texture goes through this one creation path, so
+// compressed formats (BC, ASTC) can be added in M3 without touching callers.
 class Texture
 {
   public:
-    Texture(int width, int height, int numChannels, unsigned char *data);
+    // `data` has numChannels (1-4) bytes per pixel, top row first.
+    Texture(int width, int height, int numChannels, const unsigned char *data);
+    Texture(const Texture &) = delete;
+    Texture &operator=(const Texture &) = delete;
     ~Texture();
-    GLuint GetID() const;
-    void Init(int width, int height, int numChannels, unsigned char *data);
+
+    rhi::TextureHandle GetHandle() const
+    {
+        return m_handle;
+    }
+    int GetWidth() const
+    {
+        return m_width;
+    }
+    int GetHeight() const
+    {
+        return m_height;
+    }
+    int GetMipLevels() const
+    {
+        return m_mipLevels;
+    }
 
     static std::shared_ptr<Texture> Load(const std::string &path);
 
   private:
-    GLuint m_ID = 0;
+    rhi::TextureHandle m_handle;
     int m_width = 0;
     int m_height = 0;
-    int m_numChannels = 0;
+    int m_mipLevels = 1;
 };
 
 class TextureManager

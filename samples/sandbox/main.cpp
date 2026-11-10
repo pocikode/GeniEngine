@@ -305,5 +305,12 @@ int main(int argc, char **argv)
 
     engine.Run();
     engine.Destroy();
+
+    // Tests run the sandbox with validation on (debug builds); any error fails the run.
+    if (const auto errors = Geni::rhi::GetValidationErrorCount())
+    {
+        GENI_LOG_ERROR("%llu Vulkan validation errors", static_cast<unsigned long long>(errors));
+        return 3;
+    }
     return 0;
 }

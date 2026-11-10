@@ -1,17 +1,22 @@
 #pragma once
-#include <GL/glew.h>
 #include <cstdint>
 #include <vector>
 
 namespace Geni
 {
 
+// Component type of a vertex attribute. Vertex data is always interleaved floats.
+enum class VertexElementType : uint32_t
+{
+    Float,
+};
+
 struct VertexElement
 {
-    GLuint index;    // attribute location
-    GLuint size;     // number of components
-    GLuint type;     // data type (e.g. GL_FLOAT)
-    uint32_t offset; // bytes offset
+    uint32_t index = 0;                                // attribute location
+    uint32_t size = 0;                                 // number of components, 1-4
+    VertexElementType type = VertexElementType::Float; // component type
+    uint32_t offset = 0;                               // byte offset within a vertex
 
     static constexpr int PositionIndex = 0;
     static constexpr int ColorIndex = 1;

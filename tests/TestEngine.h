@@ -37,7 +37,7 @@ class RecordingApp : public Geni::Application
 
 // Starts the engine once, with a hidden window, assets rooted at tests/assets and a
 // 1/60 s fixed step. Returns the application the engine is running.
-// Fails the calling test if no OpenGL 3.3 context can be created.
+// Fails the calling test if no Vulkan 1.1 device can be created.
 RecordingApp &RequireEngine();
 
 // Gives the engine a new empty scene (destroying the previous one) and returns it.

@@ -6,7 +6,7 @@
 #include "glm/ext/vector_float3.hpp"
 #include "graphics/Texture.h"
 #include "graphics/VertexLayout.h"
-#include "graphics/ShaderProgram.h"
+#include "render/Shader.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
 #include "scene/Skeleton.h"
@@ -278,7 +278,7 @@ static std::shared_ptr<Skeleton> BuildSkeletonFromSkin(cgltf_skin *skin, const N
 }
 
 static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std::filesystem::path &folder,
-                            const std::shared_ptr<ShaderProgram> &skinnedShader)
+                            const std::shared_ptr<Shader> &skinnedShader)
 {
     GameObject *object = nodeMap.at(node);
 
@@ -323,7 +323,7 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                 }
 
                 VertexElement element;
-                element.type = GL_FLOAT;
+                element.type = VertexElementType::Float;
 
                 switch (attr.type)
                 {
@@ -436,11 +436,11 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
             std::shared_ptr<Material> mat = std::make_shared<Material>();
             if (skeleton && skinnedShader)
             {
-                mat->SetShaderProgram(skinnedShader);
+                mat->SetShader(skinnedShader);
             }
             else
             {
-                mat->SetShaderProgram(Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram());
+                mat->SetShader(Engine::GetInstance().GetRenderer().GetDefaultShader());
             }
 
             // Returns true if a real base-color texture was loaded; false otherwise.
@@ -673,14 +673,14 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
 
     // Load the skinned shader once — shared across all skinned primitives; each primitive
     // gets its own Material instance (so textures don't clobber each other).
-    std::shared_ptr<ShaderProgram> skinnedShader;
+    std::shared_ptr<Shader> skinnedShader;
     if (data->skins_count > 0)
     {
         auto skinnedMat = Material::Load("materials/skinned.mat");
         if (skinnedMat)
-            skinnedShader = skinnedMat->GetShaderProgramShared();
+            skinnedShader = skinnedMat->GetShaderShared();
         if (!skinnedShader)
-            skinnedShader = Engine::GetInstance().GetGraphicsAPI().GetDefaultShaderProgram();
+            skinnedShader = Engine::GetInstance().GetRenderer().GetDefaultShader();
     }
 
     // Pass 2: attach mesh / skinned-mesh components.

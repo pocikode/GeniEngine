@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.30)
 
 # When building this repo on its own on Windows, pick up vcpkg automatically so that
-# GLFW and GLEW from vcpkg.json are installed and found without extra arguments.
+# GLFW from vcpkg.json is installed and found without extra arguments.
 if(WIN32
    AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR
    AND NOT DEFINED CMAKE_TOOLCHAIN_FILE
@@ -57,12 +57,13 @@ set(SRC_FILES
   src/core/FixedTimestep.cpp
   src/core/Log.cpp
   src/input/InputManager.cpp
-  src/graphics/ShaderProgram.cpp
-  src/graphics/GraphicsAPI.cpp
   src/graphics/Texture.cpp
   src/render/Material.cpp
   src/render/Mesh.cpp
   src/render/RenderQueue.cpp
+  src/render/Renderer.cpp
+  src/render/Shader.cpp
+  src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
   src/scene/Component.cpp
@@ -82,22 +83,28 @@ set(SRC_FILES
   src/physics/RigidBody.cpp
   src/rhi/vulkan/VulkanDevice.cpp
   src/rhi/vulkan/VmaImplementation.cpp
+  thirdparty/SPIRV-Reflect/spirv_reflect.c
 )
 
 # glfw
 find_package(glfw3 CONFIG REQUIRED)
 
-# glew
-find_package(GLEW REQUIRED)
-
-# OpenGL
-find_package(OpenGL REQUIRED)
-
 add_library(${PROJECT_NAME} ${SRC_FILES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC include)
-target_include_directories(${PROJECT_NAME} PUBLIC ${GLEW_INCLUDE_DIRS} ${GLFW_INCLUDE_DIRS})
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf)
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
+  ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf
+  ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/SPIRV-Reflect
+)
+
+# The engine's built-in shaders, compiled to SPIR-V and embedded in the library.
+geni_embed_shaders(${PROJECT_NAME}
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/builtin_shaders
+  SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.frag
+)
 
 # glm
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm)
@@ -126,7 +133,6 @@ target_link_libraries(
     glm::glm
     nlohmann_json::nlohmann_json
     glfw
-    GLEW::GLEW
   PRIVATE
     LinearMath
     BulletCollision
@@ -139,14 +145,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/VulkanMemoryAllocator/include
 )
 # Third-party code compiled into the engine: keep its warnings out of the build log.
-set_source_files_properties(src/rhi/vulkan/VmaImplementation.cpp PROPERTIES COMPILE_OPTIONS
-  "$<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-w>")
-
-if(APPLE)
-  target_link_libraries(${PROJECT_NAME} PRIVATE "-framework OpenGL")
-else()
-  target_link_libraries(${PROJECT_NAME} PUBLIC OpenGL::GL)
-endif()
+set_source_files_properties(src/rhi/vulkan/VmaImplementation.cpp thirdparty/SPIRV-Reflect/spirv_reflect.c PROPERTIES COMPILE_OPTIONS
+  "$<$<OR:$<CXX_COMPILER_ID:Clang,AppleClang,GNU>,$<C_COMPILER_ID:Clang,AppleClang,GNU>>:-w>")
 
 if(WIN32)
   # Stack traces in the crash handler.
@@ -166,14 +166,10 @@ if(GENI_ENABLE_IMGUI)
     ${GENI_IMGUI_DIR}/imgui_tables.cpp
     ${GENI_IMGUI_DIR}/imgui_widgets.cpp
     ${GENI_IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-    ${GENI_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     ${GENI_IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
   )
   target_include_directories(geni_imgui PUBLIC ${GENI_IMGUI_DIR})
   target_link_libraries(geni_imgui PUBLIC glfw PRIVATE Vulkan::Vulkan)
-  if(NOT APPLE)
-    target_link_libraries(geni_imgui PUBLIC OpenGL::GL)
-  endif()
 
   # PUBLIC so games can call ImGui:: between Application::Update and Render.
   target_link_libraries(${PROJECT_NAME} PUBLIC geni_imgui)

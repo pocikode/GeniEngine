@@ -992,7 +992,12 @@ void VulkanDevice::RunDeferred(bool all)
         }
         else
         {
-            m_pendingDestroys[kept++] = std::move(entry);
+            // Self-move-assignment would empty the std::function.
+            if (kept != i)
+            {
+                m_pendingDestroys[kept] = std::move(entry);
+            }
+            ++kept;
         }
     }
     m_pendingDestroys.resize(kept);

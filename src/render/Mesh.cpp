@@ -1,114 +1,107 @@
 #include "render/Mesh.h"
 #include "core/Engine.h"
-#include "glm/ext/vector_float3.hpp"
-#include "graphics/GraphicsAPI.h"
-#include "graphics/VertexLayout.h"
+#include "core/Log.h"
+#include "rhi/Device.h"
 #include <cstdint>
 #include <memory>
-#include <stdint.h>
 #include <vector>
 
 namespace Geni
 {
 
-Mesh::Mesh(const VertexLayout &layout, std::vector<float> &vertices, const std::vector<uint32_t> &indices)
+namespace
+{
+// FNV-1a over the layout: meshes with the same layout share pipelines.
+uint64_t HashLayout(const VertexLayout &layout)
+{
+    uint64_t hash = 1469598103934665603ull;
+    auto mix = [&](uint32_t value) {
+        for (int i = 0; i < 4; ++i)
+        {
+            hash ^= (value >> (i * 8)) & 0xffu;
+            hash *= 1099511628211ull;
+        }
+    };
+    mix(layout.stride);
+    for (const auto &element : layout.elements)
+    {
+        mix(element.index);
+        mix(element.size);
+        mix(static_cast<uint32_t>(element.type));
+        mix(element.offset);
+    }
+    return hash;
+}
+} // namespace
+
+Mesh::Mesh(const VertexLayout &layout, const std::vector<float> &vertices, const std::vector<uint32_t> &indices)
+{
+    Create(layout, vertices, &indices, rhi::PrimitiveTopology::TriangleList);
+}
+
+Mesh::Mesh(const VertexLayout &layout, const std::vector<float> &vertices)
+{
+    Create(layout, vertices, nullptr, rhi::PrimitiveTopology::TriangleList);
+}
+
+Mesh::Mesh(const VertexLayout &layout, const std::vector<float> &vertices, rhi::PrimitiveTopology topology)
+{
+    Create(layout, vertices, nullptr, topology);
+}
+
+void Mesh::Create(const VertexLayout &layout, const std::vector<float> &vertices, const std::vector<uint32_t> *indices,
+                  rhi::PrimitiveTopology topology)
 {
     m_vertexLayout = layout;
-    auto &graphicsAPI = Engine::GetInstance().GetGraphicsAPI();
+    m_topology = topology;
+    m_layoutKey = HashLayout(layout);
+    m_vertexCount = layout.stride > 0 ? (vertices.size() * sizeof(float)) / layout.stride : 0;
 
-    m_VBO = graphicsAPI.CreateVertexBuffer(vertices);
-    m_EBO = graphicsAPI.CreateIndexBuffer(indices);
-
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-
-    for (auto &element : m_vertexLayout.elements)
+    rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
+    if (!device)
     {
-        glVertexAttribPointer(
-            element.index, element.size, element.type, GL_FALSE, m_vertexLayout.stride,
-            (void *)(uintptr_t)element.offset
-        );
-        glEnableVertexAttribArray(element.index);
+        GENI_LOG_ERROR("Mesh created without a render device (call after Engine::Init)");
+        return;
     }
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    m_vertexCount = (vertices.size() * sizeof(float)) / m_vertexLayout.stride;
-    m_indexCount = indices.size();
-}
-
-Mesh::Mesh(const VertexLayout &layout, std::vector<float> &vertices)
-{
-    m_vertexLayout = layout;
-    auto &graphicsAPI = Engine::GetInstance().GetGraphicsAPI();
-
-    m_VBO = graphicsAPI.CreateVertexBuffer(vertices);
-
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-
-    for (auto &element : m_vertexLayout.elements)
+    if (!vertices.empty())
     {
-        glVertexAttribPointer(
-            element.index, element.size, element.type, GL_FALSE, m_vertexLayout.stride,
-            (void *)(uintptr_t)element.offset
-        );
-        glEnableVertexAttribArray(element.index);
+        m_vertexBuffer = device->CreateBuffer(
+            {vertices.size() * sizeof(float), rhi::BufferUsage::Vertex, rhi::MemoryUsage::GpuOnly, "mesh vertices"},
+            vertices.data());
     }
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    m_vertexCount = (vertices.size() * sizeof(float)) / m_vertexLayout.stride;
-}
-
-Mesh::Mesh(const VertexLayout &layout, std::vector<float> &vertices, GLenum drawMode)
-    : m_drawMode(drawMode)
-{
-    m_vertexLayout = layout;
-    auto &graphicsAPI = Engine::GetInstance().GetGraphicsAPI();
-
-    m_VBO = graphicsAPI.CreateVertexBuffer(vertices);
-
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-
-    for (auto &element : m_vertexLayout.elements)
+    if (indices && !indices->empty())
     {
-        glVertexAttribPointer(
-            element.index, element.size, element.type, GL_FALSE, m_vertexLayout.stride,
-            (void *)(uintptr_t)element.offset
-        );
-        glEnableVertexAttribArray(element.index);
+        m_indexCount = indices->size();
+        m_indexBuffer = device->CreateBuffer(
+            {indices->size() * sizeof(uint32_t), rhi::BufferUsage::Index, rhi::MemoryUsage::GpuOnly, "mesh indices"},
+            indices->data());
     }
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    m_vertexCount = (vertices.size() * sizeof(float)) / m_vertexLayout.stride;
 }
 
-void Mesh::Bind()
+Mesh::~Mesh()
 {
-    glBindVertexArray(m_VAO);
-}
-
-void Mesh::Draw()
-{
-    if (m_indexCount > 0)
+    if (rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice())
     {
-        glDrawElements(m_drawMode, m_indexCount, GL_UNSIGNED_INT, 0);
+        device->DestroyBuffer(m_vertexBuffer);
+        device->DestroyBuffer(m_indexBuffer);
+    }
+}
+
+void Mesh::Draw(rhi::CommandList &cmd) const
+{
+    if (!m_vertexBuffer.IsValid())
+    {
+        return;
+    }
+    cmd.SetVertexBuffer(m_vertexBuffer);
+    if (m_indexBuffer.IsValid())
+    {
+        cmd.SetIndexBuffer(m_indexBuffer, rhi::IndexFormat::Uint32);
+        cmd.DrawIndexed(static_cast<uint32_t>(m_indexCount));
     }
     else
     {
-        glDrawArrays(m_drawMode, 0, m_vertexCount);
+        cmd.Draw(static_cast<uint32_t>(m_vertexCount));
     }
 }
 
@@ -154,7 +147,7 @@ std::shared_ptr<Mesh> Mesh::CreateBox(const glm::vec3 &extents)
         half.x, -half.y, -half.z,   0.0f, 0.0f, 1.0f,     0.0f, 0.0f,     0.0f, 0.0f, -1.0f,
         -half.x, -half.y, -half.z,  1.0f, 1.0f, 0.0f,     1.0f, 0.0f,     0.0f, 0.0f, -1.0f,
     };
-    std::vector<unsigned int> indices = {
+    std::vector<uint32_t> indices = {
         // front face
         0,1,2,
         0,2,3,
@@ -181,28 +174,28 @@ std::shared_ptr<Mesh> Mesh::CreateBox(const glm::vec3 &extents)
     vertexLayout.elements.push_back({
         VertexElement::PositionIndex,
         3,
-        GL_FLOAT,
+        VertexElementType::Float,
         0,
     });
     // color
     vertexLayout.elements.push_back({
         VertexElement::ColorIndex,
         3,
-        GL_FLOAT,
+        VertexElementType::Float,
         3 * sizeof(float),
     });
     // uv
     vertexLayout.elements.push_back({
         VertexElement::UVIndex,
         2,
-        GL_FLOAT,
+        VertexElementType::Float,
         6 * sizeof(float),
     });
     // Normal
     vertexLayout.elements.push_back({
         VertexElement::NormalIndex,
         3,
-        GL_FLOAT,
+        VertexElementType::Float,
         8 * sizeof(float),
     });
     vertexLayout.stride = sizeof(float) * 11;
@@ -228,175 +221,11 @@ std::shared_ptr<Mesh> Mesh::CreateLines(const std::vector<glm::vec3> &positions,
     }
 
     VertexLayout layout;
-    layout.elements.push_back({VertexElement::PositionIndex, 3, GL_FLOAT, 0});
-    layout.elements.push_back({VertexElement::ColorIndex, 3, GL_FLOAT, 3 * sizeof(float)});
+    layout.elements.push_back({VertexElement::PositionIndex, 3, VertexElementType::Float, 0});
+    layout.elements.push_back({VertexElement::ColorIndex, 3, VertexElementType::Float, 3 * sizeof(float)});
     layout.stride = 6 * sizeof(float);
 
-    return std::make_shared<Mesh>(layout, vertices, GL_LINES);
+    return std::make_shared<Mesh>(layout, vertices, rhi::PrimitiveTopology::LineList);
 }
-
-// std::shared_ptr<Mesh> Mesh::Load(const std::string &path)
-// {
-//     auto contents = Engine::GetInstance().GetFileSystem().LoadAssetFileText(path);
-//     if (contents.empty())
-//     {
-//         return nullptr;
-//     }
-
-//     auto readFloats = [](const cgltf_accessor *acc, cgltf_size i, float *out, int n) {
-//         std::fill(out, out + n, 0.0f);
-//         return cgltf_accessor_read_float(acc, i, out, n) == 1;
-//     };
-
-//     auto readIndex = [](const cgltf_accessor *acc, cgltf_size i) {
-//         cgltf_uint out = 0;
-//         cgltf_bool ok = cgltf_accessor_read_uint(acc, i, &out, 1);
-//         return ok ? static_cast<uint32_t>(out) : 0;
-//     };
-
-//     cgltf_options options = {};
-//     cgltf_data *data = nullptr;
-//     cgltf_result res = cgltf_parse(&options, contents.data(), contents.size(), &data);
-//     if (res != cgltf_result_success)
-//     {
-//         return nullptr;
-//     }
-
-//     auto fullPath = Engine::GetInstance().GetFileSystem().GetAssetsFolder() / path;
-//     res = cgltf_load_buffers(&options, data, fullPath.remove_filename().string().c_str());
-//     if (res != cgltf_result_success)
-//     {
-//         cgltf_free(data);
-//         return nullptr;
-//     }
-
-//     std::shared_ptr<Mesh> result = nullptr;
-//     for (cgltf_size mi = 0; mi < data->meshes_count; ++mi)
-//     {
-//         auto mesh = data->meshes[mi];
-//         for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
-//         {
-//             auto &primitive = mesh.primitives[pi];
-//             if (primitive.type != cgltf_primitive_type_triangles)
-//             {
-//                 continue;
-//             }
-
-//             VertexLayout vertexLayout;
-//             cgltf_accessor *accessors[4] = {nullptr, nullptr, nullptr, nullptr};
-
-//             for (cgltf_size ai = 0; ai < primitive.attributes_count; ++ai)
-//             {
-//                 auto &attr = primitive.attributes[ai];
-//                 auto acc = attr.data;
-//                 if (!acc)
-//                 {
-//                     continue;
-//                 }
-
-//                 VertexElement element;
-//                 element.type = GL_FLOAT;
-
-//                 switch (attr.type)
-//                 {
-//                 case cgltf_attribute_type_position: {
-//                     accessors[VertexElement::PositionIndex] = acc;
-//                     element.index = VertexElement::PositionIndex;
-//                     element.size = 3;
-//                 }
-//                 break;
-//                 case cgltf_attribute_type_color: {
-//                     if (attr.index != 0)
-//                     {
-//                         continue;
-//                     }
-//                     accessors[VertexElement::ColorIndex] = acc;
-//                     element.index = VertexElement::ColorIndex;
-//                     element.size = 3;
-//                 }
-//                 break;
-//                 case cgltf_attribute_type_texcoord: {
-//                     if (attr.index != 0)
-//                     {
-//                         continue;
-//                     }
-//                     accessors[VertexElement::UVIndex] = acc;
-//                     element.index = VertexElement::UVIndex;
-//                     element.size = 2;
-//                 }
-//                 break;
-//                 case cgltf_attribute_type_normal: {
-//                     accessors[VertexElement::NormalIndex] = acc;
-//                     element.index = VertexElement::NormalIndex;
-//                     element.size = 3;
-//                 }
-//                 break;
-//                 default:
-//                     continue;
-//                 }
-
-//                 if (element.size > 0)
-//                 {
-//                     element.offset = vertexLayout.stride;
-//                     vertexLayout.stride += element.size * sizeof(float);
-//                     vertexLayout.elements.push_back(element);
-//                 }
-//             }
-
-//             if (!accessors[VertexElement::PositionIndex])
-//             {
-//                 continue;
-//             }
-
-//             auto vertexCount = accessors[VertexElement::PositionIndex]->count;
-
-//             std::vector<float> vertices;
-//             vertices.resize((vertexLayout.stride / sizeof(float)) * vertexCount, 0.0f);
-
-//             for (cgltf_size vi = 0; vi < vertexCount; ++vi)
-//             {
-//                 for (auto &el : vertexLayout.elements)
-//                 {
-//                     if (!accessors[el.index])
-//                     {
-//                         continue;
-//                     }
-
-//                     auto index = (vi * vertexLayout.stride + el.offset) / sizeof(float);
-//                     float *outData = &vertices[index];
-//                     readFloats(accessors[el.index], vi, outData, el.size);
-//                 }
-//             }
-
-//             if (primitive.indices)
-//             {
-//                 auto indexCount = primitive.indices->count;
-//                 std::vector<uint32_t> indices(indexCount);
-//                 for (cgltf_size i = 0; i < indexCount; ++i)
-//                 {
-//                     indices[i] = readIndex(primitive.indices, i);
-//                 }
-//                 result = std::make_shared<Mesh>(vertexLayout, vertices, indices);
-//             }
-//             else
-//             {
-//                 result = std::make_shared<Mesh>(vertexLayout, vertices);
-//             }
-
-//             if (result)
-//             {
-//                 break;
-//             }
-//         }
-
-//         if (result)
-//         {
-//             break;
-//         }
-//     }
-
-//     cgltf_free(data);
-//     return result;
-// }
 
 } // namespace Geni

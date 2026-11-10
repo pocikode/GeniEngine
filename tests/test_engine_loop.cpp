@@ -10,7 +10,8 @@
 #include "scene/components/LightComponent.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/PhysicsComponent.h"
-#include <GL/glew.h>
+#include "rhi/Device.h"
+#include <GLFW/glfw3.h>
 #include <doctest/doctest.h>
 #include <memory>
 
@@ -158,17 +159,15 @@ TEST_SUITE("gpu rendering")
         light->AddComponent(new Geni::LightComponent());
 
         auto material = std::make_shared<Geni::Material>();
-        material->SetShaderProgram(engine.GetGraphicsAPI().GetDefaultShaderProgram());
+        material->SetShader(engine.GetRenderer().GetDefaultShader());
         material->SetParam("uBaseColorFactor", glm::vec4(1.0f));
         material->SetParam("baseColorTexture", engine.GetTextureManager().GetWhiteTexture());
-        REQUIRE(material->GetShaderProgram() != nullptr);
+        REQUIRE(material->GetShader() != nullptr);
 
         auto box = scene->CreateObject("box");
         box->AddComponent(new Geni::MeshComponent(material, Geni::Mesh::CreateBox()));
 
-        while (glGetError() != GL_NO_ERROR)
-        {
-        }
+        const auto validationErrorsBefore = Geni::rhi::GetValidationErrorCount();
 
         // Not updated: the engine does not call Scene::Update itself.
         const auto frameBefore = engine.GetFrameStats().frameIndex;
@@ -180,7 +179,7 @@ TEST_SUITE("gpu rendering")
         CHECK(engine.Tick());
         CHECK(engine.GetFrameStats().drawCalls == 1);
         CHECK(engine.GetRenderQueue().GetPendingCount() == 0);
-        CHECK(glGetError() == GL_NO_ERROR);
+        CHECK(Geni::rhi::GetValidationErrorCount() == validationErrorsBefore);
 
         GeniTest::ResetScene();
     }
@@ -192,10 +191,33 @@ TEST_SUITE("gpu rendering")
 
         auto first = textures.GetOrLoadTexture("textures/checker.png");
         REQUIRE(first != nullptr);
-        CHECK(first->GetID() != 0);
+        CHECK(first->GetHandle().IsValid());
         CHECK(textures.GetOrLoadTexture("textures/checker.png") == first);
 
         CHECK(textures.GetOrLoadTexture("textures/missing.png") == nullptr);
+    }
+
+    TEST_CASE("the backbuffer follows a window resize without validation errors")
+    {
+        GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        const auto validationErrorsBefore = Geni::rhi::GetValidationErrorCount();
+
+        glfwSetWindowSize(engine.GetWindow(), 400, 300);
+        CHECK(engine.Tick());
+        CHECK(engine.Tick());
+        uint32_t width = 0;
+        uint32_t height = 0;
+        engine.GetRenderDevice()->GetBackbufferSize(width, height);
+        CHECK(width == 400);
+        CHECK(height == 300);
+
+        glfwSetWindowSize(engine.GetWindow(), 320, 240);
+        CHECK(engine.Tick());
+        engine.GetRenderDevice()->GetBackbufferSize(width, height);
+        CHECK(width == 320);
+        CHECK(height == 240);
+        CHECK(Geni::rhi::GetValidationErrorCount() == validationErrorsBefore);
     }
 
     TEST_CASE("loading a missing material returns null")

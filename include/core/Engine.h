@@ -1,12 +1,13 @@
 #pragma once
 #include "core/DebugOverlay.h"
 #include "core/FixedTimestep.h"
-#include "graphics/GraphicsAPI.h"
 #include "graphics/Texture.h"
 #include "input/InputManager.h"
 #include "io/FileSystem.h"
 #include "physics/PhysicsManager.h"
 #include "render/RenderQueue.h"
+#include "render/Renderer.h"
+#include "rhi/Device.h"
 #include "scene/Scene.h"
 #include <chrono>
 #include <glm/ext/vector_int2.hpp>
@@ -28,6 +29,13 @@ struct EngineConfig
     // false creates a hidden window: used by tests and CI smoke runs.
     bool visible = true;
     bool vsync = true;
+    // Vulkan validation layers: every validation error is logged and counted
+    // (rhi::GetValidationErrorCount). On by default in debug builds.
+#if defined(NDEBUG)
+    bool gpuValidation = false;
+#else
+    bool gpuValidation = true;
+#endif
     // Initializes Dear ImGui and the built-in stats window (F1). Turn off if the
     // application runs its own ImGui context.
     bool debugOverlay = true;
@@ -73,19 +81,21 @@ class Engine
     // Advances the simulation by frameSeconds: zero or more fixed steps (physics, then
     // Application::FixedUpdate), then one Application::Update. Does not touch the window.
     void Simulate(double frameSeconds);
-    // Draws the current scene and the debug overlay, then swaps buffers.
+    // Draws the current scene and the debug overlay, then presents.
     void RenderFrame();
     void Destroy();
 
-    // Saves the next rendered frame (as shown, overlay included) to a binary PPM file.
-    // Groundwork for the screenshot comparison tests planned for M1.
+    // Saves the next rendered frame (as shown, overlay included): PNG when the path ends
+    // in .png, binary PPM otherwise. Used by the screenshot comparison tests.
     void RequestScreenshot(const std::string &path);
 
     void SetApplication(Application *app);
     void SetWindowTitle(const std::string &title);
     Application *GetApplication();
     InputManager &GetInputManager();
-    GraphicsAPI &GetGraphicsAPI();
+    Renderer &GetRenderer();
+    // nullptr before Init and after Destroy.
+    rhi::Device *GetRenderDevice();
     RenderQueue &GetRenderQueue();
     FileSystem &GetFileSystem();
     TextureManager &GetTextureManager();
@@ -106,7 +116,8 @@ class Engine
     std::chrono::steady_clock::time_point m_lastTimePoint;
     GLFWwindow *m_window = nullptr;
     InputManager m_inputManager;
-    GraphicsAPI m_graphicsAPI;
+    std::unique_ptr<rhi::Device> m_device;
+    Renderer m_renderer;
     RenderQueue m_renderQueue;
     FileSystem m_fileSystem;
     TextureManager m_textureManager;

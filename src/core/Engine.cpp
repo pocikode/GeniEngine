@@ -6,13 +6,11 @@
 #include "core/Log.h"
 #include "core/Profiler.h"
 #include "glm/ext/vector_float2.hpp"
-#include "graphics/GraphicsAPI.h"
 #include "io/ImageWriter.h"
 #include "render/RenderQueue.h"
 #include "rhi/Device.h"
 #include <algorithm>
 #include "scene/components/CameraComponent.h"
-#include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <cstdio>
 #include <vector>
@@ -63,36 +61,6 @@ void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 static void glfwErrorCallback(int code, const char *description)
 {
     GENI_LOG_ERROR("GLFW error %d: %s", code, description ? description : "");
-}
-
-static void SaveBackBufferAsPpm(GLFWwindow *window, const std::string &path)
-{
-    int width = 0;
-    int height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    if (width <= 0 || height <= 0)
-    {
-        GENI_LOG_ERROR("Screenshot '%s' skipped: the framebuffer is empty", path.c_str());
-        return;
-    }
-
-    std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadBuffer(GL_BACK);
-    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-
-    // OpenGL rows start at the bottom; image files start at the top.
-    const size_t rowBytes = static_cast<size_t>(width) * 3;
-    std::vector<unsigned char> flipped(pixels.size());
-    for (int row = 0; row < height; ++row)
-    {
-        std::copy_n(pixels.data() + static_cast<size_t>(height - 1 - row) * rowBytes, rowBytes,
-                    flipped.data() + static_cast<size_t>(row) * rowBytes);
-    }
-    if (WriteImage(path, width, height, 3, flipped.data()))
-    {
-        GENI_LOG_INFO("Screenshot saved to %s (%dx%d)", path.c_str(), width, height);
-    }
 }
 
 Engine &Engine::GetInstance()
@@ -146,12 +114,8 @@ bool Engine::Init(const EngineConfig &config)
         return false;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#if defined(__APPLE__)
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-#endif
+    // The renderer owns the GPU API (Vulkan); the window gets no OpenGL context.
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     // A hidden window is a test or capture run: its framebuffer must be exactly the
     // requested size on every machine, so no DPI scaling and no Retina framebuffer.
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, config.visible ? GLFW_TRUE : GLFW_FALSE);
@@ -162,8 +126,7 @@ bool Engine::Init(const EngineConfig &config)
     m_window = glfwCreateWindow(config.width, config.height, m_windowTitle.c_str(), nullptr, nullptr);
     if (!m_window)
     {
-        GENI_LOG_ERROR("Failed to create a %dx%d window with an OpenGL 3.3 core context", config.width,
-                       config.height);
+        GENI_LOG_ERROR("Failed to create a %dx%d window", config.width, config.height);
         glfwTerminate();
         return false;
     }
@@ -173,31 +136,22 @@ bool Engine::Init(const EngineConfig &config)
     glfwSetCursorPosCallback(m_window, mouseCursorCallback);
     glfwSetScrollCallback(m_window, scrollCallback);
 
-    glfwMakeContextCurrent(m_window);
-    glfwSwapInterval(config.vsync ? 1 : 0);
-
-    // GLEW reports GLEW_ERROR_NO_GLX_DISPLAY under Wayland/EGL even though the function
-    // pointers loaded fine, so that one code is not a failure.
-    const GLenum glewStatus = glewInit();
-    if (glewStatus != GLEW_OK && glewStatus != GLEW_ERROR_NO_GLX_DISPLAY)
+    rhi::DeviceConfig deviceConfig;
+    deviceConfig.applicationName = m_windowTitle.c_str();
+    deviceConfig.vsync = config.vsync;
+    deviceConfig.validation = config.gpuValidation;
+    m_device = rhi::CreateDevice(m_window, deviceConfig);
+    if (!m_device || !m_renderer.Init(m_device.get()))
     {
-        GENI_LOG_ERROR("Failed to initialize GLEW: %s",
-                       reinterpret_cast<const char *>(glewGetErrorString(glewStatus)));
+        GENI_LOG_ERROR("Failed to initialize the Vulkan renderer");
+        m_renderer.Shutdown();
+        m_device.reset();
         glfwDestroyWindow(m_window);
         m_window = nullptr;
         glfwTerminate();
         return false;
     }
 
-    int fbWidth = 0;
-    int fbHeight = 0;
-    glfwGetFramebufferSize(m_window, &fbWidth, &fbHeight);
-    glViewport(0, 0, fbWidth, fbHeight);
-
-    GENI_LOG_INFO("OpenGL %s on %s", reinterpret_cast<const char *>(glGetString(GL_VERSION)),
-                  reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-
-    m_graphicsAPI.Init();
     m_physicsManager.Init();
 
     m_fixedTimestep = FixedTimestep(config.fixedTimestep, config.maxFixedStepsPerFrame);
@@ -207,7 +161,7 @@ bool Engine::Init(const EngineConfig &config)
 
     if (config.debugOverlay)
     {
-        if (m_debugOverlay.Init(m_window))
+        if (m_debugOverlay.Init(m_window, m_device.get()))
         {
             m_debugOverlay.SetVisible(config.debugOverlayVisible);
         }
@@ -340,20 +294,17 @@ void Engine::RenderFrame()
     }
 
     const auto start = std::chrono::steady_clock::now();
+    rhi::CommandList *cmd = nullptr;
     {
         GENI_PROFILE_SCOPE("Render");
 
-        int fbWidth = 0;
-        int fbHeight = 0;
-        glfwGetFramebufferSize(m_window, &fbWidth, &fbHeight);
+        // nullptr while minimized: the frame is still simulated, just not drawn.
+        cmd = m_device->BeginFrame();
 
-        // A minimized window has a zero-sized framebuffer: still drain the queue, with a
-        // harmless aspect ratio, so commands do not pile up.
-        const float aspect = fbHeight > 0 ? static_cast<float>(fbWidth) / static_cast<float>(fbHeight) : 1.0f;
-        glViewport(0, 0, fbWidth, fbHeight);
-
-        m_graphicsAPI.SetClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        m_graphicsAPI.ClearBuffers();
+        uint32_t width = 0;
+        uint32_t height = 0;
+        m_device->GetBackbufferSize(width, height);
+        const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
 
         CameraData cameraData;
         cameraData.viewMatrix = glm::mat4(1.0f);
@@ -377,25 +328,52 @@ void Engine::RenderFrame()
             lights = m_currentScene->CollectLights();
         }
 
-        m_renderQueue.Draw(m_graphicsAPI, cameraData, lights);
+        if (cmd)
+        {
+            rhi::RenderPassDesc pass;
+            pass.clearColor[0] = 1.0f;
+            pass.clearColor[1] = 1.0f;
+            pass.clearColor[2] = 1.0f;
+            pass.clearColor[3] = 1.0f;
+            cmd->BeginRenderPass(pass);
+            m_renderQueue.Draw(m_renderer, *cmd, cameraData, lights);
+        }
+        else
+        {
+            m_renderQueue.Clear();
+        }
         m_frameStats.drawCalls = m_renderQueue.GetLastDrawCallCount();
 
         m_application->Render();
 
         m_frameStats.renderMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-        m_debugOverlay.Render(m_frameStats);
+        m_debugOverlay.Render(m_frameStats, cmd);
+
+        if (cmd)
+        {
+            cmd->EndRenderPass();
+        }
     }
 
-    if (!m_pendingScreenshotPath.empty())
     {
-        SaveBackBufferAsPpm(m_window, m_pendingScreenshotPath);
-        m_pendingScreenshotPath.clear();
-    }
-
-    {
-        GENI_PROFILE_SCOPE("SwapBuffers");
-        glfwSwapBuffers(m_window);
+        GENI_PROFILE_SCOPE("Present");
+        if (!m_pendingScreenshotPath.empty() && cmd)
+        {
+            rhi::BackbufferCapture capture;
+            m_device->EndFrame(&capture);
+            if (!capture.rgb.empty() &&
+                WriteImage(m_pendingScreenshotPath, capture.width, capture.height, 3, capture.rgb.data()))
+            {
+                GENI_LOG_INFO("Screenshot saved to %s (%dx%d)", m_pendingScreenshotPath.c_str(), capture.width,
+                              capture.height);
+            }
+            m_pendingScreenshotPath.clear();
+        }
+        else
+        {
+            m_device->EndFrame();
+        }
     }
 
     // Open the next ImGui frame right away so ImGui calls are legal anywhere in the
@@ -419,14 +397,15 @@ void Engine::Destroy()
         return;
     }
 
-    // Order matters: everything that owns GL objects or rigid bodies goes before the
-    // context and the physics world.
+    // Order matters: everything that owns GPU objects or rigid bodies goes before the
+    // renderer, the device and the physics world.
     m_currentScene.reset();
     m_renderQueue.Clear();
     m_textureManager.Clear();
-    m_graphicsAPI.Shutdown();
-    m_physicsManager.Shutdown();
     m_debugOverlay.Shutdown();
+    m_renderer.Shutdown();
+    m_device.reset();
+    m_physicsManager.Shutdown();
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
@@ -451,9 +430,14 @@ InputManager &Engine::GetInputManager()
     return m_inputManager;
 }
 
-GraphicsAPI &Engine::GetGraphicsAPI()
+Renderer &Engine::GetRenderer()
 {
-    return m_graphicsAPI;
+    return m_renderer;
+}
+
+rhi::Device *Engine::GetRenderDevice()
+{
+    return m_device.get();
 }
 
 RenderQueue &Engine::GetRenderQueue()

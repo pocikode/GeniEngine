@@ -1,21 +1,32 @@
-#version 330 core
+#version 450
+// Bindings follow the engine's shader contract (include/render/ShaderInterface.h).
+
 layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aColor;
 layout(location = 2) in vec2 aUV;
 layout(location = 3) in vec3 aNormal;
 
-uniform mat4 uModel;
-uniform mat4 uView;
-uniform mat4 uProjection;
+layout(set = 0, binding = 0) uniform Frame
+{
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPos;
+    vec4 lightColor;
+    vec4 lightPosition;
+} uFrame;
 
-out vec2 vUV;
-out vec3 vNormal;
-out vec3 vFragPos;
+layout(set = 2, binding = 0) uniform Draw
+{
+    mat4 model;
+} uDraw;
+
+layout(location = 0) out vec2 vUV;
+layout(location = 1) out vec3 vNormal;
+layout(location = 2) out vec3 vFragPos;
 
 void main()
 {
     vUV = aUV;
-    vNormal = mat3(transpose(inverse(uModel))) * aNormal;
-    vFragPos = vec3(uModel * vec4(aPos, 1.0));
-    gl_Position = uProjection * uView * vec4(vFragPos, 1.0);
+    vNormal = mat3(transpose(inverse(uDraw.model))) * aNormal;
+    vFragPos = vec3(uDraw.model * vec4(aPos, 1.0));
+    gl_Position = uFrame.projection * uFrame.view * vec4(vFragPos, 1.0);
 }

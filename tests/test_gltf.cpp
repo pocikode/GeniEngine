@@ -8,7 +8,7 @@
 #include "scene/components/CameraComponent.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/SkinnedMeshComponent.h"
-#include <GL/glew.h>
+#include "rhi/Device.h"
 #include <cmath>
 #include <doctest/doctest.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -166,7 +166,7 @@ TEST_SUITE("gpu gltf")
         GeniTest::ResetScene();
     }
 
-    TEST_CASE("loaded models render without OpenGL errors")
+    TEST_CASE("loaded models render without validation errors")
     {
         auto &app = GeniTest::RequireEngine();
         auto &engine = Geni::Engine::GetInstance();
@@ -180,14 +180,12 @@ TEST_SUITE("gpu gltf")
         REQUIRE(Geni::GameObject::LoadGLTF("models/hierarchy.gltf") != nullptr);
         REQUIRE(Geni::GameObject::LoadGLTF("models/skinned_bar.gltf") != nullptr);
 
-        while (glGetError() != GL_NO_ERROR)
-        {
-        }
+        const auto validationErrorsBefore = Geni::rhi::GetValidationErrorCount();
 
         app.sceneToUpdate = scene;
         CHECK(engine.Tick());
         CHECK(engine.GetFrameStats().drawCalls == 2); // the triangle and the bar
-        CHECK(glGetError() == GL_NO_ERROR);
+        CHECK(Geni::rhi::GetValidationErrorCount() == validationErrorsBefore);
 
         GeniTest::ResetScene();
     }

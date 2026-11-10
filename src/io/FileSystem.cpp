@@ -94,9 +94,25 @@ std::vector<char> FileSystem::LoadFile(const std::filesystem::path &path)
     return buffer;
 }
 
+std::filesystem::path FileSystem::ResolveAssetPath(const std::string &relativePath) const
+{
+    const auto primary = GetAssetsFolder() / relativePath;
+    std::error_code ec;
+    if (std::filesystem::exists(primary, ec))
+    {
+        return primary;
+    }
+    const auto besideExecutable = GetExecutableFolder() / "assets" / relativePath;
+    if (std::filesystem::exists(besideExecutable, ec))
+    {
+        return besideExecutable;
+    }
+    return primary;
+}
+
 std::vector<char> FileSystem::LoadAssetFile(const std::string &relativePath)
 {
-    return LoadFile(GetAssetsFolder() / relativePath);
+    return LoadFile(ResolveAssetPath(relativePath));
 }
 
 std::string FileSystem::LoadAssetFileText(const std::string &relativePath)

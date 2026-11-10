@@ -9,6 +9,12 @@ struct GLFWwindow;
 namespace Geni
 {
 
+namespace rhi
+{
+class Device;
+class CommandList;
+} // namespace rhi
+
 // Timings and counters for the most recent frame, filled in by Engine::Tick.
 struct FrameStats
 {
@@ -30,13 +36,15 @@ struct FrameStats
 class DebugOverlay
 {
   public:
-    bool Init(GLFWwindow *window);
+    // The device draws ImGui's output; the overlay itself never touches the GPU API.
+    bool Init(GLFWwindow *window, rhi::Device *device);
     void Shutdown();
     bool IsInitialized() const;
 
     void BeginFrame();
-    // Draws the built-in window (if visible) and submits all ImGui draw data.
-    void Render(const FrameStats &stats);
+    // Draws the built-in window (if visible) and records all ImGui draw data into the
+    // open render pass of `cmd`. With a null `cmd` (minimized) the frame is ended unseen.
+    void Render(const FrameStats &stats, rhi::CommandList *cmd);
 
     void SetVisible(bool visible);
     bool IsVisible() const;
@@ -49,6 +57,7 @@ class DebugOverlay
     void DrawStatsWindow(const FrameStats &stats);
 
   private:
+    rhi::Device *m_device = nullptr;
     bool m_initialized = false;
     bool m_visible = true;
     bool m_frameStarted = false;

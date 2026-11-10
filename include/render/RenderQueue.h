@@ -10,7 +10,12 @@ namespace Geni
 
 class Mesh;
 class Material;
-class GraphicsAPI;
+class Renderer;
+
+namespace rhi
+{
+class CommandList;
+}
 
 struct RenderCommand
 {
@@ -24,7 +29,9 @@ class RenderQueue
 {
   public:
     void Submit(const RenderCommand &command);
-    void Draw(GraphicsAPI &graphicsAPI, const CameraData &cameraData, const std::vector<LightData> &lights);
+    // Draws and clears the queued commands, inside an open render pass.
+    void Draw(Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData,
+              const std::vector<LightData> &lights);
     // Drops queued commands without drawing them.
     void Clear();
     // Commands waiting for the next Draw.
