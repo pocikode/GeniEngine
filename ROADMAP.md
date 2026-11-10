@@ -58,6 +58,8 @@ Make the project safe to change quickly.
 
 ### M1: Vulkan backend (Feb – Jul 2027, about 200 h)
 
+**Status (2026-11-10):** implemented; all tests pass locally on macOS (MoltenVK) with validation layers on, and the sandbox matches the screenshots captured from the OpenGL renderer. Open until CI has run green on macOS, Windows and Linux.
+
 Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backend.
 
 - Thin RHI: device, swapchain, buffers, textures, pipelines, render passes, command lists
@@ -181,7 +183,7 @@ Each has a default so work is never blocked. Change them before the milestone th
 |---|---|---|
 | Scripting language | Lua | M6 |
 | Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
-| Shader language: GLSL or Slang | GLSL (existing shaders are GLSL) | M1 |
+| Shader language: GLSL or Slang | Decided in M1: GLSL 450, compiled offline with glslang. Revisit with the WebGPU backend | M8 |
 | Anti-aliasing: MSAA or TAA | Design page in M2 | M2 |
 | Licence and contribution terms | Keep the current licence | M6 |
 

@@ -85,18 +85,20 @@ TEST_SUITE("gpu rhi")
 
             // Upper-left half of the screen: a triangle with clip-space Y pointing up.
             const float vertices[] = {
-                -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, //
-                1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  //
+                -1.0f, 1.0f,  1.0f, 1.0f, 1.0f, //
+                1.0f,  1.0f,  1.0f, 1.0f, 1.0f, //
                 -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
             };
-            BufferHandle vertexBuffer =
-                device->CreateBuffer({sizeof(vertices), BufferUsage::Vertex, MemoryUsage::GpuOnly, "triangle"}, vertices);
+            BufferHandle vertexBuffer = device->CreateBuffer(
+                {sizeof(vertices), BufferUsage::Vertex, MemoryUsage::GpuOnly, "triangle"}, vertices
+            );
             REQUIRE(vertexBuffer.IsValid());
 
             // Two tints in one buffer; the dynamic offset picks the second (red).
-            const uint32_t alignment = device->GetUniformBufferAlignment() < 16 ? 16 : device->GetUniformBufferAlignment();
-            BufferHandle tints = device->CreateBuffer(
-                {alignment * 2, BufferUsage::Uniform, MemoryUsage::CpuToGpu, "tints"}, nullptr);
+            const uint32_t alignment =
+                device->GetUniformBufferAlignment() < 16 ? 16 : device->GetUniformBufferAlignment();
+            BufferHandle tints =
+                device->CreateBuffer({alignment * 2, BufferUsage::Uniform, MemoryUsage::CpuToGpu, "tints"}, nullptr);
             auto *mapped = static_cast<uint8_t *>(device->MapBuffer(tints));
             REQUIRE(mapped != nullptr);
             const float green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -114,16 +116,19 @@ TEST_SUITE("gpu rhi")
             REQUIRE(group.IsValid());
 
             ShaderModuleHandle vs = device->CreateShaderModule(
-                {ShaderStage::Vertex, geni_spirv_rhi_triangle_vert, sizeof(geni_spirv_rhi_triangle_vert), "vs"});
+                {ShaderStage::Vertex, geni_spirv_rhi_triangle_vert, sizeof(geni_spirv_rhi_triangle_vert), "vs"}
+            );
             ShaderModuleHandle fs = device->CreateShaderModule(
-                {ShaderStage::Fragment, geni_spirv_rhi_triangle_frag, sizeof(geni_spirv_rhi_triangle_frag), "fs"});
+                {ShaderStage::Fragment, geni_spirv_rhi_triangle_frag, sizeof(geni_spirv_rhi_triangle_frag), "fs"}
+            );
 
             PipelineDesc pipelineDesc;
             pipelineDesc.vertexShader = vs;
             pipelineDesc.fragmentShader = fs;
             pipelineDesc.vertexLayout.stride = 5 * sizeof(float);
-            pipelineDesc.vertexLayout.attributes = {{0, VertexFormat::Float2, 0},
-                                                    {1, VertexFormat::Float3, 2 * sizeof(float)}};
+            pipelineDesc.vertexLayout.attributes = {
+                {0, VertexFormat::Float2, 0}, {1, VertexFormat::Float3, 2 * sizeof(float)}
+            };
             pipelineDesc.bindGroupLayouts = {layout};
             PipelineHandle pipeline = device->CreatePipeline(pipelineDesc);
             REQUIRE(pipeline.IsValid());

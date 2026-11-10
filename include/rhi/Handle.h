@@ -74,8 +74,9 @@ template <typename T, typename Tag> class HandlePool
 
     T *Get(HandleType handle)
     {
-        GENI_ASSERT_MSG(Contains(handle), "stale or invalid handle (index %u, generation %u)", handle.index,
-                        handle.generation);
+        GENI_ASSERT_MSG(
+            Contains(handle), "stale or invalid handle (index %u, generation %u)", handle.index, handle.generation
+        );
         return Contains(handle) ? &m_slots[handle.index].value : nullptr;
     }
 

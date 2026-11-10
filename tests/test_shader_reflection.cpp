@@ -17,8 +17,11 @@ TEST_SUITE("shader reflection")
     {
         Geni::ShaderReflection fragment;
         std::string error;
-        REQUIRE(Geni::ReflectSpirv(geni_spirv_default_frag, sizeof(geni_spirv_default_frag), ShaderStage::Fragment,
-                                   fragment, error));
+        REQUIRE(
+            Geni::ReflectSpirv(
+                geni_spirv_default_frag, sizeof(geni_spirv_default_frag), ShaderStage::Fragment, fragment, error
+            )
+        );
 
         const Geni::ShaderBinding *block = fragment.Find(Geni::ShaderInterface::MaterialSet, 0);
         REQUIRE(block != nullptr);
@@ -41,10 +44,16 @@ TEST_SUITE("shader reflection")
         Geni::ShaderReflection merged;
         Geni::ShaderReflection fragment;
         std::string error;
-        REQUIRE(Geni::ReflectSpirv(geni_spirv_default_vert, sizeof(geni_spirv_default_vert), ShaderStage::Vertex,
-                                   merged, error));
-        REQUIRE(Geni::ReflectSpirv(geni_spirv_default_frag, sizeof(geni_spirv_default_frag), ShaderStage::Fragment,
-                                   fragment, error));
+        REQUIRE(
+            Geni::ReflectSpirv(
+                geni_spirv_default_vert, sizeof(geni_spirv_default_vert), ShaderStage::Vertex, merged, error
+            )
+        );
+        REQUIRE(
+            Geni::ReflectSpirv(
+                geni_spirv_default_frag, sizeof(geni_spirv_default_frag), ShaderStage::Fragment, fragment, error
+            )
+        );
         REQUIRE(Geni::MergeReflection(merged, fragment, error));
 
         // position, UV and normal; the color attribute (1) is not read.
@@ -63,8 +72,11 @@ TEST_SUITE("shader reflection")
     {
         Geni::ShaderReflection reflection;
         std::string error;
-        REQUIRE(Geni::ReflectSpirv(geni_spirv_bad_set_frag, sizeof(geni_spirv_bad_set_frag), ShaderStage::Fragment,
-                                   reflection, error));
+        REQUIRE(
+            Geni::ReflectSpirv(
+                geni_spirv_bad_set_frag, sizeof(geni_spirv_bad_set_frag), ShaderStage::Fragment, reflection, error
+            )
+        );
         CHECK_FALSE(Geni::ValidateShaderInterface(reflection, error));
         CHECK(error.find("set 3") != std::string::npos);
     }

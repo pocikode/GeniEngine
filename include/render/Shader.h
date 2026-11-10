@@ -31,8 +31,10 @@ class Shader
 
     // Creates the shader from SPIR-V words. Returns nullptr and logs on failure (invalid
     // SPIR-V, or bindings that break the contract in render/ShaderInterface.h).
-    static std::shared_ptr<Shader> Create(const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode,
-                                          size_t fragmentBytes, const std::string &name);
+    static std::shared_ptr<Shader> Create(
+        const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode, size_t fragmentBytes,
+        const std::string &name
+    );
     // Loads "<vertexPath>.spv" and "<fragmentPath>.spv" from the assets folder, as compiled
     // by geni_compile_shaders. The paths are the GLSL sources' asset paths.
     static std::shared_ptr<Shader> Load(const std::string &vertexPath, const std::string &fragmentPath);

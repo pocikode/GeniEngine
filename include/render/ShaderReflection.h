@@ -47,8 +47,9 @@ struct ShaderReflection
 };
 
 // Reads the descriptor bindings and vertex inputs of one SPIR-V module.
-bool ReflectSpirv(const uint32_t *code, size_t sizeBytes, rhi::ShaderStage stage, ShaderReflection &out,
-                  std::string &error);
+bool ReflectSpirv(
+    const uint32_t *code, size_t sizeBytes, rhi::ShaderStage stage, ShaderReflection &out, std::string &error
+);
 
 // Adds `from` (another stage) to `into`. A binding both stages use must agree on its kind
 // and, for blocks, on its size.

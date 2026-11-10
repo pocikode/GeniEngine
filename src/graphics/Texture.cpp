@@ -79,14 +79,15 @@ std::vector<uint8_t> Downsample(const std::vector<uint8_t> &src, int width, int 
 
 } // namespace
 
-Texture::Texture(int width, int height, int numChannels, const unsigned char *data)
-    : m_width(width), m_height(height)
+Texture::Texture(int width, int height, int numChannels, const unsigned char *data) : m_width(width), m_height(height)
 {
     rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
     if (!device || width <= 0 || height <= 0 || !data || numChannels < 1 || numChannels > 4)
     {
-        GENI_LOG_ERROR("Texture %dx%d (%d channels) not created: %s", width, height, numChannels,
-                       device ? "invalid image" : "no render device");
+        GENI_LOG_ERROR(
+            "Texture %dx%d (%d channels) not created: %s", width, height, numChannels,
+            device ? "invalid image" : "no render device"
+        );
         return;
     }
 

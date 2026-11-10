@@ -74,14 +74,15 @@ const char *ResultString(VkResult result)
         const VkResult geniVkResult = (expr);                                                                          \
         if (geniVkResult != VK_SUCCESS)                                                                                \
         {                                                                                                              \
-            GENI_LOG_ERROR("%s failed: %s (%d)", #expr, ResultString(geniVkResult), static_cast<int>(geniVkResult));  \
+            GENI_LOG_ERROR("%s failed: %s (%d)", #expr, ResultString(geniVkResult), static_cast<int>(geniVkResult));   \
             return false;                                                                                              \
         }                                                                                                              \
     } while (0)
 
-VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                                             VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT *data,
-                                             void *)
+VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT,
+    const VkDebugUtilsMessengerCallbackDataEXT *data, void *
+)
 {
     const char *message = data && data->pMessage ? data->pMessage : "";
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
@@ -319,8 +320,10 @@ bool VulkanDevice::CreateInstance(const DeviceConfig &config)
     vkEnumerateInstanceVersion(&apiVersion);
     if (apiVersion < VK_API_VERSION_1_1)
     {
-        GENI_LOG_ERROR("Vulkan 1.1 is required; the loader supports %u.%u", VK_API_VERSION_MAJOR(apiVersion),
-                       VK_API_VERSION_MINOR(apiVersion));
+        GENI_LOG_ERROR(
+            "Vulkan 1.1 is required; the loader supports %u.%u", VK_API_VERSION_MAJOR(apiVersion),
+            VK_API_VERSION_MINOR(apiVersion)
+        );
         return false;
     }
 
@@ -362,8 +365,10 @@ bool VulkanDevice::CreateInstance(const DeviceConfig &config)
         }
         else
         {
-            GENI_LOG_WARN("Vulkan validation was requested but VK_LAYER_KHRONOS_validation was not found; "
-                          "install the validation layers or point VK_ADD_LAYER_PATH at them");
+            GENI_LOG_WARN(
+                "Vulkan validation was requested but VK_LAYER_KHRONOS_validation was not found; "
+                "install the validation layers or point VK_ADD_LAYER_PATH at them"
+            );
         }
     }
     if (debugUtils)
@@ -399,7 +404,8 @@ bool VulkanDevice::CreateInstance(const DeviceConfig &config)
     if (!layers.empty())
     {
         auto createMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-            vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT"));
+            vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT")
+        );
         if (createMessenger)
         {
             createMessenger(m_instance, &messengerInfo, nullptr, &m_messenger);
@@ -409,7 +415,8 @@ bool VulkanDevice::CreateInstance(const DeviceConfig &config)
     if (debugUtils)
     {
         m_setObjectName = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
-            vkGetInstanceProcAddr(m_instance, "vkSetDebugUtilsObjectNameEXT"));
+            vkGetInstanceProcAddr(m_instance, "vkSetDebugUtilsObjectNameEXT")
+        );
     }
     return true;
 }
@@ -832,11 +839,11 @@ VkRenderPass VulkanDevice::GetRenderPass(const RenderPassKey &key)
     attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[1].loadOp = ToVk(key.depthLoad);
     attachments[1].storeOp = ToVk(key.depthStore);
-    attachments[1].stencilLoadOp =
-        depthHasStencil && key.depthLoad == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = depthHasStencil && key.depthLoad == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                                                                     : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = key.depthLoad == LoadOp::Load ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                                                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].initialLayout =
+        key.depthLoad == LoadOp::Load ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -923,7 +930,8 @@ VulkanDevice::~VulkanDevice()
     if (m_messenger)
     {
         auto destroyMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-            vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT"));
+            vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT")
+        );
         if (destroyMessenger)
         {
             destroyMessenger(m_instance, m_messenger, nullptr);
@@ -942,9 +950,11 @@ void VulkanDevice::DestroyAllLiveObjects()
                         m_pipelines.LiveCount();
     if (live > 0)
     {
-        GENI_LOG_WARN("Vulkan device shut down with %zu objects still alive (buffers %zu, textures %zu, pipelines "
-                      "%zu); destroying them",
-                      live, m_buffers.LiveCount(), m_textures.LiveCount(), m_pipelines.LiveCount());
+        GENI_LOG_WARN(
+            "Vulkan device shut down with %zu objects still alive (buffers %zu, textures %zu, pipelines "
+            "%zu); destroying them",
+            live, m_buffers.LiveCount(), m_textures.LiveCount(), m_pipelines.LiveCount()
+        );
     }
 
     m_pipelines.ForEach([&](PipelineRecord &r) {
@@ -952,8 +962,9 @@ void VulkanDevice::DestroyAllLiveObjects()
         vkDestroyPipelineLayout(m_device, r.layout, nullptr);
     });
     m_bindGroups.ForEach([&](BindGroupRecord &) {}); // freed with their pools
-    m_bindGroupLayouts.ForEach(
-        [&](BindGroupLayoutRecord &r) { vkDestroyDescriptorSetLayout(m_device, r.layout, nullptr); });
+    m_bindGroupLayouts.ForEach([&](BindGroupLayoutRecord &r) {
+        vkDestroyDescriptorSetLayout(m_device, r.layout, nullptr);
+    });
     m_shaderModules.ForEach([&](ShaderModuleRecord &r) { vkDestroyShaderModule(m_device, r.module, nullptr); });
     m_samplers.ForEach([&](SamplerRecord &r) { vkDestroySampler(m_device, r.sampler, nullptr); });
     m_textures.ForEach([&](TextureRecord &r) {
@@ -1092,8 +1103,9 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
     const VkResult vr = vmaCreateBuffer(m_allocator, &info, &allocInfo, &record.buffer, &record.allocation, &result);
     if (vr != VK_SUCCESS)
     {
-        GENI_LOG_ERROR("Vulkan: cannot create a %llu-byte buffer: %s", static_cast<unsigned long long>(desc.size),
-                       ResultString(vr));
+        GENI_LOG_ERROR(
+            "Vulkan: cannot create a %llu-byte buffer: %s", static_cast<unsigned long long>(desc.size), ResultString(vr)
+        );
         return {};
     }
     record.mapped = desc.memory == MemoryUsage::CpuToGpu ? result.pMappedData : nullptr;
@@ -1245,21 +1257,27 @@ TextureHandle VulkanDevice::CreateTexture(const TextureDesc &desc, const void *c
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
-                             nullptr, 1, &barrier);
+        vkCmdPipelineBarrier(
+            cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+            &barrier
+        );
 
         if (stagingBuffer)
         {
-            vkCmdCopyBufferToImage(cmd, stagingBuffer, record.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   static_cast<uint32_t>(regions.size()), regions.data());
+            vkCmdCopyBufferToImage(
+                cmd, stagingBuffer, record.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                static_cast<uint32_t>(regions.size()), regions.data()
+            );
         }
 
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
-                             0, nullptr, 1, &barrier);
+        vkCmdPipelineBarrier(
+            cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+            &barrier
+        );
     });
 
     if (staging.IsValid())
@@ -1345,8 +1363,9 @@ ShaderModuleHandle VulkanDevice::CreateShaderModule(const ShaderModuleDesc &desc
     const VkResult vr = vkCreateShaderModule(m_device, &info, nullptr, &record.module);
     if (vr != VK_SUCCESS)
     {
-        GENI_LOG_ERROR("vkCreateShaderModule failed for '%s': %s", desc.debugName ? desc.debugName : "",
-                       ResultString(vr));
+        GENI_LOG_ERROR(
+            "vkCreateShaderModule failed for '%s': %s", desc.debugName ? desc.debugName : "", ResultString(vr)
+        );
         return {};
     }
     SetDebugName(VK_OBJECT_TYPE_SHADER_MODULE, reinterpret_cast<uint64_t>(record.module), desc.debugName);
@@ -1461,8 +1480,10 @@ BindGroupHandle VulkanDevice::CreateBindGroup(const BindGroupDesc &desc)
 
     for (const auto &entry : desc.entries)
     {
-        auto layoutEntry = std::find_if(layout->entries.begin(), layout->entries.end(),
-                                        [&](const BindGroupLayoutEntry &e) { return e.binding == entry.binding; });
+        auto layoutEntry =
+            std::find_if(layout->entries.begin(), layout->entries.end(), [&](const BindGroupLayoutEntry &e) {
+                return e.binding == entry.binding;
+            });
         if (layoutEntry == layout->entries.end())
         {
             GENI_LOG_ERROR("Vulkan: bind group entry %u is not in its layout", entry.binding);
@@ -1634,8 +1655,9 @@ PipelineHandle VulkanDevice::CreatePipeline(const PipelineDesc &desc)
     vr = vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &info, nullptr, &record.pipeline);
     if (vr != VK_SUCCESS)
     {
-        GENI_LOG_ERROR("vkCreateGraphicsPipelines failed for '%s': %s", desc.debugName ? desc.debugName : "",
-                       ResultString(vr));
+        GENI_LOG_ERROR(
+            "vkCreateGraphicsPipelines failed for '%s': %s", desc.debugName ? desc.debugName : "", ResultString(vr)
+        );
         vkDestroyPipelineLayout(m_device, record.layout, nullptr);
         return {};
     }
@@ -1693,16 +1715,17 @@ CommandList *VulkanDevice::BeginFrame()
         }
     }
 
-    VkResult result = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE,
-                                            &m_imageIndex);
+    VkResult result =
+        vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &m_imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         if (!RecreateSwapchain())
         {
             return nullptr;
         }
-        result = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE,
-                                       &m_imageIndex);
+        result = vkAcquireNextImageKHR(
+            m_device, m_swapchain, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &m_imageIndex
+        );
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
@@ -1781,21 +1804,26 @@ void VulkanDevice::EndFrame(BackbufferCapture *capture)
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                             nullptr, 0, nullptr, 1, &barrier);
+        vkCmdPipelineBarrier(
+            cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+            nullptr, 1, &barrier
+        );
 
         VkBufferImageCopy region{};
         region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         region.imageExtent = {m_extent.width, m_extent.height, 1};
-        vkCmdCopyImageToBuffer(cmd, m_swapchainImages[m_imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               readback.buffer, 1, &region);
+        vkCmdCopyImageToBuffer(
+            cmd, m_swapchainImages[m_imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.buffer, 1, &region
+        );
 
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         barrier.dstAccessMask = 0;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr,
-                             0, nullptr, 1, &barrier);
+        vkCmdPipelineBarrier(
+            cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1,
+            &barrier
+        );
 
         VkBufferMemoryBarrier hostBarrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         hostBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1804,8 +1832,9 @@ void VulkanDevice::EndFrame(BackbufferCapture *capture)
         hostBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         hostBarrier.buffer = readback.buffer;
         hostBarrier.size = VK_WHOLE_SIZE;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1,
-                             &hostBarrier, 0, nullptr);
+        vkCmdPipelineBarrier(
+            cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &hostBarrier, 0, nullptr
+        );
     }
 
     vkEndCommandBuffer(cmd);
@@ -1881,10 +1910,12 @@ uint32_t VulkanDevice::GetUniformBufferAlignment() const
 std::string VulkanDevice::GetDescription() const
 {
     char text[512];
-    std::snprintf(text, sizeof(text), "Vulkan %u.%u.%u on %s (backbuffer %ux%u, %zu images, %s)",
-                  VK_API_VERSION_MAJOR(m_properties.apiVersion), VK_API_VERSION_MINOR(m_properties.apiVersion),
-                  VK_API_VERSION_PATCH(m_properties.apiVersion), m_properties.deviceName, m_extent.width,
-                  m_extent.height, m_swapchainImages.size(), m_vsync ? "vsync" : "no vsync");
+    std::snprintf(
+        text, sizeof(text), "Vulkan %u.%u.%u on %s (backbuffer %ux%u, %zu images, %s)",
+        VK_API_VERSION_MAJOR(m_properties.apiVersion), VK_API_VERSION_MINOR(m_properties.apiVersion),
+        VK_API_VERSION_PATCH(m_properties.apiVersion), m_properties.deviceName, m_extent.width, m_extent.height,
+        m_swapchainImages.size(), m_vsync ? "vsync" : "no vsync"
+    );
     return text;
 }
 
@@ -1982,8 +2013,9 @@ void VulkanDevice::RenderImGui(CommandList &)
 void VulkanCommandList::BeginRenderPass(const RenderPassDesc &desc)
 {
     GENI_ASSERT_MSG(!m_inRenderPass, "BeginRenderPass inside a render pass");
-    VulkanDevice::RenderPassKey key{desc.colorLoad, desc.colorStore, desc.depthLoad, desc.depthStore,
-                                    !m_backbufferWritten};
+    VulkanDevice::RenderPassKey key{
+        desc.colorLoad, desc.colorStore, desc.depthLoad, desc.depthStore, !m_backbufferWritten
+    };
     if (key.firstInFrame && key.colorLoad == LoadOp::Load)
     {
         // A freshly acquired backbuffer has no contents to load.
@@ -2005,8 +2037,9 @@ void VulkanCommandList::BeginRenderPass(const RenderPassDesc &desc)
     m_inRenderPass = true;
     m_backbufferWritten = true;
 
-    SetViewport(0.0f, 0.0f, static_cast<float>(m_device->m_extent.width),
-                static_cast<float>(m_device->m_extent.height));
+    SetViewport(
+        0.0f, 0.0f, static_cast<float>(m_device->m_extent.width), static_cast<float>(m_device->m_extent.height)
+    );
 }
 
 void VulkanCommandList::EndRenderPass()
@@ -2021,8 +2054,10 @@ void VulkanCommandList::SetViewport(float x, float y, float width, float height)
     // Negative height flips Y so that clip space points up, as in OpenGL and WebGPU.
     VkViewport viewport{x, y + height, width, -height, 0.0f, 1.0f};
     vkCmdSetViewport(m_cmd, 0, 1, &viewport);
-    VkRect2D scissor{{static_cast<int32_t>(x), static_cast<int32_t>(y)},
-                     {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}};
+    VkRect2D scissor{
+        {static_cast<int32_t>(x), static_cast<int32_t>(y)},
+        {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}
+    };
     vkCmdSetScissor(m_cmd, 0, 1, &scissor);
 }
 
@@ -2037,8 +2072,9 @@ void VulkanCommandList::SetPipeline(PipelineHandle pipeline)
     m_layout = record->layout;
 }
 
-void VulkanCommandList::SetBindGroup(uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets,
-                                     uint32_t dynamicOffsetCount)
+void VulkanCommandList::SetBindGroup(
+    uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets, uint32_t dynamicOffsetCount
+)
 {
     GENI_ASSERT_MSG(m_layout != VK_NULL_HANDLE, "SetBindGroup before SetPipeline");
     BindGroupRecord *record = m_device->m_bindGroups.Get(group);
@@ -2046,8 +2082,9 @@ void VulkanCommandList::SetBindGroup(uint32_t set, BindGroupHandle group, const 
     {
         return;
     }
-    vkCmdBindDescriptorSets(m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, set, 1, &record->set, dynamicOffsetCount,
-                            dynamicOffsets);
+    vkCmdBindDescriptorSets(
+        m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, set, 1, &record->set, dynamicOffsetCount, dynamicOffsets
+    );
 }
 
 void VulkanCommandList::SetVertexBuffer(BufferHandle buffer, uint64_t offset)
@@ -2068,8 +2105,9 @@ void VulkanCommandList::SetIndexBuffer(BufferHandle buffer, IndexFormat format, 
     {
         return;
     }
-    vkCmdBindIndexBuffer(m_cmd, record->buffer, offset,
-                         format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(
+        m_cmd, record->buffer, offset, format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32
+    );
 }
 
 void VulkanCommandList::Draw(uint32_t vertexCount, uint32_t firstVertex)

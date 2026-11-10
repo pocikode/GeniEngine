@@ -24,10 +24,12 @@ namespace
 {
 // CameraComponent builds OpenGL-style projections (depth -1..1). The RHI's clip space has
 // depth 0..1: z' = 0.5 * z + 0.5 * w.
-const glm::mat4 kDepthZeroToOne(1.0f, 0.0f, 0.0f, 0.0f, //
-                                0.0f, 1.0f, 0.0f, 0.0f, //
-                                0.0f, 0.0f, 0.5f, 0.0f, //
-                                0.0f, 0.0f, 0.5f, 1.0f);
+const glm::mat4 kDepthZeroToOne(
+    1.0f, 0.0f, 0.0f, 0.0f, //
+    0.0f, 1.0f, 0.0f, 0.0f, //
+    0.0f, 0.0f, 0.5f, 0.0f, //
+    0.0f, 0.0f, 0.5f, 1.0f
+);
 
 constexpr uint64_t kInitialDrawCapacity = 1u << 20;
 } // namespace
@@ -38,13 +40,15 @@ bool Renderer::Init(rhi::Device *device)
     m_alignment = std::max<uint32_t>(16, device->GetUniformBufferAlignment());
 
     rhi::BindGroupLayoutDesc frameLayout;
-    frameLayout.entries.push_back({FrameBinding, rhi::BindingType::UniformBuffer,
-                                   rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment});
+    frameLayout.entries.push_back(
+        {FrameBinding, rhi::BindingType::UniformBuffer, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment}
+    );
     m_frameLayout = m_device->CreateBindGroupLayout(frameLayout);
 
     rhi::BindGroupLayoutDesc drawLayout;
-    drawLayout.entries.push_back({DrawBinding, rhi::BindingType::DynamicUniformBuffer,
-                                  rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment});
+    drawLayout.entries.push_back(
+        {DrawBinding, rhi::BindingType::DynamicUniformBuffer, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment}
+    );
     drawLayout.entries.push_back({BonesBinding, rhi::BindingType::DynamicUniformBuffer, rhi::ShaderStage::Vertex});
     m_drawLayout = m_device->CreateBindGroupLayout(drawLayout);
 
@@ -55,7 +59,8 @@ bool Renderer::Init(rhi::Device *device)
     for (auto &frame : m_frames)
     {
         frame.frameBuffer = m_device->CreateBuffer(
-            {sizeof(FrameUniforms), rhi::BufferUsage::Uniform, rhi::MemoryUsage::CpuToGpu, "frame uniforms"});
+            {sizeof(FrameUniforms), rhi::BufferUsage::Uniform, rhi::MemoryUsage::CpuToGpu, "frame uniforms"}
+        );
         rhi::BindGroupDesc group;
         group.layout = m_frameLayout;
         group.entries.push_back({FrameBinding, frame.frameBuffer, 0, sizeof(FrameUniforms)});
@@ -66,8 +71,10 @@ bool Renderer::Init(rhi::Device *device)
         }
     }
 
-    m_defaultShader = Shader::Create(geni_spirv_default_vert, sizeof(geni_spirv_default_vert), geni_spirv_default_frag,
-                                     sizeof(geni_spirv_default_frag), "builtin/default");
+    m_defaultShader = Shader::Create(
+        geni_spirv_default_vert, sizeof(geni_spirv_default_vert), geni_spirv_default_frag,
+        sizeof(geni_spirv_default_frag), "builtin/default"
+    );
     return m_frameLayout.IsValid() && m_drawLayout.IsValid() && m_sampler.IsValid() && m_defaultShader != nullptr;
 }
 
@@ -158,8 +165,9 @@ rhi::PipelineHandle Renderer::GetPipeline(const Shader &shader, const Mesh &mesh
     const auto &inputs = shader.GetVertexInputLocations();
     for (const auto &element : layout.elements)
     {
-        static const rhi::VertexFormat formats[] = {rhi::VertexFormat::Float1, rhi::VertexFormat::Float2,
-                                                    rhi::VertexFormat::Float3, rhi::VertexFormat::Float4};
+        static const rhi::VertexFormat formats[] = {
+            rhi::VertexFormat::Float1, rhi::VertexFormat::Float2, rhi::VertexFormat::Float3, rhi::VertexFormat::Float4
+        };
         // Attributes the shader does not read are left out; the stride still skips them.
         if (element.size < 1 || element.size > 4 ||
             std::find(inputs.begin(), inputs.end(), element.index) == inputs.end())
@@ -175,13 +183,17 @@ rhi::PipelineHandle Renderer::GetPipeline(const Shader &shader, const Mesh &mesh
     bool inputsProvided = true;
     for (uint32_t location : shader.GetVertexInputLocations())
     {
-        const bool found = std::any_of(desc.vertexLayout.attributes.begin(), desc.vertexLayout.attributes.end(),
-                                       [&](const rhi::VertexAttribute &a) { return a.location == location; });
+        const bool found = std::any_of(
+            desc.vertexLayout.attributes.begin(), desc.vertexLayout.attributes.end(),
+            [&](const rhi::VertexAttribute &a) { return a.location == location; }
+        );
         if (!found)
         {
-            GENI_LOG_ERROR("Shader '%s' reads vertex input %u, which a mesh drawn with it does not have; those "
-                           "meshes are skipped",
-                           shader.GetName().c_str(), location);
+            GENI_LOG_ERROR(
+                "Shader '%s' reads vertex input %u, which a mesh drawn with it does not have; those "
+                "meshes are skipped",
+                shader.GetName().c_str(), location
+            );
             inputsProvided = false;
             break;
         }
@@ -214,8 +226,10 @@ void Renderer::ReleasePipelines(uint64_t shaderId)
     }
 }
 
-bool Renderer::DrawMesh(rhi::CommandList &cmd, const Mesh &mesh, Material &material, const glm::mat4 &model,
-                        const std::vector<glm::mat4> *bones)
+bool Renderer::DrawMesh(
+    rhi::CommandList &cmd, const Mesh &mesh, Material &material, const glm::mat4 &model,
+    const std::vector<glm::mat4> *bones
+)
 {
     Shader *shader = material.GetShader();
     if (!shader)

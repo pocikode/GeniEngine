@@ -28,8 +28,9 @@ class CommandList
     virtual void SetPipeline(PipelineHandle pipeline) = 0;
     // Binds a group to `set` of the current pipeline. One dynamic offset per dynamic
     // uniform buffer in the group, in binding order.
-    virtual void SetBindGroup(uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets = nullptr,
-                              uint32_t dynamicOffsetCount = 0) = 0;
+    virtual void SetBindGroup(
+        uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets = nullptr, uint32_t dynamicOffsetCount = 0
+    ) = 0;
     virtual void SetVertexBuffer(BufferHandle buffer, uint64_t offset = 0) = 0;
     virtual void SetIndexBuffer(BufferHandle buffer, IndexFormat format, uint64_t offset = 0) = 0;
     virtual void Draw(uint32_t vertexCount, uint32_t firstVertex = 0) = 0;

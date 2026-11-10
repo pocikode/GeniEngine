@@ -20,15 +20,12 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
-            workflow: dev
           - name: Linux
             os: ubuntu-24.04
-            workflow: dev
-          # Hosted Windows runners have no OpenGL 3.3 driver, so the tests that need a
-          # window are skipped there. They still compile, and the sample is still built.
+          # Hosted Windows runners have no Vulkan driver, so the tests that need a window
+          # are skipped there. They still compile, and the sample is still built.
           - name: Windows
             os: windows-2025
-            workflow: dev-no-gpu
 
     steps:
       - name: Checkout
@@ -38,34 +35,60 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install glfw glew
+        run: brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers vulkan-tools glslang
 
+      # lavapipe (mesa-vulkan-drivers) is a software Vulkan driver, so the result does
+      # not depend on the runner's hardware.
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libglfw3-dev libglew-dev libgl1-mesa-dev libgl1-mesa-dri xvfb
+            libglfw3-dev libvulkan-dev vulkan-validationlayers vulkan-tools glslang-tools \
+            mesa-vulkan-drivers xvfb
 
-      # GLFW and GLEW come from vcpkg.json; CMakeLists.txt picks the toolchain up
-      # from VCPKG_ROOT.
-      - name: Point VCPKG_ROOT at the preinstalled vcpkg (Windows)
+      # Headers, loader and glslangValidator come from the LunarG Vulkan SDK; GLFW comes
+      # from vcpkg.json, which CMakeLists.txt picks up from VCPKG_ROOT.
+      - name: Install the Vulkan SDK and point VCPKG_ROOT at vcpkg (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+        run: |
+          $version = (Invoke-WebRequest -UseBasicParsing https://vulkan.lunarg.com/sdk/latest/windows.txt).Content.Trim()
+          Write-Host "Vulkan SDK $version"
+          $installer = "$env:RUNNER_TEMP\vulkan-sdk.exe"
+          Invoke-WebRequest -UseBasicParsing "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan-sdk.exe" -OutFile $installer
+          $root = "C:\VulkanSDK\$version"
+          Start-Process -Wait -FilePath $installer -ArgumentList "--root", $root, "--accept-licenses", "--default-answer", "--confirm-command", "install"
+          echo "VULKAN_SDK=$root" >> $env:GITHUB_ENV
+          echo "$root\Bin" >> $env:GITHUB_PATH
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      # Runs the full workflow when the runner has a Vulkan device, and the one without
+      # gpu tests otherwise, with a visible warning rather than a silent skip.
+      - name: Choose the workflow preset
+        shell: bash
+        run: |
+          probe="vulkaninfo --summary"
+          if [ "$RUNNER_OS" = "Linux" ]; then probe="xvfb-run -a $probe"; fi
+          if [ "$RUNNER_OS" != "Windows" ] && $probe 2>/dev/null | grep -q "deviceName"; then
+            $probe 2>/dev/null | grep -E "deviceName|driverName|apiVersion" || true
+            echo "GENI_PRESET=dev" >> "$GITHUB_ENV"
+          else
+            if [ "$RUNNER_OS" != "Windows" ]; then
+              echo "::warning::No Vulkan device on this runner; gpu and screenshot tests are skipped"
+            fi
+            echo "GENI_PRESET=dev-no-gpu" >> "$GITHUB_ENV"
+          fi
 
       - name: Configure, build and test (Linux)
         if: runner.os == 'Linux'
-        env:
-          # Software OpenGL, so the result does not depend on the runner's hardware.
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: xvfb-run -a -s "-screen 0 1280x720x24" cmake --workflow --preset ${{ matrix.workflow }}
+        run: xvfb-run -a -s "-screen 0 1280x720x24" cmake --workflow --preset ${{ env.GENI_PRESET }}
 
       - name: Configure, build and test (macOS, Windows)
         if: runner.os != 'Linux'
-        run: cmake --workflow --preset ${{ matrix.workflow }}
+        run: cmake --workflow --preset ${{ env.GENI_PRESET }}
 
-      - name: Upload logs and crash reports
+      - name: Upload logs, crash reports and screenshots
         if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -73,4 +96,5 @@ jobs:
           path: |
             build/dev/Testing/Temporary/LastTest.log
             build/dev/**/geni_crash_*.log
+            build/dev/screenshots/*.png
           if-no-files-found: ignore

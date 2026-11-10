@@ -42,7 +42,7 @@
     },
     {
       "name": "dev-no-gpu",
-      "description": "Skips tests that need a window and an OpenGL context.",
+      "description": "Skips tests that need a window and a Vulkan device.",
       "inherits": "dev",
       "filter": { "exclude": { "label": "gpu" } }
     },
@@ -54,7 +54,7 @@
     },
     {
       "name": "release-no-gpu",
-      "description": "Skips tests that need a window and an OpenGL context.",
+      "description": "Skips tests that need a window and a Vulkan device.",
       "inherits": "release",
       "filter": { "exclude": { "label": "gpu" } }
     }

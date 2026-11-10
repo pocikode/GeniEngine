@@ -48,8 +48,9 @@ int main(int argc, char **argv)
 {
     if (argc < 3)
     {
-        std::fprintf(stderr,
-                     "Usage: image_compare ACTUAL REFERENCE [--tolerance N] [--max-fraction F] [--diff OUT.png]\n");
+        std::fprintf(
+            stderr, "Usage: image_compare ACTUAL REFERENCE [--tolerance N] [--max-fraction F] [--diff OUT.png]\n"
+        );
         return 2;
     }
 
@@ -86,8 +87,10 @@ int main(int argc, char **argv)
 
     if (actual.width != reference.width || actual.height != reference.height)
     {
-        std::fprintf(stderr, "image_compare: size %dx%d does not match reference %dx%d\n", actual.width,
-                     actual.height, reference.width, reference.height);
+        std::fprintf(
+            stderr, "image_compare: size %dx%d does not match reference %dx%d\n", actual.width, actual.height,
+            reference.width, reference.height
+        );
         return 1;
     }
 
@@ -123,10 +126,11 @@ int main(int argc, char **argv)
 
     const double fraction = static_cast<double>(differing) / static_cast<double>(pixelCount);
     const bool match = fraction <= maxFraction;
-    std::printf("image_compare: %zu of %zu pixels differ by more than %d (%.4f%%, allowed %.4f%%); largest "
-                "difference %d -> %s\n",
-                differing, pixelCount, tolerance, fraction * 100.0, maxFraction * 100.0, largest,
-                match ? "MATCH" : "DIFFERENT");
+    std::printf(
+        "image_compare: %zu of %zu pixels differ by more than %d (%.4f%%, allowed %.4f%%); largest "
+        "difference %d -> %s\n",
+        differing, pixelCount, tolerance, fraction * 100.0, maxFraction * 100.0, largest, match ? "MATCH" : "DIFFERENT"
+    );
 
     if (!match && !diffPath.empty())
     {

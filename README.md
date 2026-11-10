@@ -2,17 +2,19 @@
 
 A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
 
-Today it renders with OpenGL 3.3 and has a scene graph, glTF loading with skinning and animation, materials, and rigid-body physics.
+Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface, and has a scene graph, glTF loading with skinning and animation, materials, and rigid-body physics.
 
 ## Build and test
 
-You need CMake 3.30 or newer, a C++17 compiler, git, and GLFW and GLEW:
+You need CMake 3.30 or newer, a C++17 compiler, git, GLFW, and the Vulkan loader, headers, validation layers and the `glslangValidator` shader compiler:
 
-| Platform | Install GLFW and GLEW with |
+| Platform | Install with |
 |---|---|
-| macOS | `brew install glfw glew` |
-| Ubuntu / Debian | `sudo apt install libglfw3-dev libglew-dev libgl1-mesa-dev` |
-| Windows | [vcpkg](https://vcpkg.io), with the `VCPKG_ROOT` environment variable set. The packages listed in `vcpkg.json` are installed during configure. |
+| macOS | `brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers glslang` |
+| Ubuntu / Debian | `sudo apt install libglfw3-dev libvulkan-dev vulkan-validationlayers glslang-tools` plus a Vulkan driver (`mesa-vulkan-drivers` includes the lavapipe software driver) |
+| Windows | The [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (sets `VULKAN_SDK`), and [vcpkg](https://vcpkg.io) with the `VCPKG_ROOT` environment variable set for GLFW (installed from `vcpkg.json` during configure). |
+
+Debug builds turn on the Vulkan validation layers; every validation error is logged, and the tests fail on any. The Homebrew layer location is found at configure time, so no environment setup is needed.
 
 Then one command configures, builds and runs the tests:
 
@@ -25,12 +27,14 @@ Everything else the engine depends on is a git submodule under `thirdparty/`, fe
 | Workflow preset | What it does |
 |---|---|
 | `dev` | Debug build with tests, samples, the debug overlay and Tracy |
-| `dev-no-gpu` | Same, but skips the tests that need a window and an OpenGL context |
+| `dev-no-gpu` | Same, but skips the tests that need a window and a Vulkan device |
 | `release`, `release-no-gpu` | Optimized build with debug info, without Tracy, in `build/release/` |
 
 Makefile builds use one core unless told otherwise: set `CMAKE_BUILD_PARALLEL_LEVEL` (for example `export CMAKE_BUILD_PARALLEL_LEVEL=8`) to speed them up.
 
 To run tests again without rebuilding: `ctest --preset dev`. To run one group: `build/dev/tests/geni_tests --test-suite="scene tree"` (add `--list-test-suites` to see them all).
+
+The `screenshot_sandbox_*` tests render the sample off-screen and compare it with `tests/reference/*.png` (`tools/image_compare.cpp`; a failing run writes a diff image to `build/dev/screenshots/`). After an intended visual change, regenerate the references with `GENI_UPDATE_REFERENCES=1 ctest --preset dev -R screenshot` and review the new images before committing them.
 
 ## Run the sample
 
@@ -77,6 +81,8 @@ Each frame the engine runs zero or more **fixed steps** (physics, then `Applicat
 
 Asset paths are relative to an `assets/` folder: the top-level project's `assets/` during development, or the one next to the executable. `FileSystem::SetAssetsFolder` overrides it.
 
+Shaders are GLSL 450, compiled to SPIR-V at build time. List them with `geni_compile_shaders(<target> SOURCE_DIR ... OUTPUT_DIR ... SOURCES ...)` from `cmake/GeniShaders.cmake`; a `.mat` file names the GLSL source and the engine loads the compiled `.spv` next to it. The bindings every shader uses are described in `include/render/ShaderInterface.h`, and `samples/sandbox/assets/shaders/` has examples.
+
 CMake options when embedding:
 
 | Option | Default | Effect |
@@ -94,9 +100,9 @@ CMake options when embedding:
 
 ## Dependencies
 
-Installed on the system: GLFW, GLEW.
+Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers, glslang (and MoltenVK on macOS).
 
-Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3. Checked in directly: [stb_image](https://github.com/nothings/stb).
+Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
 
 ## Licence
 

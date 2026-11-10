@@ -1,6 +1,6 @@
 # 0001: Rendering interface and Vulkan backend
 
-Milestone: M1 · Status: Accepted · Last updated: 2026-11-10
+Milestone: M1 · Status: Accepted (implemented; waiting for CI on all three platforms) · Last updated: 2026-11-10
 
 ## Problem
 
@@ -58,14 +58,20 @@ Resources are referred to by small generational handles (index + generation), no
 - **Compile GLSL at run time.** Keeps hot reload trivial, but ships a compiler in every build and is not workable on mobile. Hot reload returns in M4 by re-running the offline compiler.
 - **Switch to Slang now.** The roadmap's default is GLSL because the existing shaders are GLSL. Revisit when a second backend needs a second shading language (M8).
 
-## To verify
+## Decided during implementation
 
-Check these in the first week of M1, before step 2, and record the answers here.
+- **Colour stays UNORM end to end** (UNORM swapchain, UNORM textures), as the OpenGL renderer had it, so the screenshots could be compared. Linear lighting with an sRGB backbuffer arrives with HDR and tonemapping in M2.
+- **Mip chains are built on the CPU** when a texture is created, so the backend needs no blit path. The cooker takes this over in M3.
+- **Per-draw data** (model matrix, bone palette) goes into one host-visible buffer per frame in flight, addressed by dynamic offsets. Material parameters live in a small GPU buffer per material, updated only when a parameter changes.
+- **The shader contract** (sets, bindings, block layouts) is written down in `include/render/ShaderInterface.h` and checked with SPIRV-Reflect when a shader is created. Material parameters keep their names: `Material::SetParam` and `.mat` files did not change.
+- **Pipelines include only the vertex attributes a shader reads.** The stride still covers the whole vertex, so one mesh layout works with shaders that read different subsets.
 
-| Question | Default if not settled |
+## Verified (2026-11-10)
+
+| Question | Answer |
 |---|---|
-| Which Vulkan version, and which optional features, do the current MoltenVK release and mainstream Android devices both support? | Target Vulkan 1.1 core features only, and treat anything newer as optional |
-| Dynamic rendering or classic render pass objects inside the backend? | Classic render passes; the RHI's `BeginRenderPass` hides the choice |
-| Can CI run Vulkan with validation layers on hosted macOS, Windows and Linux runners (software implementation where there is no GPU)? | Run screenshot tests on Linux in CI; run macOS and Windows locally before each merge |
-| How close do OpenGL and Vulkan screenshots get (sRGB handling, clip-space depth, Y direction)? | Per-pixel tolerance with a small allowed fraction of differing pixels; regenerate references from Vulkan once OpenGL is deleted |
-| Which GLSL-to-SPIR-V compiler is used, and how is it obtained on each platform and in CI? | Require the Vulkan SDK on developer machines and install it in CI |
+| Which Vulkan version and optional features do MoltenVK and mainstream Android devices both support? | MoltenVK 1.4.2 on an Apple M4 reports Vulkan 1.4 (conformance 1.4.4). The engine requests Vulkan 1.1 and enables no optional device features. Android was not checked on a device; that check moves to the start of M7. |
+| Dynamic rendering or classic render pass objects? | Classic render passes, cached per combination of load/store operations. Framebuffers are made with one compatible pass. `BeginRenderPass` hides this. |
+| Can CI run Vulkan with validation layers? | Linux: lavapipe (software Vulkan) under xvfb with the apt validation layers. macOS: MoltenVK from Homebrew; CI probes for a device with `vulkaninfo` and falls back to the tests that need no GPU, with a warning, if the runner has none. Windows: no driver on hosted runners; the build and unit tests run. **Not yet confirmed by a CI run.** |
+| How close do OpenGL and Vulkan screenshots get? | On the Apple M4: frame 1 differs by at most 1/255 per channel; frame 120 has one pixel (a triangle edge) of 921,600 over the tolerance (8/255 per channel, at most 0.5% of pixels allowed). The references were then regenerated from Vulkan. Whether lavapipe output stays within this tolerance of the MoltenVK references is open until the first Linux CI run. |
+| Which GLSL-to-SPIR-V compiler, and where from? | `glslangValidator`: Homebrew `glslang` on macOS, apt `glslang-tools` on Linux, the LunarG Vulkan SDK on Windows. Configure fails with install instructions if it is missing. |

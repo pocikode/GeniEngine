@@ -21,8 +21,9 @@ const ShaderBinding *ShaderReflection::Find(uint32_t set, uint32_t binding) cons
     return nullptr;
 }
 
-bool ReflectSpirv(const uint32_t *code, size_t sizeBytes, rhi::ShaderStage stage, ShaderReflection &out,
-                  std::string &error)
+bool ReflectSpirv(
+    const uint32_t *code, size_t sizeBytes, rhi::ShaderStage stage, ShaderReflection &out, std::string &error
+)
 {
     out = ShaderReflection();
     SpvReflectShaderModule module;
@@ -67,8 +68,10 @@ bool ReflectSpirv(const uint32_t *code, size_t sizeBytes, rhi::ShaderStage stage
         else
         {
             char text[160];
-            std::snprintf(text, sizeof(text), "'%s' (set %u, binding %u) is neither a uniform block nor a sampler2D",
-                          binding.name.c_str(), binding.set, binding.binding);
+            std::snprintf(
+                text, sizeof(text), "'%s' (set %u, binding %u) is neither a uniform block nor a sampler2D",
+                binding.name.c_str(), binding.set, binding.binding
+            );
             error = text;
             ok = false;
             break;
@@ -111,8 +114,10 @@ bool MergeReflection(ShaderReflection &into, const ShaderReflection &from, std::
         if (it->kind != binding.kind || it->size != binding.size)
         {
             char text[160];
-            std::snprintf(text, sizeof(text), "set %u, binding %u is declared differently in the two stages",
-                          binding.set, binding.binding);
+            std::snprintf(
+                text, sizeof(text), "set %u, binding %u is declared differently in the two stages", binding.set,
+                binding.binding
+            );
             error = text;
             return false;
         }
@@ -151,17 +156,21 @@ bool ValidateShaderInterface(const ShaderReflection &reflection, std::string &er
 
             if (provided == 0 || b.kind != ShaderBindingKind::UniformBlock)
             {
-                std::snprintf(text, sizeof(text),
-                              "'%s' (set %u, binding %u) is not something the renderer provides; see "
-                              "render/ShaderInterface.h",
-                              b.name.c_str(), b.set, b.binding);
+                std::snprintf(
+                    text, sizeof(text),
+                    "'%s' (set %u, binding %u) is not something the renderer provides; see "
+                    "render/ShaderInterface.h",
+                    b.name.c_str(), b.set, b.binding
+                );
                 error = text;
                 return false;
             }
             if (b.size > provided)
             {
-                std::snprintf(text, sizeof(text), "block '%s' (set %u, binding %u) is %u bytes; the renderer provides %u",
-                              b.blockName.c_str(), b.set, b.binding, b.size, provided);
+                std::snprintf(
+                    text, sizeof(text), "block '%s' (set %u, binding %u) is %u bytes; the renderer provides %u",
+                    b.blockName.c_str(), b.set, b.binding, b.size, provided
+                );
                 error = text;
                 return false;
             }

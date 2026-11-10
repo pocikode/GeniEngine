@@ -69,8 +69,9 @@ class VulkanCommandList final : public CommandList
     void EndRenderPass() override;
     void SetViewport(float x, float y, float width, float height) override;
     void SetPipeline(PipelineHandle pipeline) override;
-    void SetBindGroup(uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets,
-                      uint32_t dynamicOffsetCount) override;
+    void SetBindGroup(
+        uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets, uint32_t dynamicOffsetCount
+    ) override;
     void SetVertexBuffer(BufferHandle buffer, uint64_t offset) override;
     void SetIndexBuffer(BufferHandle buffer, IndexFormat format, uint64_t offset) override;
     void Draw(uint32_t vertexCount, uint32_t firstVertex) override;

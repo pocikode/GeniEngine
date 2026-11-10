@@ -52,8 +52,10 @@ class Renderer
     void BeginFrame(const CameraData &camera, const std::vector<LightData> &lights);
     // Records one draw into the open render pass. Returns false if nothing was drawn
     // (no shader, or a shader whose vertex inputs the mesh does not provide).
-    bool DrawMesh(rhi::CommandList &cmd, const Mesh &mesh, Material &material, const glm::mat4 &model,
-                  const std::vector<glm::mat4> *bones);
+    bool DrawMesh(
+        rhi::CommandList &cmd, const Mesh &mesh, Material &material, const glm::mat4 &model,
+        const std::vector<glm::mat4> *bones
+    );
 
     // Destroys the cached pipelines made from a shader (called when it is destroyed).
     void ReleasePipelines(uint64_t shaderId);

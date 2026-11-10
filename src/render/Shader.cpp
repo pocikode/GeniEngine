@@ -25,8 +25,10 @@ std::vector<uint32_t> ToWords(const std::vector<char> &bytes)
 }
 } // namespace
 
-std::shared_ptr<Shader> Shader::Create(const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode,
-                                       size_t fragmentBytes, const std::string &name)
+std::shared_ptr<Shader> Shader::Create(
+    const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode, size_t fragmentBytes,
+    const std::string &name
+)
 {
     rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
     if (!device)
@@ -82,8 +84,7 @@ std::shared_ptr<Shader> Shader::Create(const uint32_t *vertexCode, size_t vertex
     shader->m_fragmentModule =
         device->CreateShaderModule({rhi::ShaderStage::Fragment, fragmentCode, fragmentBytes, fsName.c_str()});
     shader->m_materialLayout = device->CreateBindGroupLayout(materialLayout);
-    if (!shader->m_vertexModule.IsValid() || !shader->m_fragmentModule.IsValid() ||
-        !shader->m_materialLayout.IsValid())
+    if (!shader->m_vertexModule.IsValid() || !shader->m_fragmentModule.IsValid() || !shader->m_materialLayout.IsValid())
     {
         return nullptr;
     }
@@ -95,13 +96,16 @@ std::shared_ptr<Shader> Shader::Load(const std::string &vertexPath, const std::s
     auto &fs = Engine::GetInstance().GetFileSystem();
     const auto vertexBytes = fs.LoadAssetFile(vertexPath + ".spv");
     const auto fragmentBytes = fs.LoadAssetFile(fragmentPath + ".spv");
-    for (const auto *missing : {vertexBytes.empty() ? &vertexPath : nullptr, fragmentBytes.empty() ? &fragmentPath : nullptr})
+    for (const auto *missing :
+         {vertexBytes.empty() ? &vertexPath : nullptr, fragmentBytes.empty() ? &fragmentPath : nullptr})
     {
         if (missing)
         {
-            GENI_LOG_ERROR("Compiled shader '%s.spv' not found. Shaders are compiled at build time: list the "
-                           "source with geni_compile_shaders (cmake/GeniShaders.cmake)",
-                           missing->c_str());
+            GENI_LOG_ERROR(
+                "Compiled shader '%s.spv' not found. Shaders are compiled at build time: list the "
+                "source with geni_compile_shaders (cmake/GeniShaders.cmake)",
+                missing->c_str()
+            );
         }
     }
     if (vertexBytes.empty() || fragmentBytes.empty())
@@ -111,8 +115,10 @@ std::shared_ptr<Shader> Shader::Load(const std::string &vertexPath, const std::s
 
     const auto vertexWords = ToWords(vertexBytes);
     const auto fragmentWords = ToWords(fragmentBytes);
-    return Create(vertexWords.data(), vertexWords.size() * 4, fragmentWords.data(), fragmentWords.size() * 4,
-                  vertexPath + "+" + fragmentPath);
+    return Create(
+        vertexWords.data(), vertexWords.size() * 4, fragmentWords.data(), fragmentWords.size() * 4,
+        vertexPath + "+" + fragmentPath
+    );
 }
 
 Shader::~Shader()

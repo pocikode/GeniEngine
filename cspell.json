@@ -4,8 +4,14 @@
   ],
   "words": [
     "broadphase",
-    "glew",
     "glfw",
-    "OPENGL"
+    "glsl",
+    "glslang",
+    "lavapipe",
+    "MoltenVK",
+    "spirv",
+    "SPIRV",
+    "vulkaninfo",
+    "xvfb"
   ]
 }
