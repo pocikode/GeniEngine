@@ -56,7 +56,7 @@ std::shared_ptr<Texture> Texture::Load(const std::string &path)
 {
     int width, height, numChannels;
 
-    auto fs = Geni::Engine::GetInstance().GetFileSystem();
+    auto &fs = Geni::Engine::GetInstance().GetFileSystem();
     auto fullPath = fs.GetAssetsFolder() / path;
 
     if (!std::filesystem::exists(fullPath))
@@ -98,6 +98,12 @@ std::shared_ptr<Texture> TextureManager::GetWhiteTexture()
         m_whiteTexture = std::make_shared<Texture>(1, 1, 4, pixels);
     }
     return m_whiteTexture;
+}
+
+void TextureManager::Clear()
+{
+    m_textures.clear();
+    m_whiteTexture.reset();
 }
 
 } // namespace Geni

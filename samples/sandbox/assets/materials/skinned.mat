@@ -1,0 +1,6 @@
+{
+  "shader": {
+    "vertex": "shaders/skinned.vert",
+    "fragment": "shaders/lit.frag"
+  }
+}

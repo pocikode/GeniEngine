@@ -14,9 +14,8 @@ void OrbitCameraComponent::Update(float deltaTime)
 {
     auto &inputManager = Engine::GetInstance().GetInputManager();
 
-    // Check if ImGui wants mouse input (engine will handle this through imgui integration if available)
-    // For now, we just use input directly
-    bool imguiWantsMouse = false;
+    // Dragging or scrolling over a debug window must not move the camera.
+    bool imguiWantsMouse = Engine::GetInstance().GetDebugOverlay().WantsMouse();
 
     if (!imguiWantsMouse)
     {

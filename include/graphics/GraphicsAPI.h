@@ -16,6 +16,8 @@ class GraphicsAPI
 {
   public:
     bool Init();
+    // Releases GL objects owned by the API. Must run while the context is still current.
+    void Shutdown();
     std::shared_ptr<ShaderProgram> CreateShaderProgram(
         const std::string &vertexSource, const std::string &fragmentSource
     );

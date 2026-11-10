@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Common.h"
+#include <cstddef>
 #include <glm/mat4x4.hpp>
 #include <vector>
 
@@ -24,9 +25,16 @@ class RenderQueue
   public:
     void Submit(const RenderCommand &command);
     void Draw(GraphicsAPI &graphicsAPI, const CameraData &cameraData, const std::vector<LightData> &lights);
+    // Drops queued commands without drawing them.
+    void Clear();
+    // Commands waiting for the next Draw.
+    size_t GetPendingCount() const;
+    // Draw calls issued by the most recent Draw.
+    int GetLastDrawCallCount() const;
 
   private:
     std::vector<RenderCommand> m_commands;
+    int m_lastDrawCallCount = 0;
 };
 
 } // namespace Geni

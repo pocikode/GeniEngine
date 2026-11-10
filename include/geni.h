@@ -1,7 +1,13 @@
 #pragma once
 
 #include "core/Application.h"
+#include "core/Assert.h"
+#include "core/CrashHandler.h"
+#include "core/DebugOverlay.h"
 #include "core/Engine.h"
+#include "core/FixedTimestep.h"
+#include "core/Log.h"
+#include "core/Profiler.h"
 #include "graphics/GraphicsAPI.h"
 #include "graphics/ShaderProgram.h"
 #include "graphics/Texture.h"

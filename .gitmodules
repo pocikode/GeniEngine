@@ -10,3 +10,12 @@
 [submodule "thirdparty/bullet3"]
 	path = thirdparty/bullet3
 	url = https://github.com/bulletphysics/bullet3.git
+[submodule "thirdparty/tracy"]
+	path = thirdparty/tracy
+	url = https://github.com/wolfpld/tracy.git
+[submodule "thirdparty/doctest"]
+	path = thirdparty/doctest
+	url = https://github.com/doctest/doctest.git
+[submodule "thirdparty/imgui"]
+	path = thirdparty/imgui
+	url = https://github.com/ocornut/imgui.git

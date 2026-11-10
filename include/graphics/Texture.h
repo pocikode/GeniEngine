@@ -33,6 +33,8 @@ class TextureManager
     // color factor but no base color texture, so the shader can still sample
     // `baseColorTexture * baseColorFactor` without branching.
     std::shared_ptr<Texture> GetWhiteTexture();
+    // Releases the cache. Textures still referenced elsewhere stay alive.
+    void Clear();
 
   private:
     std::unordered_map<std::string, std::shared_ptr<Texture>> m_textures;

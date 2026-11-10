@@ -1,5 +1,7 @@
 #include "scene/GameObject.h"
 #include "core/Engine.h"
+#include "core/Log.h"
+#include "core/Profiler.h"
 #include "glm/ext/quaternion_float.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "graphics/Texture.h"
@@ -11,6 +13,7 @@
 #include "scene/components/AnimationComponent.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/SkinnedMeshComponent.h"
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -613,15 +616,30 @@ auto ReadOutputQuat = [](cgltf_accessor *acc, std::vector<glm::quat> &outValues)
 
 GameObject *GameObject::LoadGLTF(const std::string &path)
 {
+    GENI_PROFILE_FUNCTION();
+
+    if (!Engine::GetInstance().GetScene())
+    {
+        GENI_LOG_ERROR("LoadGLTF('%s'): no current scene, call Engine::SetScene first", path.c_str());
+        return nullptr;
+    }
+
     auto contents = Engine::GetInstance().GetFileSystem().LoadAssetFileText(path);
     if (contents.empty())
+    {
+        GENI_LOG_ERROR("LoadGLTF('%s'): file is missing or empty", path.c_str());
         return nullptr;
+    }
 
     cgltf_options options = {};
     cgltf_data *data = nullptr;
     cgltf_result res = cgltf_parse(&options, contents.data(), contents.size(), &data);
     if (res != cgltf_result_success)
+    {
+        GENI_LOG_ERROR("LoadGLTF('%s'): not a valid glTF file (cgltf error %d)", path.c_str(),
+                       static_cast<int>(res));
         return nullptr;
+    }
 
     auto fullPath = Engine::GetInstance().GetFileSystem().GetAssetsFolder() / path;
     auto fullFolderPath = fullPath.remove_filename();
@@ -630,12 +648,21 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
     res = cgltf_load_buffers(&options, data, fullFolderPath.string().c_str());
     if (res != cgltf_result_success)
     {
+        GENI_LOG_ERROR("LoadGLTF('%s'): could not load buffers (cgltf error %d)", path.c_str(),
+                       static_cast<int>(res));
+        cgltf_free(data);
+        return nullptr;
+    }
+
+    auto scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
+    if (!scene)
+    {
+        GENI_LOG_ERROR("LoadGLTF('%s'): file contains no scene", path.c_str());
         cgltf_free(data);
         return nullptr;
     }
 
     auto resultObject = Engine::GetInstance().GetScene()->CreateObject("Result");
-    auto scene = &data->scenes[0];
 
     // Pass 1: build node hierarchy as GameObjects and record cgltf_node → GameObject mapping.
     NodeMap nodeMap;
@@ -681,7 +708,8 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
             }
 
             TransformTrack track;
-            track.targetName = node->name;
+            // Same fallback name ParseGLTFHierarchy gives unnamed nodes.
+            track.targetName = node->name ? node->name : "node";
             clip->tracks.push_back(track);
             size_t idx = clip->tracks.size() - 1;
             trackIndexOf[node] = idx;
@@ -742,7 +770,10 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
                 break;
             }
 
-            clip->duration = std::max(clip->duration, times.back());
+            if (!times.empty())
+            {
+                clip->duration = std::max(clip->duration, times.back());
+            }
         }
 
         clips.push_back(std::move(clip));

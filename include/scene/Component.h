@@ -23,7 +23,7 @@ class Component
     }
 
   protected:
-    GameObject *m_owner;
+    GameObject *m_owner = nullptr;
 
     friend class GameObject;
 

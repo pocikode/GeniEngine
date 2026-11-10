@@ -46,6 +46,13 @@ bool Scene::SetParent(GameObject *obj, GameObject *parent)
     bool result = false;
     auto currentParent = obj->GetParent();
 
+    // Already where it should be. Also keeps the move below from touching the vector
+    // it is iterating.
+    if (parent != nullptr && parent == currentParent)
+    {
+        return true;
+    }
+
     if (parent == nullptr)
     {
         if (currentParent != nullptr)
@@ -107,7 +114,7 @@ bool Scene::SetParent(GameObject *obj, GameObject *parent)
                     parent->m_children.push_back(std::move(*it));
                     obj->m_parent = parent;
                     currentParent->m_children.erase(it);
-                    result = false;
+                    result = true;
                 }
             }
         }

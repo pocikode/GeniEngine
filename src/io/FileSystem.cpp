@@ -37,8 +37,18 @@ std::filesystem::path FileSystem::GetExecutableFolder() const
 #endif
 }
 
+void FileSystem::SetAssetsFolder(const std::filesystem::path &path)
+{
+    m_assetsFolderOverride = path;
+}
+
 std::filesystem::path FileSystem::GetAssetsFolder() const
 {
+    if (!m_assetsFolderOverride.empty())
+    {
+        return m_assetsFolderOverride;
+    }
+
 #if defined(ASSETS_ROOT)
     // ASSETS_ROOT is an absolute path baked in at build time (the build host's
     // source assets/ folder) so the app can run straight from the build tree.

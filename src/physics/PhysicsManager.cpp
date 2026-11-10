@@ -6,6 +6,7 @@
 #include "BulletDynamics/ConstraintSolver/btSequentialImpulseConstraintSolver.h"
 #include "BulletDynamics/Dynamics/btDiscreteDynamicsWorld.h"
 #include "LinearMath/btVector3.h"
+#include "core/Profiler.h"
 #include "physics/RigidBody.h"
 #include <memory>
 
@@ -33,8 +34,35 @@ void PhysicsManager::Init()
     m_world->setGravity(btVector3(0, -9.81f, 0));
 }
 
+void PhysicsManager::Shutdown()
+{
+    // The world refers to the other objects, so it goes first.
+    m_world.reset();
+    m_solver.reset();
+    m_dispatcher.reset();
+    m_collisionConfig.reset();
+    m_broadphase.reset();
+}
+
+void PhysicsManager::Step(float fixedDeltaTime)
+{
+    if (!m_world)
+    {
+        return;
+    }
+
+    GENI_PROFILE_SCOPE("PhysicsManager::Step");
+    // maxSubSteps = 0 makes Bullet take a single step of exactly fixedDeltaTime.
+    m_world->stepSimulation(fixedDeltaTime, 0);
+}
+
 void PhysicsManager::Update(float deltaTime)
 {
+    if (!m_world)
+    {
+        return;
+    }
+
     const btScalar fixedTimesStep = 1.0f / 60.0f;
     const int maxSubSteps = 4;
     m_world->stepSimulation(deltaTime, maxSubSteps, fixedTimesStep);

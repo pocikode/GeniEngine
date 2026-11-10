@@ -1,5 +1,6 @@
 #include "render/Material.h"
 #include "core/Engine.h"
+#include "core/Log.h"
 #include "graphics/ShaderProgram.h"
 #include "graphics/Texture.h"
 #include <memory>
@@ -99,6 +100,12 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
 
         result = std::make_shared<Material>();
         result->SetShaderProgram(shaderProgram);
+    }
+
+    if (!result)
+    {
+        GENI_LOG_ERROR("Material '%s' has no \"shader\" object", path.c_str());
+        return nullptr;
     }
 
     if (json.contains("params"))

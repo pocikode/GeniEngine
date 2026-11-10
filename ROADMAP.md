@@ -42,13 +42,15 @@ Dates assume about 8 h/week starting November 2026.
 
 ### M0: Foundations (Nov 2026 – Jan 2027, about 80 h)
 
+**Status (2026-11-10):** implemented; all tests pass locally on macOS. Open until CI has run green on macOS, Windows and Linux.
+
 Make the project safe to change quickly.
 
 - Logging, assertions and crash reporting with stack traces
 - Tracy profiler integration and a Dear ImGui debug overlay
 - Unit test framework; first tests for transforms, the scene tree and GLTF loading
 - CI building and testing on macOS, Windows and Linux
-- `samples/` directory with the current demo moved into the repo
+- `samples/` directory with a demo of everything that works today (`samples/sandbox`)
 - Fixed-timestep game loop separated from rendering
 - `docs/design/` created, with the first design page written for M1
 

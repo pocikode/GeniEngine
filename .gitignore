@@ -1,3 +1,6 @@
 **/.DS_Store
 /.cache
 /build
+/vcpkg_installed
+geni_crash_*.log
+imgui.ini

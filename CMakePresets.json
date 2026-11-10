@@ -1,0 +1,100 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Development",
+      "description": "Debug build with tests, samples, the debug overlay and Tracy.",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "GENI_BUILD_TESTS": "ON",
+        "GENI_BUILD_SAMPLES": "ON",
+        "GENI_ENABLE_IMGUI": "ON",
+        "GENI_ENABLE_TRACY": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimized build with debug info, tests and samples; no Tracy.",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "GENI_BUILD_TESTS": "ON",
+        "GENI_BUILD_SAMPLES": "ON",
+        "GENI_ENABLE_IMGUI": "ON",
+        "GENI_ENABLE_TRACY": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev", "configuration": "Debug" },
+    { "name": "release", "configurePreset": "release", "configuration": "RelWithDebInfo" }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "dev-no-gpu",
+      "description": "Skips tests that need a window and an OpenGL context.",
+      "inherits": "dev",
+      "filter": { "exclude": { "label": "gpu" } }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "RelWithDebInfo",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release-no-gpu",
+      "description": "Skips tests that need a window and an OpenGL context.",
+      "inherits": "release",
+      "filter": { "exclude": { "label": "gpu" } }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "description": "Configure, build and test the development build.",
+      "steps": [
+        { "type": "configure", "name": "dev" },
+        { "type": "build", "name": "dev" },
+        { "type": "test", "name": "dev" }
+      ]
+    },
+    {
+      "name": "dev-no-gpu",
+      "description": "Like dev, without the tests that need a GPU.",
+      "steps": [
+        { "type": "configure", "name": "dev" },
+        { "type": "build", "name": "dev" },
+        { "type": "test", "name": "dev-no-gpu" }
+      ]
+    },
+    {
+      "name": "release",
+      "description": "Configure, build and test the release build.",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release" }
+      ]
+    },
+    {
+      "name": "release-no-gpu",
+      "description": "Like release, without the tests that need a GPU.",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release-no-gpu" }
+      ]
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 #include "graphics/GraphicsAPI.h"
+#include "core/Log.h"
 #include "graphics/ShaderProgram.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
 #include <cstdint>
-#include <iostream>
 #include <memory>
 
 namespace Geni
@@ -13,6 +13,11 @@ bool GraphicsAPI::Init()
 {
     glEnable(GL_DEPTH_TEST);
     return true;
+}
+
+void GraphicsAPI::Shutdown()
+{
+    m_defaultShaderProgram.reset();
 }
 
 std::shared_ptr<ShaderProgram> GraphicsAPI::CreateShaderProgram(
@@ -30,7 +35,7 @@ std::shared_ptr<ShaderProgram> GraphicsAPI::CreateShaderProgram(
     if (!success)
     {
         glGetShaderInfoLog(vertexShader, 512, nullptr, infolog);
-        std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED: " << infolog << std::endl;
+        GENI_LOG_ERROR("Vertex shader compilation failed: %s", infolog);
     }
 
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -41,7 +46,7 @@ std::shared_ptr<ShaderProgram> GraphicsAPI::CreateShaderProgram(
     if (!success)
     {
         glGetShaderInfoLog(fragmentShader, 512, nullptr, infolog);
-        std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED: " << infolog << std::endl;
+        GENI_LOG_ERROR("Fragment shader compilation failed: %s", infolog);
     }
 
     GLuint program = glCreateProgram();
@@ -52,7 +57,7 @@ std::shared_ptr<ShaderProgram> GraphicsAPI::CreateShaderProgram(
     if (!success)
     {
         glGetProgramInfoLog(program, 512, nullptr, infolog);
-        std::cerr << "ERROR::SHADER::PROGRAM::LINK_FAILED: " << infolog << std::endl;
+        GENI_LOG_ERROR("Shader program link failed: %s", infolog);
         return nullptr;
     }
 

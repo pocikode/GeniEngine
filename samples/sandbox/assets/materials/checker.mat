@@ -1,0 +1,11 @@
+{
+  "shader": {
+    "vertex": "shaders/lit.vert",
+    "fragment": "shaders/lit.frag"
+  },
+  "params": {
+    "textures": [
+      { "name": "baseColorTexture", "path": "textures/checker.png" }
+    ]
+  }
+}
