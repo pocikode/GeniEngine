@@ -24,6 +24,10 @@ struct VertexElement
     static constexpr int NormalIndex = 3;
     static constexpr int JointsIndex = 4;
     static constexpr int WeightsIndex = 5;
+    // Locations 6-9 are reserved for the per-instance model matrix columns; 10 is the
+    // cascade index of the shadow pass. They are not part of a mesh's interleaved vertex.
+    static constexpr int InstanceMatrixIndex = 6;
+    static constexpr int CascadeIndex = 10;
 };
 
 struct VertexLayout

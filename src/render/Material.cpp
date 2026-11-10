@@ -96,8 +96,10 @@ rhi::BindGroupHandle Material::PrepareBindGroup(Renderer &renderer)
         m_gpuShaderId = m_shader->GetId();
         if (m_shader->GetMaterialBlockSize() > 0)
         {
-            m_uniformBuffer = device->CreateBuffer({m_shader->GetMaterialBlockSize(), rhi::BufferUsage::Uniform,
-                                                    rhi::MemoryUsage::GpuOnly, "material uniforms"});
+            m_uniformBuffer = device->CreateBuffer(
+                {m_shader->GetMaterialBlockSize(), rhi::BufferUsage::Uniform, rhi::MemoryUsage::GpuOnly,
+                 "material uniforms"}
+            );
         }
     }
 
@@ -135,7 +137,8 @@ rhi::BindGroupHandle Material::PrepareBindGroup(Renderer &renderer)
         if (m_uniformBuffer.IsValid())
         {
             desc.entries.push_back(
-                {m_shader->GetMaterialBlockBinding(), m_uniformBuffer, 0, m_shader->GetMaterialBlockSize()});
+                {m_shader->GetMaterialBlockBinding(), m_uniformBuffer, 0, m_shader->GetMaterialBlockSize()}
+            );
         }
         for (const auto &slot : m_shader->GetMaterialTextures())
         {
@@ -215,6 +218,19 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
                 float v0 = p.value("value0", 0.0f);
                 float v1 = p.value("value1", 0.0f);
                 result->SetParam(name, v0, v1);
+            }
+        }
+
+        // floats 4
+        if (paramsObj.contains("float4"))
+        {
+            for (auto &p : paramsObj["float4"])
+            {
+                std::string name = p.value("name", "");
+                glm::vec4 value(
+                    p.value("value0", 0.0f), p.value("value1", 0.0f), p.value("value2", 0.0f), p.value("value3", 0.0f)
+                );
+                result->SetParam(name, value);
             }
         }
 

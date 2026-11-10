@@ -52,6 +52,8 @@ struct EngineConfig
     std::string crashReportDirectory;
     // Log file path. Empty means no log file (stderr only).
     std::string logFile;
+    // Renderer v1 quality and art direction (MSAA, cascades, clusters, sky).
+    RendererConfig renderer;
 };
 
 class Engine

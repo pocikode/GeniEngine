@@ -22,7 +22,11 @@ function(geni_add_sample name)
     if(shaders)
       set(compiled "${CMAKE_CURRENT_BINARY_DIR}/compiled_assets")
       geni_compile_shaders(${name} SOURCE_DIR "${assets}" OUTPUT_DIR "${compiled}" SOURCES ${shaders})
-      add_custom_command(TARGET ${name} POST_BUILD
+      # Both copies hang off the shader target, so editing a shader alone is enough:
+      # without that, the assets next to the executable kept the previous SPIR-V until
+      # the sample relinked.
+      add_custom_command(TARGET ${name}_shaders POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${assets}" "$<TARGET_FILE_DIR:${name}>/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${compiled}" "$<TARGET_FILE_DIR:${name}>/assets"
       )
     endif()
@@ -30,3 +34,5 @@ function(geni_add_sample name)
 endfunction()
 
 add_subdirectory(sandbox)
+
+add_subdirectory(city)

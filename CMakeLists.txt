@@ -60,6 +60,9 @@ set(SRC_FILES
   src/graphics/Texture.cpp
   src/render/Material.cpp
   src/render/Mesh.cpp
+  src/render/Cascades.cpp
+  src/render/ClusterGrid.cpp
+  src/render/Frustum.cpp
   src/render/RenderQueue.cpp
   src/render/Renderer.cpp
   src/render/Shader.cpp
@@ -104,6 +107,13 @@ geni_embed_shaders(${PROJECT_NAME}
   SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.vert
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow_skinned.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.frag
 )
 
 # glm

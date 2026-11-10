@@ -23,15 +23,20 @@ struct RenderCommand
     Material *material = nullptr;
     glm::mat4 modelMatrix;
     const std::vector<glm::mat4> *bonePalette = nullptr;
+    // Leading palette entries the mesh's joints refer to (the rest is identity padding).
+    // Culling bounds a skinned mesh by these bones; 0 means the whole palette.
+    uint32_t boneCount = 0;
 };
 
 class RenderQueue
 {
   public:
     void Submit(const RenderCommand &command);
-    // Draws and clears the queued commands, inside an open render pass.
-    void Draw(Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData,
-              const std::vector<LightData> &lights);
+    // Runs the renderer's frame (shadows, HDR scene, tonemap) with the queued commands
+    // and clears the queue. The tonemap render pass stays open for later draws.
+    void Draw(
+        Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData, const std::vector<LightData> &lights
+    );
     // Drops queued commands without drawing them.
     void Clear();
     // Commands waiting for the next Draw.

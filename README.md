@@ -2,7 +2,7 @@
 
 A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
 
-Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface, and has a scene graph, glTF loading with skinning and animation, materials, and rigid-body physics.
+Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based glTF materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph, glTF loading with skinning and animation, and rigid-body physics.
 
 ## Build and test
 
@@ -36,15 +36,18 @@ To run tests again without rebuilding: `ctest --preset dev`. To run one group: `
 
 The `screenshot_sandbox_*` tests render the sample off-screen and compare it with `tests/reference/*.png` (`tools/image_compare.cpp`; a failing run writes a diff image to `build/dev/screenshots/`). After an intended visual change, regenerate the references with `GENI_UPDATE_REFERENCES=1 ctest --preset dev -R screenshot` and review the new images before committing them.
 
-## Run the sample
+## Run the samples
 
 ```sh
-build/dev/samples/sandbox/sandbox
+build/dev/samples/sandbox/sandbox   # everything the engine can do, in one scene
+build/dev/samples/city/city         # the reference game's first city block
 ```
 
-`samples/sandbox` uses every engine feature in one scene: textured meshes, a light, an orbit camera, physics, and a skinned animated model. Left drag orbits, right drag pans, scroll zooms, Space spawns a crate, Esc quits.
+`samples/sandbox` uses every engine feature in one scene: PBR textured meshes, a sun and a ring of point lights, an orbit camera, physics, and a skinned animated model. Left drag orbits, right drag pans, scroll zooms, Space spawns a crate, Esc quits.
 
-**F1** toggles the debug overlay: frame time, fixed steps per frame, draw calls and the recent log.
+`samples/city` is the reference game (and the M2 performance benchmark): 10,000 instanced buildings, 100 point lights and cascaded shadows. Run it with `--hidden --frames N --budget-ms M` to measure: it exits with code 4 when the mean frame time is over budget. CTest runs it as `benchmark_city`.
+
+**F1** toggles the debug overlay: frame time, fixed steps per frame, draw calls, submitted/visible/culled objects, instances, clustered lights and the recent log.
 
 To profile, start the [Tracy](https://github.com/wolfpld/tracy) UI (version 0.15) and connect to the running sample. The `dev` preset compiles the Tracy client in; it records nothing until the UI connects.
 

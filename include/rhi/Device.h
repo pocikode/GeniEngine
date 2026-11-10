@@ -22,6 +22,7 @@ class CommandList
     // backbuffer until SetViewport changes them.
     virtual void BeginRenderPass(const RenderPassDesc &desc) = 0;
     virtual void EndRenderPass() = 0;
+    virtual bool IsInRenderPass() const = 0;
 
     // Pixel rectangle with its origin at the top-left corner.
     virtual void SetViewport(float x, float y, float width, float height) = 0;
@@ -31,10 +32,17 @@ class CommandList
     virtual void SetBindGroup(
         uint32_t set, BindGroupHandle group, const uint32_t *dynamicOffsets = nullptr, uint32_t dynamicOffsetCount = 0
     ) = 0;
-    virtual void SetVertexBuffer(BufferHandle buffer, uint64_t offset = 0) = 0;
+    virtual void SetVertexBuffer(uint32_t binding, BufferHandle buffer, uint64_t offset = 0) = 0;
     virtual void SetIndexBuffer(BufferHandle buffer, IndexFormat format, uint64_t offset = 0) = 0;
     virtual void Draw(uint32_t vertexCount, uint32_t firstVertex = 0) = 0;
     virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex = 0, int32_t vertexOffset = 0) = 0;
+    // One draw for `instanceCount` copies of the mesh; per-instance attributes come from
+    // the buffer bound at binding 1.
+    virtual void DrawIndexedInstanced(
+        uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex = 0, int32_t vertexOffset = 0,
+        uint32_t firstInstance = 0
+    ) = 0;
+    virtual void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstInstance = 0) = 0;
 };
 
 struct DeviceConfig
@@ -112,6 +120,12 @@ class Device
     // Required alignment of dynamic offsets and of uniform buffer binding offsets.
     virtual uint32_t GetUniformBufferAlignment() const = 0;
     virtual std::string GetDescription() const = 0;
+    // The depth format the device's swapchain depth buffer uses; renderer-created depth
+    // targets should use the same one.
+    virtual Format GetDepthFormat() const = 0;
+    // A depth-only format that can be both a depth attachment and sampled (shadow maps).
+    // Sample it with Nearest filtering: linear filtering of depth formats is optional.
+    virtual Format GetSampledDepthFormat() const = 0;
 
     // Dear ImGui renderer integration, so code outside the backend never sees its API.
     // The engine owns the ImGui context and the platform (GLFW) backend. No-ops when the

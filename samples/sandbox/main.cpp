@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <glm/gtc/quaternion.hpp>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -75,7 +76,41 @@ class SandboxApp : public Geni::Application
 
         auto light = m_scene->CreateObject("Light");
         light->SetPosition(glm::vec3(5.0f, 9.0f, 6.0f));
-        light->AddComponent(new Geni::LightComponent());
+        auto lightComponent = new Geni::LightComponent();
+        lightComponent->SetType(Geni::LightType::Point);
+        lightComponent->SetColor(glm::vec3(1.0f, 0.85f, 0.65f));
+        lightComponent->SetIntensity(2.0f);
+        lightComponent->SetRange(20.0f);
+        light->AddComponent(lightComponent);
+
+        // The sun drives cascaded shadows and the sky. A light points along its local -Z.
+        auto sun = m_scene->CreateObject("Sun");
+        sun->SetRotation(glm::quatLookAt(glm::normalize(glm::vec3(-0.55f, -0.75f, -0.40f)), glm::vec3(0, 1, 0)));
+        auto sunComponent = new Geni::LightComponent();
+        sunComponent->SetType(Geni::LightType::Directional);
+        sunComponent->SetColor(glm::vec3(1.0f, 0.94f, 0.82f));
+        sunComponent->SetIntensity(1.8f);
+        sun->AddComponent(sunComponent);
+
+        // A ring of coloured point lights: the clustered forward path with more than one
+        // light per cluster.
+        for (int i = 0; i < 10; ++i)
+        {
+            const float angle = static_cast<float>(i) * 0.6283185f;
+            auto point = m_scene->CreateObject("PointLight");
+            point->SetPosition(glm::vec3(std::cos(angle) * 6.0f, 1.6f, std::sin(angle) * 6.0f));
+            auto pointLight = new Geni::LightComponent();
+            pointLight->SetType(Geni::LightType::Point);
+            pointLight->SetColor(
+                glm::vec3(
+                    0.5f + 0.5f * std::cos(angle), 0.5f + 0.5f * std::cos(angle + 2.09f),
+                    0.5f + 0.5f * std::cos(angle + 4.19f)
+                )
+            );
+            pointLight->SetIntensity(1.4f);
+            pointLight->SetRange(9.0f);
+            point->AddComponent(pointLight);
+        }
 
         m_checkerMaterial = Geni::Material::Load("materials/checker.mat");
         if (!m_checkerMaterial)
@@ -87,6 +122,7 @@ class SandboxApp : public Geni::Application
             return false;
         }
         m_checkerMaterial->SetParam("uBaseColorFactor", glm::vec4(1.0f));
+        m_checkerMaterial->SetParam("uMetallicRoughness", glm::vec4(0.0f, 0.62f, 0.0f, 0.0f));
 
         // Ground: a wide, thin static box.
         const glm::vec3 groundSize(16.0f, 0.5f, 16.0f);
@@ -274,7 +310,8 @@ int main(int argc, char **argv)
         else
         {
             GENI_LOG_ERROR(
-                "Unknown argument '%s'. Usage: sandbox [--frames N] [--hidden] [--no-overlay] [--screenshot FILE]", argv[i]
+                "Unknown argument '%s'. Usage: sandbox [--frames N] [--hidden] [--no-overlay] [--screenshot FILE]",
+                argv[i]
             );
             return 2;
         }

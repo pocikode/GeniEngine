@@ -11,25 +11,14 @@ void RenderQueue::Submit(const RenderCommand &command)
     m_commands.push_back(command);
 }
 
-void RenderQueue::Draw(Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData,
-                       const std::vector<LightData> &lights)
+void RenderQueue::Draw(
+    Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData, const std::vector<LightData> &lights
+)
 {
     GENI_PROFILE_SCOPE("RenderQueue::Draw");
 
-    renderer.BeginFrame(cameraData, lights);
-    m_lastDrawCallCount = 0;
-    for (auto &command : m_commands)
-    {
-        if (!command.material || !command.mesh)
-        {
-            continue;
-        }
-        if (renderer.DrawMesh(cmd, *command.mesh, *command.material, command.modelMatrix, command.bonePalette))
-        {
-            ++m_lastDrawCallCount;
-        }
-    }
-
+    renderer.RenderFrame(cmd, m_commands, cameraData, lights);
+    m_lastDrawCallCount = static_cast<int>(renderer.GetRenderStats().mainDraws);
     m_commands.clear();
 }
 

@@ -48,8 +48,8 @@ class Material
     rhi::BindGroupHandle PrepareBindGroup(Renderer &renderer);
 
     // Reads a JSON .mat file: {"shader": {"vertex", "fragment"}, "params": {"float",
-    // "float2", "textures"}}. Shader paths name GLSL sources; their compiled ".spv" files
-    // are loaded (Shader::Load).
+    // "float2", "float4", "textures"}}. Shader paths name GLSL sources; their compiled
+    // ".spv" files are loaded (Shader::Load).
     static std::shared_ptr<Material> Load(const std::string &path);
 
   private:

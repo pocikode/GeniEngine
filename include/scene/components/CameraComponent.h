@@ -16,6 +16,19 @@ class CameraComponent : public Component
     glm::mat4 GetViewMatrix() const;
     glm::mat4 GetProjectionMatrix(float aspect) const;
 
+    float GetNearPlane() const
+    {
+        return m_nearPlane;
+    }
+    float GetFarPlane() const
+    {
+        return m_farPlane;
+    }
+    float GetFieldOfView() const
+    {
+        return m_fov;
+    }
+
   private:
     float m_fov = 60.0f;
     float m_nearPlane = 0.1f;

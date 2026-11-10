@@ -9,6 +9,7 @@ add_executable(geni_tests
   test_transform.cpp
   test_engine_loop.cpp
   test_gltf.cpp
+  test_render_math.cpp
   test_rhi.cpp
   test_shader_reflection.cpp
 )

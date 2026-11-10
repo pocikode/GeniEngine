@@ -189,8 +189,13 @@ void Scene::CollectLightsRecursive(GameObject *obj, std::vector<LightData> &out)
     if (auto light = obj->GetComponent<LightComponent>())
     {
         LightData data;
-        data.color = light->GetColor();
+        data.type = light->GetType();
+        data.color = light->GetColor() * light->GetIntensity();
         data.position = obj->GetWorldPosition();
+        data.direction = light->GetDirection();
+        data.range = light->GetRange();
+        data.innerConeAngle = light->GetInnerConeAngle();
+        data.outerConeAngle = light->GetOuterConeAngle();
         out.push_back(data);
     }
 

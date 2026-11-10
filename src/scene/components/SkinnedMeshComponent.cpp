@@ -7,6 +7,8 @@
 #include "scene/GameObject.h"
 #include "scene/Skeleton.h"
 
+#include <algorithm>
+
 namespace Geni
 {
 
@@ -35,6 +37,7 @@ void SkinnedMeshComponent::Update(float /*deltaTime*/)
     // joints' transforms, which already place vertices in world space via the palette.
     command.modelMatrix = glm::mat4(1.0f);
     command.bonePalette = &palette;
+    command.boneCount = static_cast<uint32_t>(std::max(0, m_skeleton->GetJointCount()));
 
     Engine::GetInstance().GetRenderQueue().Submit(command);
 }

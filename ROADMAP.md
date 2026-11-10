@@ -74,6 +74,8 @@ Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backen
 
 ### M2: Renderer v1 (Aug 2027 – Jan 2028, about 200 h)
 
+**Status (2026-11-10):** implemented; design page `docs/design/0002-renderer-v1.md`. All tests pass locally on macOS (MoltenVK) with validation layers on: the sandbox and the 10,000-object city block render with cascaded shadows, clustered lighting, PBR, HDR and MSAA, and the release benchmark runs at 8.5 ms/frame (118 fps) on an Apple M4. Open until CI has run green on macOS, Windows and Linux and the budget has been measured on a Windows GPU.
+
 Make it look modern and scale to many objects.
 
 - Frustum culling, draw sorting by pipeline and material, instancing
@@ -184,7 +186,7 @@ Each has a default so work is never blocked. Change them before the milestone th
 | Scripting language | Lua | M6 |
 | Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
 | Shader language: GLSL or Slang | Decided in M1: GLSL 450, compiled offline with glslang. Revisit with the WebGPU backend | M8 |
-| Anti-aliasing: MSAA or TAA | Design page in M2 | M2 |
+| Anti-aliasing: MSAA or TAA | Decided in M2: 4x MSAA, configurable (`docs/design/0002-renderer-v1.md`); TAA revisited with M5 camera-relative rendering | M2 |
 | Licence and contribution terms | Keep the current licence | M6 |
 
 ## Review points

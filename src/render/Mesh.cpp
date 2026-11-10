@@ -2,7 +2,11 @@
 #include "core/Engine.h"
 #include "core/Log.h"
 #include "rhi/Device.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
 #include <memory>
 #include <vector>
 
@@ -32,6 +36,46 @@ uint64_t HashLayout(const VertexLayout &layout)
     }
     return hash;
 }
+
+MeshBounds ComputeBounds(const VertexLayout &layout, const std::vector<float> &vertices)
+{
+    MeshBounds bounds;
+    const auto position = std::find_if(layout.elements.begin(), layout.elements.end(), [](const VertexElement &e) {
+        return e.index == VertexElement::PositionIndex && e.size >= 3;
+    });
+    if (position == layout.elements.end() || layout.stride == 0)
+    {
+        return bounds;
+    }
+    const size_t vertexCount = (vertices.size() * sizeof(float)) / layout.stride;
+    const size_t positionOffset = position->offset / sizeof(float);
+    const size_t stride = layout.stride / sizeof(float);
+    for (size_t i = 0; i < vertexCount; ++i)
+    {
+        const float *p = vertices.data() + i * stride + positionOffset;
+        const glm::vec3 position(p[0], p[1], p[2]);
+        if (i == 0)
+        {
+            bounds.min = bounds.max = position;
+        }
+        else
+        {
+            bounds.min = glm::min(bounds.min, position);
+            bounds.max = glm::max(bounds.max, position);
+        }
+    }
+    bounds.center = (bounds.min + bounds.max) * 0.5f;
+    float radiusSquared = 0.0f;
+    for (size_t i = 0; i < vertexCount; ++i)
+    {
+        const float *p = vertices.data() + i * stride + positionOffset;
+        const glm::vec3 position(p[0], p[1], p[2]);
+        const glm::vec3 delta = position - bounds.center;
+        radiusSquared = std::max(radiusSquared, glm::dot(delta, delta));
+    }
+    bounds.radius = std::sqrt(radiusSquared);
+    return bounds;
+}
 } // namespace
 
 Mesh::Mesh(const VertexLayout &layout, const std::vector<float> &vertices, const std::vector<uint32_t> &indices)
@@ -49,13 +93,16 @@ Mesh::Mesh(const VertexLayout &layout, const std::vector<float> &vertices, rhi::
     Create(layout, vertices, nullptr, topology);
 }
 
-void Mesh::Create(const VertexLayout &layout, const std::vector<float> &vertices, const std::vector<uint32_t> *indices,
-                  rhi::PrimitiveTopology topology)
+void Mesh::Create(
+    const VertexLayout &layout, const std::vector<float> &vertices, const std::vector<uint32_t> *indices,
+    rhi::PrimitiveTopology topology
+)
 {
     m_vertexLayout = layout;
     m_topology = topology;
     m_layoutKey = HashLayout(layout);
     m_vertexCount = layout.stride > 0 ? (vertices.size() * sizeof(float)) / layout.stride : 0;
+    m_bounds = ComputeBounds(layout, vertices);
 
     rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
     if (!device)
@@ -67,14 +114,16 @@ void Mesh::Create(const VertexLayout &layout, const std::vector<float> &vertices
     {
         m_vertexBuffer = device->CreateBuffer(
             {vertices.size() * sizeof(float), rhi::BufferUsage::Vertex, rhi::MemoryUsage::GpuOnly, "mesh vertices"},
-            vertices.data());
+            vertices.data()
+        );
     }
     if (indices && !indices->empty())
     {
         m_indexCount = indices->size();
         m_indexBuffer = device->CreateBuffer(
             {indices->size() * sizeof(uint32_t), rhi::BufferUsage::Index, rhi::MemoryUsage::GpuOnly, "mesh indices"},
-            indices->data());
+            indices->data()
+        );
     }
 }
 
@@ -87,16 +136,24 @@ Mesh::~Mesh()
     }
 }
 
-void Mesh::Draw(rhi::CommandList &cmd) const
+void Mesh::Bind(rhi::CommandList &cmd) const
 {
     if (!m_vertexBuffer.IsValid())
     {
         return;
     }
-    cmd.SetVertexBuffer(m_vertexBuffer);
+    cmd.SetVertexBuffer(0, m_vertexBuffer);
     if (m_indexBuffer.IsValid())
     {
         cmd.SetIndexBuffer(m_indexBuffer, rhi::IndexFormat::Uint32);
+    }
+}
+
+void Mesh::Draw(rhi::CommandList &cmd) const
+{
+    Bind(cmd);
+    if (m_indexBuffer.IsValid())
+    {
         cmd.DrawIndexed(static_cast<uint32_t>(m_indexCount));
     }
     else
@@ -204,8 +261,7 @@ std::shared_ptr<Mesh> Mesh::CreateBox(const glm::vec3 &extents)
     return result;
 }
 
-std::shared_ptr<Mesh> Mesh::CreateLines(const std::vector<glm::vec3> &positions,
-                                        const std::vector<glm::vec3> &colors)
+std::shared_ptr<Mesh> Mesh::CreateLines(const std::vector<glm::vec3> &positions, const std::vector<glm::vec3> &colors)
 {
     std::vector<float> vertices;
     vertices.reserve(positions.size() * 6);

@@ -27,11 +27,13 @@ TEST_SUITE("shader reflection")
         REQUIRE(block != nullptr);
         CHECK(block->kind == ShaderBindingKind::UniformBlock);
         CHECK(block->blockName == "Material");
-        CHECK(block->size == 16);
-        REQUIRE(block->members.size() == 1);
+        CHECK(block->size == 64);
+        REQUIRE(block->members.size() == 4);
         CHECK(block->members[0].name == "uBaseColorFactor");
         CHECK(block->members[0].offset == 0);
         CHECK(block->members[0].size == 16);
+        CHECK(block->members[1].name == "uMetallicRoughness");
+        CHECK(block->members[1].offset == 16);
 
         const Geni::ShaderBinding *texture = fragment.Find(Geni::ShaderInterface::MaterialSet, 1);
         REQUIRE(texture != nullptr);
@@ -56,8 +58,9 @@ TEST_SUITE("shader reflection")
         );
         REQUIRE(Geni::MergeReflection(merged, fragment, error));
 
-        // position, UV and normal; the color attribute (1) is not read.
-        CHECK(merged.inputLocations == std::vector<uint32_t>{0, 2, 3});
+        // position, UV, normal and the four instance-transform attributes; the color
+        // attribute (1) is not read.
+        CHECK(merged.inputLocations == std::vector<uint32_t>{0, 2, 3, 6, 7, 8, 9});
 
         const Geni::ShaderBinding *frame = merged.Find(Geni::ShaderInterface::FrameSet, 0);
         REQUIRE(frame != nullptr);

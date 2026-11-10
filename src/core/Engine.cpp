@@ -9,9 +9,9 @@
 #include "io/ImageWriter.h"
 #include "render/RenderQueue.h"
 #include "rhi/Device.h"
-#include <algorithm>
 #include "scene/components/CameraComponent.h"
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <cstdio>
 #include <vector>
 
@@ -141,7 +141,7 @@ bool Engine::Init(const EngineConfig &config)
     deviceConfig.vsync = config.vsync;
     deviceConfig.validation = config.gpuValidation;
     m_device = rhi::CreateDevice(m_window, deviceConfig);
-    if (!m_device || !m_renderer.Init(m_device.get()))
+    if (!m_device || !m_renderer.Init(m_device.get(), config.renderer))
     {
         GENI_LOG_ERROR("Failed to initialize the Vulkan renderer");
         m_renderer.Shutdown();
@@ -322,6 +322,8 @@ void Engine::RenderFrame()
                     cameraData.viewMatrix = cameraComponent->GetViewMatrix();
                     cameraData.projectionMatrix = cameraComponent->GetProjectionMatrix(aspect);
                     cameraData.position = cameraObj->GetWorldPosition();
+                    cameraData.nearPlane = cameraComponent->GetNearPlane();
+                    cameraData.farPlane = cameraComponent->GetFarPlane();
                 }
             }
 
@@ -330,12 +332,8 @@ void Engine::RenderFrame()
 
         if (cmd)
         {
-            rhi::RenderPassDesc pass;
-            pass.clearColor[0] = 1.0f;
-            pass.clearColor[1] = 1.0f;
-            pass.clearColor[2] = 1.0f;
-            pass.clearColor[3] = 1.0f;
-            cmd->BeginRenderPass(pass);
+            // Renderer v1 runs the shadow, HDR and tonemap passes and leaves the
+            // backbuffer pass open for the application and the overlay.
             m_renderQueue.Draw(m_renderer, *cmd, cameraData, lights);
         }
         else
@@ -343,6 +341,14 @@ void Engine::RenderFrame()
             m_renderQueue.Clear();
         }
         m_frameStats.drawCalls = m_renderQueue.GetLastDrawCallCount();
+        const RenderStats &renderStats = m_renderer.GetRenderStats();
+        m_frameStats.submittedObjects = static_cast<int>(renderStats.submitted);
+        m_frameStats.visibleObjects = static_cast<int>(renderStats.visible);
+        m_frameStats.culledObjects = static_cast<int>(renderStats.culled);
+        m_frameStats.instancesDrawn = static_cast<int>(renderStats.instances);
+        m_frameStats.shadowDraws = static_cast<int>(renderStats.shadowDraws);
+        m_frameStats.clusteredLights = static_cast<int>(renderStats.clusteredLights);
+        m_frameStats.overflowLights = static_cast<int>(renderStats.overflowLights);
 
         m_application->Render();
 
@@ -350,7 +356,7 @@ void Engine::RenderFrame()
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         m_debugOverlay.Render(m_frameStats, cmd);
 
-        if (cmd)
+        if (cmd && cmd->IsInRenderPass())
         {
             cmd->EndRenderPass();
         }
@@ -365,8 +371,9 @@ void Engine::RenderFrame()
             if (!capture.rgb.empty() &&
                 WriteImage(m_pendingScreenshotPath, capture.width, capture.height, 3, capture.rgb.data()))
             {
-                GENI_LOG_INFO("Screenshot saved to %s (%dx%d)", m_pendingScreenshotPath.c_str(), capture.width,
-                              capture.height);
+                GENI_LOG_INFO(
+                    "Screenshot saved to %s (%dx%d)", m_pendingScreenshotPath.c_str(), capture.width, capture.height
+                );
             }
             m_pendingScreenshotPath.clear();
         }

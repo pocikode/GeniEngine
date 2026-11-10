@@ -61,6 +61,9 @@ class GameObject
     glm::mat4 GetLocalTransform() const;
     glm::mat4 GetWorldTransform() const;
     glm::vec3 GetWorldPosition() const;
+    // Rotation part of the world transform. A transform with scale gives an
+    // approximate rotation; lights and cameras are normally unscaled.
+    glm::quat GetWorldRotation() const;
 
     static GameObject *LoadGLTF(const std::string &path);
 

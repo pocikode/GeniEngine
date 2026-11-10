@@ -12,6 +12,7 @@ namespace Geni
 enum class ShaderBindingKind : uint8_t
 {
     UniformBlock,
+    StorageBuffer,
     SampledTexture,
 };
 

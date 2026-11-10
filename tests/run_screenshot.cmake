@@ -1,7 +1,10 @@
 # Renders a sample off-screen and compares the result with a reference image.
 #
 # Inputs (-D): SAMPLE (executable), FRAMES, REFERENCE (png), COMPARE (image_compare),
-# OUT_DIR (where the capture and, on failure, the diff are written).
+# OUT_DIR (where the capture and, on failure, the diff are written), and optionally
+# TOLERANCE (per-channel, default 8) and MAX_FRACTION (default 0.005). Denser scenes may
+# allow a slightly larger tolerance because another driver's MSAA/PCF edges move.
+
 #
 # Set GENI_UPDATE_REFERENCES=1 in the environment to overwrite the reference with the
 # capture instead of comparing.
@@ -33,8 +36,15 @@ if(NOT EXISTS "${REFERENCE}")
   message(FATAL_ERROR "No reference image at ${REFERENCE}. Run with GENI_UPDATE_REFERENCES=1 to create it.")
 endif()
 
+set(compare_args "${actual}" "${REFERENCE}" --diff "${diff}")
+if(DEFINED TOLERANCE)
+  list(APPEND compare_args --tolerance "${TOLERANCE}")
+endif()
+if(DEFINED MAX_FRACTION)
+  list(APPEND compare_args --max-fraction "${MAX_FRACTION}")
+endif()
 execute_process(
-  COMMAND "${COMPARE}" "${actual}" "${REFERENCE}" --diff "${diff}"
+  COMMAND "${COMPARE}" ${compare_args}
   RESULT_VARIABLE result
 )
 if(NOT result EQUAL 0)

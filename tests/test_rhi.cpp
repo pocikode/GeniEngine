@@ -125,9 +125,9 @@ TEST_SUITE("gpu rhi")
             PipelineDesc pipelineDesc;
             pipelineDesc.vertexShader = vs;
             pipelineDesc.fragmentShader = fs;
-            pipelineDesc.vertexLayout.stride = 5 * sizeof(float);
+            pipelineDesc.vertexLayout.buffers = {{0, 5 * sizeof(float), VertexStepMode::Vertex}};
             pipelineDesc.vertexLayout.attributes = {
-                {0, VertexFormat::Float2, 0}, {1, VertexFormat::Float3, 2 * sizeof(float)}
+                {0, VertexFormat::Float2, 0, 0}, {1, VertexFormat::Float3, 2 * sizeof(float), 0}
             };
             pipelineDesc.bindGroupLayouts = {layout};
             PipelineHandle pipeline = device->CreatePipeline(pipelineDesc);
@@ -150,7 +150,7 @@ TEST_SUITE("gpu rhi")
                 cmd->SetPipeline(pipeline);
                 const uint32_t offset = alignment;
                 cmd->SetBindGroup(0, group, &offset, 1);
-                cmd->SetVertexBuffer(vertexBuffer);
+                cmd->SetVertexBuffer(0, vertexBuffer);
                 cmd->Draw(3);
                 cmd->EndRenderPass();
                 device->EndFrame(frame == 3 ? &capture : nullptr);

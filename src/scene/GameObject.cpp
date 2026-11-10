@@ -6,9 +6,9 @@
 #include "glm/ext/vector_float3.hpp"
 #include "graphics/Texture.h"
 #include "graphics/VertexLayout.h"
-#include "render/Shader.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
+#include "render/Shader.h"
 #include "scene/Skeleton.h"
 #include "scene/components/AnimationComponent.h"
 #include "scene/components/MeshComponent.h"
@@ -25,6 +25,7 @@
 #include <vector>
 
 #define GLM_ENABLE_EXPERIMENTAL
+#include "glm/geometric.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
@@ -211,6 +212,22 @@ glm::vec3 GameObject::GetWorldPosition() const
     return glm::vec3(hom) / hom.w;
 }
 
+glm::quat GameObject::GetWorldRotation() const
+{
+    const glm::mat4 world = GetWorldTransform();
+    glm::mat3 basis(world);
+    // Remove scale column by column.
+    for (int column = 0; column < 3; ++column)
+    {
+        const float length = glm::length(basis[column]);
+        if (length > 1e-6f)
+        {
+            basis[column] /= length;
+        }
+    }
+    return glm::normalize(glm::quat_cast(basis));
+}
+
 using NodeMap = std::unordered_map<cgltf_node *, GameObject *>;
 
 static void ParseGLTFHierarchy(cgltf_node *node, GameObject *parent, NodeMap &nodeMap)
@@ -277,8 +294,10 @@ static std::shared_ptr<Skeleton> BuildSkeletonFromSkin(cgltf_skin *skin, const N
     return skeleton;
 }
 
-static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std::filesystem::path &folder,
-                            const std::shared_ptr<Shader> &skinnedShader)
+static void ParseGLTFMeshes(
+    cgltf_node *node, const NodeMap &nodeMap, const std::filesystem::path &folder,
+    const std::shared_ptr<Shader> &skinnedShader
+)
 {
     GameObject *object = nodeMap.at(node);
 
@@ -443,8 +462,9 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                 mat->SetShader(Engine::GetInstance().GetRenderer().GetDefaultShader());
             }
 
-            // Returns true if a real base-color texture was loaded; false otherwise.
-            auto LoadTexture = [&](cgltf_texture *texture) -> bool {
+            // Loads a glTF texture into the material parameter `paramName`. Returns true
+            // if a texture was loaded; false leaves the material's default in place.
+            auto LoadTexture = [&](cgltf_texture *texture, const char *paramName) -> bool {
                 if (!texture || !texture->image)
                     return false;
                 auto *image = texture->image;
@@ -453,15 +473,14 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                 if (image->buffer_view)
                 {
                     auto *bv = image->buffer_view;
-                    const auto *imgData =
-                        static_cast<const unsigned char *>(bv->buffer->data) + bv->offset;
+                    const auto *imgData = static_cast<const unsigned char *>(bv->buffer->data) + bv->offset;
                     int w, h, ch;
                     unsigned char *pixels = stbi_load_from_memory(imgData, (int)bv->size, &w, &h, &ch, 0);
                     if (pixels)
                     {
                         auto tex = std::make_shared<Texture>(w, h, ch, pixels);
                         stbi_image_free(pixels);
-                        mat->SetParam("baseColorTexture", tex);
+                        mat->SetParam(paramName, tex);
                         return true;
                     }
                     return false;
@@ -486,22 +505,21 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                     // Size unknown up front; base64 expands to ~3/4 of the encoded length, so
                     // this is an upper bound that cgltf will write the actual bytes into.
                     cgltf_size decodedSize = static_cast<cgltf_size>(std::strlen(comma + 1)) * 3 / 4;
-                    if (cgltf_load_buffer_base64(&opt, decodedSize, comma + 1, &decoded) !=
-                            cgltf_result_success ||
+                    if (cgltf_load_buffer_base64(&opt, decodedSize, comma + 1, &decoded) != cgltf_result_success ||
                         !decoded)
                     {
                         return false;
                     }
 
                     int w, h, ch;
-                    unsigned char *pixels = stbi_load_from_memory(
-                        static_cast<unsigned char *>(decoded), (int)decodedSize, &w, &h, &ch, 0);
+                    unsigned char *pixels =
+                        stbi_load_from_memory(static_cast<unsigned char *>(decoded), (int)decodedSize, &w, &h, &ch, 0);
                     std::free(decoded);
                     if (!pixels)
                         return false;
                     auto tex = std::make_shared<Texture>(w, h, ch, pixels);
                     stbi_image_free(pixels);
-                    mat->SetParam("baseColorTexture", tex);
+                    mat->SetParam(paramName, tex);
                     return true;
                 }
 
@@ -515,7 +533,7 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
                 auto tex = Engine::GetInstance().GetTextureManager().GetOrLoadTexture(path.string());
                 if (tex)
                 {
-                    mat->SetParam("baseColorTexture", tex);
+                    mat->SetParam(paramName, tex);
                     return true;
                 }
                 return false;
@@ -526,33 +544,57 @@ static void ParseGLTFMeshes(cgltf_node *node, const NodeMap &nodeMap, const std:
             glm::vec4 baseColorFactor(1.0f, 1.0f, 1.0f, 1.0f);
             bool hasTexture = false;
 
+            glm::vec4 metallicRoughness(0.0f, 1.0f, 0.0f, 0.0f);
+            glm::vec4 emissiveFactor(0.0f);
+            glm::vec4 normalScaleOcclusion(0.0f, 1.0f, 0.0f, 0.0f);
+
             if (primitive.material)
             {
                 auto gltfMat = primitive.material;
                 if (gltfMat->has_pbr_metallic_roughness)
                 {
                     const auto &pbr = gltfMat->pbr_metallic_roughness;
-                    baseColorFactor = glm::vec4(pbr.base_color_factor[0], pbr.base_color_factor[1],
-                                                pbr.base_color_factor[2], pbr.base_color_factor[3]);
-                    hasTexture = LoadTexture(pbr.base_color_texture.texture);
+                    baseColorFactor = glm::vec4(
+                        pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2],
+                        pbr.base_color_factor[3]
+                    );
+                    metallicRoughness = glm::vec4(pbr.metallic_factor, pbr.roughness_factor, 0.0f, 0.0f);
+                    hasTexture = LoadTexture(pbr.base_color_texture.texture, "baseColorTexture");
+                    LoadTexture(pbr.metallic_roughness_texture.texture, "metallicRoughnessTexture");
                 }
                 else if (gltfMat->has_pbr_specular_glossiness)
                 {
                     const auto &sg = gltfMat->pbr_specular_glossiness;
-                    baseColorFactor = glm::vec4(sg.diffuse_factor[0], sg.diffuse_factor[1],
-                                                sg.diffuse_factor[2], sg.diffuse_factor[3]);
-                    hasTexture = LoadTexture(sg.diffuse_texture.texture);
+                    baseColorFactor = glm::vec4(
+                        sg.diffuse_factor[0], sg.diffuse_factor[1], sg.diffuse_factor[2], sg.diffuse_factor[3]
+                    );
+                    // No metallic channel in the legacy model: treat it as a rough dielectric.
+                    metallicRoughness = glm::vec4(0.0f, 1.0f - sg.glossiness_factor, 0.0f, 0.0f);
+                    hasTexture = LoadTexture(sg.diffuse_texture.texture, "baseColorTexture");
                 }
+
+                emissiveFactor = glm::vec4(
+                    gltfMat->emissive_factor[0], gltfMat->emissive_factor[1], gltfMat->emissive_factor[2], 0.0f
+                );
+                LoadTexture(gltfMat->emissive_texture.texture, "emissiveTexture");
+                if (LoadTexture(gltfMat->normal_texture.texture, "normalTexture"))
+                {
+                    normalScaleOcclusion.x = gltfMat->normal_texture.scale;
+                }
+                LoadTexture(gltfMat->occlusion_texture.texture, "occlusionTexture");
+                normalScaleOcclusion.y = gltfMat->occlusion_texture.scale;
             }
 
             mat->SetParam("uBaseColorFactor", baseColorFactor);
+            mat->SetParam("uMetallicRoughness", metallicRoughness);
+            mat->SetParam("uEmissiveFactor", emissiveFactor);
+            mat->SetParam("uNormalScaleOcclusion", normalScaleOcclusion);
             // Bind a 1x1 white fallback so sampling the texture yields (1,1,1,1) and the
             // factor alone drives the color. Without this, GLSL samples an unbound unit
             // and returns black, masking the factor entirely.
             if (!hasTexture)
             {
-                mat->SetParam("baseColorTexture",
-                              Engine::GetInstance().GetTextureManager().GetWhiteTexture());
+                mat->SetParam("baseColorTexture", Engine::GetInstance().GetTextureManager().GetWhiteTexture());
             }
 
             if (skeleton)
@@ -636,8 +678,7 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
     cgltf_result res = cgltf_parse(&options, contents.data(), contents.size(), &data);
     if (res != cgltf_result_success)
     {
-        GENI_LOG_ERROR("LoadGLTF('%s'): not a valid glTF file (cgltf error %d)", path.c_str(),
-                       static_cast<int>(res));
+        GENI_LOG_ERROR("LoadGLTF('%s'): not a valid glTF file (cgltf error %d)", path.c_str(), static_cast<int>(res));
         return nullptr;
     }
 
@@ -648,8 +689,7 @@ GameObject *GameObject::LoadGLTF(const std::string &path)
     res = cgltf_load_buffers(&options, data, fullFolderPath.string().c_str());
     if (res != cgltf_result_success)
     {
-        GENI_LOG_ERROR("LoadGLTF('%s'): could not load buffers (cgltf error %d)", path.c_str(),
-                       static_cast<int>(res));
+        GENI_LOG_ERROR("LoadGLTF('%s'): could not load buffers (cgltf error %d)", path.c_str(), static_cast<int>(res));
         cgltf_free(data);
         return nullptr;
     }

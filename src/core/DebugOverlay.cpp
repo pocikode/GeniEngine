@@ -137,6 +137,11 @@ void DebugOverlay::DrawStatsWindow(const FrameStats &stats)
         );
     }
     ImGui::Text("Draw calls %d   Frame %llu", stats.drawCalls, static_cast<unsigned long long>(stats.frameIndex));
+    ImGui::Text(
+        "Objects %d submitted, %d visible, %d culled", stats.submittedObjects, stats.visibleObjects, stats.culledObjects
+    );
+    ImGui::Text("Instances %d   Shadow draws %d", stats.instancesDrawn, stats.shadowDraws);
+    ImGui::Text("Clustered lights %d   Overflow %d", stats.clusteredLights, stats.overflowLights);
 
 #if defined(GENI_ENABLE_TRACY)
     ImGui::TextDisabled("Tracy: enabled (on demand)");

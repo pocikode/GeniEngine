@@ -27,6 +27,15 @@ struct FrameStats
     double interpolationAlpha = 0.0;
     double droppedSimulationSeconds = 0.0;
     int drawCalls = 0;
+
+    // Renderer v1 counters (from Renderer::GetRenderStats).
+    int submittedObjects = 0;
+    int visibleObjects = 0;
+    int culledObjects = 0;
+    int instancesDrawn = 0;
+    int shadowDraws = 0;
+    int clusteredLights = 0;
+    int overflowLights = 0;
 };
 
 // Dear ImGui integration plus a built-in stats and log window (toggle with F1).

@@ -333,6 +333,46 @@ TEST_SUITE("scene queries")
         CHECK(GeniTest::Near(lights[0].position, glm::vec3(1.0f, 2.0f, 0.0f)));
         CHECK(GeniTest::Near(lights[0].color, glm::vec3(1.0f, 0.5f, 0.25f)));
         CHECK(GeniTest::Near(lights[1].color, glm::vec3(1.0f)));
+        // A light without a type is a point light pointing down.
+        CHECK(lights[0].type == Geni::LightType::Point);
+    }
+
+    TEST_CASE("a directional light reports its direction and intensity through the scene")
+    {
+        Geni::Scene scene;
+        auto sun = scene.CreateObject("sun");
+        // Local -Z rotated -90 degrees about X points straight down.
+        sun->SetRotation(glm::angleAxis(glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f)));
+        auto component = new Geni::LightComponent();
+        component->SetType(Geni::LightType::Directional);
+        component->SetColor(glm::vec3(0.5f, 0.5f, 0.5f));
+        component->SetIntensity(2.0f);
+        sun->AddComponent(component);
+
+        const auto lights = scene.CollectLights();
+        REQUIRE(lights.size() == 1);
+        CHECK(lights[0].type == Geni::LightType::Directional);
+        // Collected colour already includes the intensity.
+        CHECK(GeniTest::Near(lights[0].color, glm::vec3(1.0f)));
+        CHECK(GeniTest::Near(lights[0].direction, glm::vec3(0.0f, -1.0f, 0.0f)));
+    }
+
+    TEST_CASE("a spot light carries its cone angles")
+    {
+        Geni::Scene scene;
+        auto spot = scene.CreateObject("spot");
+        auto component = new Geni::LightComponent();
+        component->SetType(Geni::LightType::Spot);
+        component->SetRange(12.0f);
+        component->SetConeAngles(0.2f, 0.5f);
+        spot->AddComponent(component);
+
+        const auto lights = scene.CollectLights();
+        REQUIRE(lights.size() == 1);
+        CHECK(lights[0].type == Geni::LightType::Spot);
+        CHECK(GeniTest::Near(lights[0].range, 12.0f));
+        CHECK(GeniTest::Near(lights[0].innerConeAngle, 0.2f));
+        CHECK(GeniTest::Near(lights[0].outerConeAngle, 0.5f));
     }
 
     TEST_CASE("the main camera is whatever was set")

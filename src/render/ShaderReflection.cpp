@@ -61,6 +61,15 @@ bool ReflectSpirv(
                 binding.members.push_back({member.name ? member.name : "", member.offset, member.size});
             }
         }
+        else if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+        {
+            binding.kind = ShaderBindingKind::StorageBuffer;
+            if (b->type_description && b->type_description->type_name)
+            {
+                binding.blockName = b->type_description->type_name;
+            }
+            binding.size = b->block.size;
+        }
         else if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
             binding.kind = ShaderBindingKind::SampledTexture;
@@ -138,38 +147,42 @@ bool ValidateShaderInterface(const ShaderReflection &reflection, std::string &er
 
     for (const auto &b : reflection.bindings)
     {
-        if (b.set == FrameSet || b.set == DrawSet)
+        if (b.set == FrameSet)
         {
-            uint32_t provided = 0;
-            if (b.set == FrameSet && b.binding == FrameBinding)
+            bool valid = false;
+            if (b.binding == FrameBinding)
             {
-                provided = sizeof(FrameUniforms);
+                valid = b.kind == ShaderBindingKind::UniformBlock && b.size <= sizeof(FrameUniforms);
             }
-            else if (b.set == DrawSet && b.binding == DrawBinding)
+            else if (b.binding == LightsBinding || b.binding == ClusterGridBinding || b.binding == ClusterLightsBinding)
             {
-                provided = sizeof(DrawUniforms);
+                valid = b.kind == ShaderBindingKind::StorageBuffer;
             }
-            else if (b.set == DrawSet && b.binding == BonesBinding)
+            else if (b.binding >= ShadowBinding0 && b.binding < ShadowBinding0 + Cascades)
             {
-                provided = sizeof(BoneUniforms);
+                valid = b.kind == ShaderBindingKind::SampledTexture;
             }
-
-            if (provided == 0 || b.kind != ShaderBindingKind::UniformBlock)
+            if (!valid)
             {
                 std::snprintf(
                     text, sizeof(text),
-                    "'%s' (set %u, binding %u) is not something the renderer provides; see "
+                    "'%s' (set %u, binding %u) does not match what the renderer provides; see "
                     "render/ShaderInterface.h",
                     b.name.c_str(), b.set, b.binding
                 );
                 error = text;
                 return false;
             }
-            if (b.size > provided)
+        }
+        else if (b.set == DrawSet)
+        {
+            if (b.binding != BonesBinding || b.kind != ShaderBindingKind::UniformBlock || b.size > sizeof(BoneUniforms))
             {
                 std::snprintf(
-                    text, sizeof(text), "block '%s' (set %u, binding %u) is %u bytes; the renderer provides %u",
-                    b.blockName.c_str(), b.set, b.binding, b.size, provided
+                    text, sizeof(text),
+                    "'%s' (set 2, binding %u) is not something the renderer provides; the draw set only has "
+                    "the Bones block at binding %u",
+                    b.name.c_str(), b.binding, BonesBinding
                 );
                 error = text;
                 return false;
@@ -177,6 +190,15 @@ bool ValidateShaderInterface(const ShaderReflection &reflection, std::string &er
         }
         else if (b.set == MaterialSet)
         {
+            if (b.kind != ShaderBindingKind::UniformBlock && b.kind != ShaderBindingKind::SampledTexture)
+            {
+                std::snprintf(
+                    text, sizeof(text), "'%s' (set 1, binding %u) must be a uniform block or a sampler2D",
+                    b.name.c_str(), b.binding
+                );
+                error = text;
+                return false;
+            }
             if (b.kind == ShaderBindingKind::UniformBlock && ++materialBlocks > 1)
             {
                 error = "set 1 (material) may hold only one uniform block";

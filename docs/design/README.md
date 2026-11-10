@@ -7,6 +7,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | # | Page | Milestone | Status |
 |---|---|---|---|
 | 0001 | [Rendering interface and Vulkan backend](0001-rhi-and-vulkan-backend.md) | M1 | Accepted |
+| 0002 | [Renderer v1](0002-renderer-v1.md) | M2 | Accepted |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 
