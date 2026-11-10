@@ -42,7 +42,7 @@ Dates assume about 8 h/week starting November 2026.
 
 ### M0: Foundations (Nov 2026 – Jan 2027, about 80 h)
 
-**Status (2026-11-10):** implemented; all tests pass locally on macOS. Open until CI has run green on macOS, Windows and Linux.
+**Status (2026-11-10):** implemented. Verified locally on macOS and on Linux (Arch, GCC 16, Wayland): `cmake --workflow --preset dev` builds and passes every test. On Linux, GNU ld needs the Bullet libraries listed dependents-first, which `CMakeLists.txt` now does. Open until CI has run green on macOS, Windows and Linux.
 
 Make the project safe to change quickly.
 
@@ -58,7 +58,7 @@ Make the project safe to change quickly.
 
 ### M1: Vulkan backend (Feb – Jul 2027, about 200 h)
 
-**Status (2026-11-10):** implemented; all tests pass locally on macOS (MoltenVK) with validation layers on, and the sandbox matches the screenshots captured from the OpenGL renderer. Open until CI has run green on macOS, Windows and Linux.
+**Status (2026-11-10):** implemented; all tests pass locally on macOS (MoltenVK) with validation layers on, and the sandbox matches the screenshots captured from the OpenGL renderer. On Linux, all tests pass in debug and release with zero validation errors on an NVIDIA RTX 4060 Laptop GPU (driver 615.78) and an AMD Radeon 780M (Mesa RADV), and the screenshot tests match the references on both. Known driver issue: on NVIDIA under Wayland, the driver crashes in `vkDestroySwapchainKHR` when a second Vulkan instance was created and destroyed while the engine's was alive. It does not happen under X11 or on RADV. The `gpu rhi` test, which creates its own instance, therefore runs in its own process (`gpu_rhi`); not yet reported to NVIDIA. Open until CI has run green on macOS, Windows and Linux.
 
 Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backend.
 
@@ -74,7 +74,7 @@ Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backen
 
 ### M2: Renderer v1 (Aug 2027 – Jan 2028, about 200 h)
 
-**Status (2026-11-10):** implemented; design page `docs/design/0002-renderer-v1.md`. All tests pass locally on macOS (MoltenVK) with validation layers on: the sandbox and the 10,000-object city block render with cascaded shadows, clustered lighting, PBR, HDR and MSAA, and the release benchmark runs at 8.5 ms/frame (118 fps) on an Apple M4. Open until CI has run green on macOS, Windows and Linux and the budget has been measured on a Windows GPU.
+**Status (2026-11-10):** implemented; design page `docs/design/0002-renderer-v1.md`. All tests pass locally on macOS (MoltenVK) with validation layers on: the sandbox and the 10,000-object city block render with cascaded shadows, clustered lighting, PBR, HDR and MSAA, and the release benchmark runs at 8.5 ms/frame (118 fps) on an Apple M4. On Linux at 1280×720 the same benchmark runs at 2.7 ms/frame (373 fps) on an NVIDIA RTX 4060 Laptop GPU and 4.4 ms/frame (225 fps) on an AMD Radeon 780M integrated GPU. Open until CI has run green on macOS, Windows and Linux and the budget has been measured on a Windows GPU.
 
 Make it look modern and scale to many objects.
 

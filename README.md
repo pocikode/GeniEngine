@@ -6,15 +6,17 @@ Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interfa
 
 ## Build and test
 
-You need CMake 3.30 or newer, a C++17 compiler, git, GLFW, and the Vulkan loader, headers, validation layers and the `glslangValidator` shader compiler:
+You need CMake 3.30 or newer, a C++17 compiler, git, GLFW, and the Vulkan loader, headers and validation layers:
 
 | Platform | Install with |
 |---|---|
-| macOS | `brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers glslang` |
-| Ubuntu / Debian | `sudo apt install libglfw3-dev libvulkan-dev vulkan-validationlayers glslang-tools` plus a Vulkan driver (`mesa-vulkan-drivers` includes the lavapipe software driver) |
+| macOS | `brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers` |
+| Ubuntu / Debian | `sudo apt install libglfw3-dev libvulkan-dev vulkan-validationlayers` plus a Vulkan driver (`mesa-vulkan-drivers` includes the lavapipe software driver) |
 | Windows | The [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (sets `VULKAN_SDK`), and [vcpkg](https://vcpkg.io) with the `VCPKG_ROOT` environment variable set for GLFW (installed from `vcpkg.json` during configure). |
 
 Debug builds turn on the Vulkan validation layers; every validation error is logged, and the tests fail on any. The Homebrew layer location is found at configure time, so no environment setup is needed.
+
+Shaders are written in Slang and compiled offline by a pinned `slangc`, downloaded once into `.cache/slang/` at configure time. Set `GENI_SLANGC` to use a different one.
 
 Then one command configures, builds and runs the tests:
 
@@ -103,7 +105,7 @@ CMake options when embedding:
 
 ## Dependencies
 
-Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers, glslang (and MoltenVK on macOS).
+Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers (and MoltenVK on macOS). Downloaded at configure time: the [Slang](https://github.com/shader-slang/slang) compiler, at a pinned version.
 
 Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
 

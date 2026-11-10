@@ -140,9 +140,10 @@ target_link_libraries(
     nlohmann_json::nlohmann_json
     glfw
   PRIVATE
-    LinearMath
-    BulletCollision
+    # Static archives are searched once, left to right: dependents before their dependencies.
     BulletDynamics
+    BulletCollision
+    LinearMath
     Vulkan::Vulkan
 )
 

@@ -28,8 +28,12 @@ set_target_properties(geni_tests PROPERTIES ENABLE_EXPORTS ON)
 # Test suites whose name starts with "gpu" need a window and a Vulkan 1.1 device.
 # Everything else runs anywhere. `ctest -LE gpu` skips the ones that need a GPU.
 add_test(NAME unit COMMAND geni_tests --test-suite-exclude=gpu*)
-add_test(NAME gpu COMMAND geni_tests --test-suite=gpu*)
-set_tests_properties(gpu PROPERTIES LABELS "gpu" TIMEOUT 120)
+add_test(NAME gpu COMMAND geni_tests --test-suite=gpu* "--test-suite-exclude=gpu rhi")
+# "gpu rhi" creates its own Vulkan instance and device, so it runs in its own process:
+# with the engine's instance alive at the same time, NVIDIA's driver (615.78, Wayland)
+# crashes when the engine later destroys its swapchain.
+add_test(NAME gpu_rhi COMMAND geni_tests "--test-suite=gpu rhi")
+set_tests_properties(gpu gpu_rhi PROPERTIES LABELS "gpu" TIMEOUT 120)
 
 # Crash handler: a helper program dies on purpose and must leave a report behind.
 add_executable(geni_crash_probe crash_probe.cpp)
