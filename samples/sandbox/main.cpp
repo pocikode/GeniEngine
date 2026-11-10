@@ -6,10 +6,11 @@
 //   - a skinned, animated glTF model
 //   - the debug overlay (F1) plus a small ImGui window of its own
 //
-// Usage: sandbox [--frames N] [--hidden] [--screenshot FILE.ppm]
+// Usage: sandbox [--frames N] [--hidden] [--no-overlay] [--screenshot FILE]
 //   --frames N         quit after N rendered frames (used by the CI smoke test)
 //   --hidden           do not show the window
-//   --screenshot FILE  save the last frame as a PPM image (needs --frames)
+//   --no-overlay       start without Dear ImGui (used by the screenshot tests)
+//   --screenshot FILE  save the last frame as PNG (.png) or PPM (needs --frames)
 
 #include <geni.h>
 
@@ -34,6 +35,7 @@ struct Options
 {
     long maxFrames = 0; // 0 = run until the window is closed
     bool hidden = false;
+    bool overlay = true;
     std::string screenshotPath;
 };
 
@@ -261,6 +263,10 @@ int main(int argc, char **argv)
         {
             options.hidden = true;
         }
+        else if (std::strcmp(argv[i], "--no-overlay") == 0)
+        {
+            options.overlay = false;
+        }
         else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
         {
             options.screenshotPath = argv[++i];
@@ -268,7 +274,7 @@ int main(int argc, char **argv)
         else
         {
             GENI_LOG_ERROR(
-                "Unknown argument '%s'. Usage: sandbox [--frames N] [--hidden] [--screenshot FILE.ppm]", argv[i]
+                "Unknown argument '%s'. Usage: sandbox [--frames N] [--hidden] [--no-overlay] [--screenshot FILE]", argv[i]
             );
             return 2;
         }
@@ -279,6 +285,7 @@ int main(int argc, char **argv)
     config.width = 1280;
     config.height = 720;
     config.visible = !options.hidden;
+    config.debugOverlay = options.overlay;
     if (options.hidden)
     {
         // A hidden window is a test run: do not wait for the display, and advance by

@@ -7,7 +7,9 @@
 #include "core/Profiler.h"
 #include "glm/ext/vector_float2.hpp"
 #include "graphics/GraphicsAPI.h"
+#include "io/ImageWriter.h"
 #include "render/RenderQueue.h"
+#include <algorithm>
 #include "scene/components/CameraComponent.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -78,22 +80,18 @@ static void SaveBackBufferAsPpm(GLFWwindow *window, const std::string &path)
     glReadBuffer(GL_BACK);
     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
 
-    FILE *file = std::fopen(path.c_str(), "wb");
-    if (!file)
-    {
-        GENI_LOG_ERROR("Screenshot: cannot write '%s'", path.c_str());
-        return;
-    }
-
-    std::fprintf(file, "P6\n%d %d\n255\n", width, height);
     // OpenGL rows start at the bottom; image files start at the top.
     const size_t rowBytes = static_cast<size_t>(width) * 3;
-    for (int row = height - 1; row >= 0; --row)
+    std::vector<unsigned char> flipped(pixels.size());
+    for (int row = 0; row < height; ++row)
     {
-        std::fwrite(pixels.data() + static_cast<size_t>(row) * rowBytes, 1, rowBytes, file);
+        std::copy_n(pixels.data() + static_cast<size_t>(height - 1 - row) * rowBytes, rowBytes,
+                    flipped.data() + static_cast<size_t>(row) * rowBytes);
     }
-    std::fclose(file);
-    GENI_LOG_INFO("Screenshot saved to %s (%dx%d)", path.c_str(), width, height);
+    if (WriteImage(path, width, height, 3, flipped.data()))
+    {
+        GENI_LOG_INFO("Screenshot saved to %s (%dx%d)", path.c_str(), width, height);
+    }
 }
 
 Engine &Engine::GetInstance()
@@ -152,7 +150,10 @@ bool Engine::Init(const EngineConfig &config)
 #if defined(__APPLE__)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
-    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+    // A hidden window is a test or capture run: its framebuffer must be exactly the
+    // requested size on every machine, so no DPI scaling and no Retina framebuffer.
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, config.visible ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, config.visible ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint(GLFW_VISIBLE, config.visible ? GLFW_TRUE : GLFW_FALSE);
 
     m_windowTitle = config.title;

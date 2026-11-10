@@ -59,6 +59,7 @@ set(SRC_FILES
   src/scene/components/PhysicsComponent.cpp
   src/scene/components/OrbitCameraComponent.cpp
   src/io/FileSystem.cpp
+  src/io/ImageWriter.cpp
   src/physics/PhysicsManager.cpp
   src/physics/Collider.cpp
   src/physics/RigidBody.cpp
@@ -182,6 +183,12 @@ endif()
 
 if(GENI_BUILD_TESTS OR GENI_BUILD_SAMPLES)
   enable_testing()
+endif()
+
+if(GENI_BUILD_TESTS)
+  # Standalone: compares a capture with a reference image (tests/run_screenshot.cmake).
+  add_executable(image_compare tools/image_compare.cpp)
+  target_include_directories(image_compare PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 endif()
 
 if(GENI_BUILD_SAMPLES)
