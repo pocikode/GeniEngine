@@ -1,6 +1,6 @@
 # 0001: Rendering interface and Vulkan backend
 
-Milestone: M1 · Status: Proposed · Last updated: 2026-11-10
+Milestone: M1 · Status: Accepted · Last updated: 2026-11-10
 
 ## Problem
 
@@ -36,15 +36,17 @@ Resources are referred to by small generational handles (index + generation), no
 
 **Shaders are compiled offline.** GLSL 4.50 sources in `assets/shaders/` are compiled to SPIR-V by a CMake build step and loaded as binary. Reflection data from the SPIR-V is used to check, at pipeline creation, that the shader's bindings match what the renderer provides. `.mat` files keep their format and refer to the compiled shaders. The built-in default shader moves out of `GraphicsAPI.cpp` into a file.
 
-**Libraries** (ROADMAP rule 6): a Vulkan function loader, Vulkan Memory Allocator for GPU memory, a SPIR-V reflection library, and GLFW's Vulkan surface support. The ImGui overlay switches to ImGui's Vulkan backend.
+**Libraries** (ROADMAP rule 6): the system Vulkan loader (linked directly through CMake's `find_package(Vulkan)`), Vulkan Memory Allocator for GPU memory, SPIRV-Reflect for SPIR-V reflection, and GLFW's Vulkan surface support. The ImGui overlay switches to ImGui's Vulkan backend. A function loader such as volk was dropped: it would force ImGui's no-prototypes mode and buys nothing until a platform lacks a system loader.
 
 **Order of work.** Each step ends with the sandbox sample still running.
 
 1. Screenshot harness: render the sandbox off-screen for a fixed number of fixed steps, save a PNG, compare against a reference with a tolerance. Capture the references from the **current OpenGL renderer**, so "renders identically" is measured, not judged by eye.
-2. Introduce `rhi/` and move the existing OpenGL code behind it without changing behaviour. This proves the interface against working code.
+2. Introduce `rhi/` and the Vulkan backend next to the untouched OpenGL renderer, proven by its own off-screen test.
 3. Offline shader pipeline, and uniform blocks in place of named uniforms.
-4. Vulkan backend: device, swapchain, static meshes, textures, then skinned meshes, then the overlay.
-5. Vulkan passes the screenshot tests on all three platforms in CI with validation layers on. Delete the OpenGL backend, GLEW, and the GL types in public headers.
+4. Switch the renderer to the RHI: static meshes, textures, skinned meshes, the overlay. The OpenGL screenshots are the target.
+5. Delete the OpenGL code, GLEW, and the GL types in public headers. Regenerate the references from Vulkan.
+
+*Changed when work started:* the original step 2 moved the OpenGL code behind `rhi/` first. That backend would have been deleted in step 5, so it was skipped. The interface is checked against the screenshot references instead of against a second backend.
 
 **Mobile limits apply from the start** (ROADMAP rule 5): no feature is required that the baseline below lacks, render passes are described with explicit load/store operations so tile-based GPUs are not penalised, and every texture goes through one creation path so that BC and ASTC variants can be added in M3 without touching callers.
 
