@@ -6,6 +6,7 @@
 #include "Cooker.h"
 #include "Ktx2Writer.h"
 #include "TextureCooker.h"
+#include "assets/CookedFormats.h"
 #include "assets/Ktx2.h"
 
 #include <cmath>
@@ -13,6 +14,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -254,5 +257,82 @@ TEST_SUITE("cooker")
         partial.inputs = {"textures/checker.png"};
         REQUIRE_MESSAGE(Geni::cook::Cooker().Run(partial, &error), error);
         CHECK(std::filesystem::exists(output / "cooked" / "models" / "hierarchy.gscene"));
+    }
+    TEST_CASE("each glTF's materials keep their own textures when many are cooked together")
+    {
+        // Regression: images were cached by their cgltf_image address across files. Once a
+        // glTF was freed, the next one's images could reuse those addresses and its
+        // materials then pointed at the previous file's textures. Several identical glTFs,
+        // each with its own image, are the easiest way to get the addresses reused.
+        const auto root = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "image_cache";
+        const auto source = root / "source";
+        const auto output = root / "output";
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(source / "models");
+        std::filesystem::create_directories(source / "textures");
+
+        std::ifstream quadFile(std::filesystem::path(GENI_COOKER_TEST_SOURCE) / "models" / "textured_quad.gltf");
+        REQUIRE(quadFile);
+        const std::string quad((std::istreambuf_iterator<char>(quadFile)), std::istreambuf_iterator<char>());
+        const std::string imageUri = "\"../textures/checker.png\"";
+        REQUIRE(quad.find(imageUri) != std::string::npos);
+
+        const std::vector<std::string> names = {"a", "b", "c", "d", "e", "f", "g", "h"};
+        for (const auto &name : names)
+        {
+            std::filesystem::copy_file(
+                std::filesystem::path(GENI_COOKER_TEST_SOURCE) / "textures" / "checker.png",
+                source / "textures" / (name + ".png")
+            );
+            std::string gltf = quad;
+            gltf.replace(gltf.find(imageUri), imageUri.size(), "\"../textures/" + name + ".png\"");
+            std::ofstream(source / "models" / (name + ".gltf")) << gltf;
+        }
+
+        Geni::cook::CookOptions options;
+        options.sourceRoot = source;
+        options.outputRoot = output;
+        options.cookAll = true;
+        options.textureQuality = Geni::cook::TextureQuality::Fast;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        REQUIRE(manifestFile);
+        const auto manifest = nlohmann::json::parse(manifestFile);
+        std::map<std::string, std::string> sourceByID; // texture ID -> source path
+        std::map<std::string, std::string> materialPathBySource;
+        for (const auto &entry : manifest.at("assets"))
+        {
+            const std::string type = entry.at("type").get<std::string>();
+            if (type == "texture")
+            {
+                sourceByID[entry.at("id").get<std::string>()] = entry.at("source").get<std::string>();
+            }
+            else if (type == "material")
+            {
+                materialPathBySource[entry.at("source").get<std::string>()] = entry.at("path").get<std::string>();
+            }
+        }
+
+        for (const auto &name : names)
+        {
+            const auto material = materialPathBySource.find("models/" + name + ".gltf#material0");
+            REQUIRE_MESSAGE(material != materialPathBySource.end(), name);
+            std::vector<uint8_t> bytes;
+            REQUIRE(Geni::cooked::ReadFile(output / material->second, bytes));
+            Geni::cooked::CookedMaterialData data;
+            REQUIRE_MESSAGE(Geni::cooked::ReadMaterial(bytes, data, &error), error);
+            for (const auto &[slot, expected] : std::map<std::string, std::string>{
+                     {"baseColorTexture", "textures/" + name + ".png"}, {"normalTexture", "textures/" + name + ".png#normal"}})
+            {
+                const auto texture = data.textures.find(slot);
+                REQUIRE_MESSAGE(texture != data.textures.end(), name << " " << slot);
+                CHECK_MESSAGE(
+                    sourceByID[texture->second.ToHex()] == expected,
+                    name << ".gltf " << slot << " uses " << sourceByID[texture->second.ToHex()]
+                );
+            }
+        }
     }
 }

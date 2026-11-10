@@ -99,6 +99,7 @@ if(GENI_BUILD_TESTS)
     ${PROJECT_SOURCE_DIR}/tools/asset_cooker
     ${PROJECT_SOURCE_DIR}/thirdparty/doctest
     ${PROJECT_SOURCE_DIR}/thirdparty/glm
+    ${PROJECT_SOURCE_DIR}/thirdparty/nlohmann_json/include
   )
   target_compile_definitions(geni_cook_tests PRIVATE
     GENI_COOKER_TEST_SOURCE="${PROJECT_SOURCE_DIR}/tests/assets"

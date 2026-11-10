@@ -221,6 +221,9 @@ struct Cooker::Impl
     std::unordered_map<std::string, AssetID> textureCache;
     std::unordered_map<std::string, AssetID> materialCache;
     std::unordered_map<std::string, AssetID> meshCache;
+    // Images of the glTF being cooked, by cgltf_image address. Only valid for one file:
+    // once its cgltf_data is freed, the next file's images can reuse the addresses.
+    // CookGLTF clears it; textureCache (by logical name) is what is shared across files.
     std::map<std::pair<const cgltf_image *, TextureUsage>, AssetID> imageCache;
     std::unordered_map<std::string, SourceMeta> metaCache;
     bool fullCook = false;
@@ -1136,6 +1139,7 @@ struct Cooker::Impl
 
     bool CookGLTF(const std::string &relative)
     {
+        imageCache.clear();
         std::vector<uint8_t> fileBytes;
         const auto fullPath = options.sourceRoot / relative;
         if (!ReadFile(fullPath, fileBytes))
