@@ -3,12 +3,15 @@
 // clustered forward lighting, PBR materials, a sky and MSAA, then tonemapped.
 //
 // It is also the performance check: with --budget-ms the program exits with code 4 when
-// the mean frame time is over budget.
+// the mean frame time is over budget, and with --load-budget-ms it exits with code 5 when
+// any frame while the block is loading took longer than that (a loading hitch).
 //
-// Usage: city [--frames N] [--warmup N] [--budget-ms MS] [--hidden] [--screenshot FILE]
+// Usage: city [--frames N] [--warmup N] [--budget-ms MS] [--load-budget-ms MS] [--hidden]
+//             [--screenshot FILE]
 //   --frames N       quit after N rendered frames (the CI benchmark measures the last N)
 //   --warmup N       frames before the measurement starts (default 20)
 //   --budget-ms MS   exit with code 4 when the mean frame time exceeds MS
+//   --load-budget-ms MS  exit with code 5 when the slowest loading frame exceeds MS
 //   --hidden         do not show the window
 //   --width/--height  window size (default 1280x720)
 //   --screenshot F   save the last frame as PNG (.png) or PPM
@@ -35,6 +38,7 @@ struct Options
     long frames = 0; // 0 = run until the window closes
     long warmup = 20;
     double budgetMs = 0.0;
+    double loadBudgetMs = 0.0;
     bool hidden = false;
     int width = 1280;
     int height = 720;
@@ -42,8 +46,10 @@ struct Options
 };
 
 constexpr int kBlocksPerSide = 100; // 100 x 100 = 10,000 buildings
-constexpr int kMaterials = 8;
 constexpr int kLightsPerSide = 10; // 100 point lights
+// Scene nodes instantiated per frame while loading. Two passes over 10,001 nodes take
+// about 20 frames, and each step stays far below a frame's budget.
+constexpr size_t kNodesPerLoadingFrame = 1000;
 
 class CityApp : public Geni::Application
 {
@@ -59,111 +65,76 @@ class CityApp : public Geni::Application
         m_scene = new Geni::Scene();
         engine.SetScene(m_scene);
 
-        // A camera looking across the block at street level: left drag orbits, scroll
-        // zooms. Without input it does not move, so the benchmark is repeatable.
-        auto camera = m_scene->CreateObject("Camera");
-        camera->AddComponent(new Geni::CameraComponent());
-        auto orbit = new Geni::OrbitCameraComponent();
-        orbit->SetTarget(glm::vec3(0.0f, 10.0f, 0.0f));
-        orbit->SetDistance(135.0f);
-        orbit->SetYaw(35.0f);
-        orbit->SetPitch(13.0f);
-        camera->AddComponent(orbit);
-        m_scene->SetMainCamera(camera);
-
-        auto sun = m_scene->CreateObject("Sun");
-        sun->SetRotation(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -0.78f, -0.36f)), glm::vec3(0, 1, 0)));
-        auto sunLight = new Geni::LightComponent();
-        sunLight->SetType(Geni::LightType::Directional);
-        sunLight->SetColor(glm::vec3(1.0f, 0.95f, 0.85f));
-        sunLight->SetIntensity(2.2f);
-        sun->AddComponent(sunLight);
-
-        // One shared unit cube: every building, and the ground, is an instance of it.
-        m_cube = Geni::Mesh::CreateBox(glm::vec3(1.0f));
-
-        // A muted, plausible city palette: concrete, brick, stone, glass.
-        static const glm::vec3 palette[] = {
-            {0.56f, 0.56f, 0.58f}, {0.42f, 0.40f, 0.38f}, {0.65f, 0.61f, 0.55f}, {0.34f, 0.32f, 0.31f},
-            {0.52f, 0.36f, 0.30f}, {0.30f, 0.37f, 0.44f}, {0.68f, 0.66f, 0.62f}, {0.45f, 0.29f, 0.25f},
-        };
-        for (int i = 0; i < kMaterials; ++i)
+        // M3: the block is a cooked scene, not 10,000 lines of C++. The cooker turns
+        // models/city.gltf into cooked/models/city.gscene plus .gmesh/.gmat assets and a
+        // manifest; the runtime never parses glTF. The scene file is read and parsed on a
+        // worker, instantiated a slice per frame, and its meshes and materials stream in
+        // on workers while frames keep rendering.
+        auto &assets = engine.GetAssetManager();
+        const Geni::AssetID sceneID = assets.FindBySource(Geni::AssetType::Scene, "models/city.gltf");
+        m_sceneAsset = assets.LoadScene(sceneID, true);
+        if (!m_sceneAsset.IsValid() || m_sceneAsset.HasFailed())
         {
-            auto material = std::make_shared<Geni::Material>();
-            material->SetShader(engine.GetRenderer().GetDefaultShader());
-            material->SetParam("uBaseColorFactor", glm::vec4(palette[i % 8], 1.0f));
-            const bool glass = i == 5;
-            material->SetParam(
-                "uMetallicRoughness",
-                glm::vec4(glass ? 0.55f : 0.02f, glass ? 0.18f : 0.62f + 0.1f * (i % 3), 0.0f, 0.0f)
-            );
-            m_materials.push_back(material);
+            GENI_LOG_ERROR("Could not start loading the cooked city scene");
+            return false;
+        }
+        m_loading = true;
+        m_lastTime = std::chrono::steady_clock::now();
+        return true;
+    }
+
+    // One loading step per frame. Never blocks: it returns false until the scene exists
+    // and every asset it references has loaded.
+    bool StepLoading()
+    {
+        auto &assets = Geni::Engine::GetInstance().GetAssetManager();
+        if (!m_instantiation)
+        {
+            if (!m_sceneAsset.IsReady())
+            {
+                if (m_sceneAsset.HasFailed())
+                {
+                    GENI_LOG_ERROR("Could not load the cooked city scene: %s", m_sceneAsset.GetError().c_str());
+                    SetNeedsToBeClosed(true);
+                }
+                return false;
+            }
+            Geni::SerializationContext context{m_scene, &assets};
+            m_instantiation =
+                std::make_unique<Geni::SceneInstantiation>(*m_scene, m_sceneAsset->document, context);
         }
 
-        auto groundMaterial = std::make_shared<Geni::Material>();
-        groundMaterial->SetShader(engine.GetRenderer().GetDefaultShader());
-        groundMaterial->SetParam("uBaseColorFactor", glm::vec4(0.20f, 0.22f, 0.24f, 1.0f));
-        groundMaterial->SetParam("uMetallicRoughness", glm::vec4(0.0f, 0.92f, 0.0f, 0.0f));
-        m_groundMaterial = groundMaterial;
-
-        auto ground = m_scene->CreateObject("Ground");
-        ground->SetPosition(glm::vec3(0.0f, -0.5f, 0.0f));
-        ground->SetScale(glm::vec3(360.0f, 1.0f, 360.0f));
-        ground->AddComponent(new Geni::MeshComponent(groundMaterial, m_cube));
-
-        // A cheap hash gives deterministic, non-uniform heights.
-        for (int z = 0; z < kBlocksPerSide; ++z)
+        if (m_instantiation->GetStatus() == Geni::SceneInstantiation::Status::InProgress)
         {
-            for (int x = 0; x < kBlocksPerSide; ++x)
+            const auto status = m_instantiation->Step(kNodesPerLoadingFrame);
+            if (status == Geni::SceneInstantiation::Status::Failed)
             {
-                const int index = z * kBlocksPerSide + x;
-                const float hash =
-                    std::fabs(std::fmod(std::sin(static_cast<float>(index) * 12.9898f) * 43758.5453f, 1.0f));
-                const float width = 2.4f - 1.2f * static_cast<float>(index % 3) * 0.15f;
-                const float height = 2.0f + 30.0f * hash;
-
-                auto building = m_scene->CreateObject("Block");
-                building->SetPosition(
-                    glm::vec3(
-                        (static_cast<float>(x) - (kBlocksPerSide - 1) * 0.5f) * 2.6f, height * 0.5f,
-                        (static_cast<float>(z) - (kBlocksPerSide - 1) * 0.5f) * 2.6f
-                    )
-                );
-                building->SetScale(glm::vec3(width, height, width));
-                building->AddComponent(
-                    new Geni::MeshComponent(m_materials[static_cast<size_t>(index) % m_materials.size()], m_cube)
-                );
+                GENI_LOG_ERROR("Could not instantiate the cooked city scene: %s", m_instantiation->GetError().c_str());
+                SetNeedsToBeClosed(true);
+                return false;
+            }
+            if (status == Geni::SceneInstantiation::Status::InProgress)
+            {
+                return false;
             }
         }
 
-        for (int z = 0; z < kLightsPerSide; ++z)
+        // Meshes and materials finish on workers; Engine's AssetManager::Update uploads
+        // them a few at a time. Wait for that without blocking the frame.
+        if (assets.IsLoading())
         {
-            for (int x = 0; x < kLightsPerSide; ++x)
-            {
-                const int index = z * kLightsPerSide + x;
-                auto lightObject = m_scene->CreateObject("StreetLight");
-                lightObject->SetPosition(
-                    glm::vec3(
-                        (static_cast<float>(x) - (kLightsPerSide - 1) * 0.5f) * 26.0f, 6.0f,
-                        (static_cast<float>(z) - (kLightsPerSide - 1) * 0.5f) * 26.0f
-                    )
-                );
-                auto light = new Geni::LightComponent();
-                light->SetType(Geni::LightType::Point);
-                const float hue = static_cast<float>(index % kLightsPerSide) / static_cast<float>(kLightsPerSide);
-                light->SetColor(
-                    glm::vec3(0.9f, 0.6f + 0.4f * std::cos(6.2832f * hue), 0.4f + 0.6f * std::sin(6.2832f * hue))
-                );
-                light->SetIntensity(5.0f);
-                light->SetRange(34.0f);
-                lightObject->AddComponent(light);
-            }
+            return false;
         }
 
         GENI_LOG_INFO(
-            "City block: %d buildings from %d meshes and %d materials, %d point lights, one sun",
-            kBlocksPerSide * kBlocksPerSide, 1, kMaterials, kLightsPerSide * kLightsPerSide
+            "City block: %zu mesh components, %zu lights, %llu assets; loaded over %ld frames from cooked scene %s; "
+            "slowest loading frame %.2f ms",
+            m_scene->CountComponents<Geni::MeshComponent>() + m_scene->CountComponents<Geni::SkinnedMeshComponent>(),
+            m_scene->CollectLights().size(), static_cast<unsigned long long>(assets.GetStats().assetsLoaded),
+            m_loadingFrames, m_sceneAsset->GetSourcePath().c_str(), m_slowestLoadingFrameMs
         );
+        m_instantiation.reset();
+        m_loading = false;
         return true;
     }
 
@@ -172,6 +143,19 @@ class CityApp : public Geni::Application
         const auto now = std::chrono::steady_clock::now();
         const double frameMs = std::chrono::duration<double, std::milli>(now - m_lastTime).count();
         m_lastTime = now;
+
+        if (m_loading)
+        {
+            // The first frame also pays for swapchain and pipeline creation; it is not a
+            // loading hitch.
+            if (++m_loadingFrames > 1)
+            {
+                m_slowestLoadingFrameMs = std::max(m_slowestLoadingFrameMs, frameMs);
+            }
+            m_scene->Update(deltaTime);
+            StepLoading();
+            return;
+        }
 
         if (Geni::Engine::GetInstance().GetInputManager().IsKeyPressed(GLFW_KEY_ESCAPE))
         {
@@ -199,22 +183,25 @@ class CityApp : public Geni::Application
 
     void Destroy() override
     {
-        m_materials.clear();
-        m_groundMaterial.reset();
-        m_cube.reset();
     }
 
     double MeanFrameMs() const
     {
         return m_measured > 0 ? m_totalMs / static_cast<double>(m_measured) : 0.0;
     }
+    double SlowestLoadingFrameMs() const
+    {
+        return m_slowestLoadingFrameMs;
+    }
 
   private:
     Options m_options;
     Geni::Scene *m_scene = nullptr; // owned by the engine
-    std::shared_ptr<Geni::Mesh> m_cube;
-    std::vector<std::shared_ptr<Geni::Material>> m_materials;
-    std::shared_ptr<Geni::Material> m_groundMaterial;
+    Geni::AssetHandle<Geni::SceneAsset> m_sceneAsset;
+    std::unique_ptr<Geni::SceneInstantiation> m_instantiation;
+    bool m_loading = false;
+    long m_loadingFrames = 0;
+    double m_slowestLoadingFrameMs = 0.0;
     long m_frame = 0;
     long m_measured = 0;
     double m_totalMs = 0.0;
@@ -240,6 +227,10 @@ int main(int argc, char **argv)
         {
             options.budgetMs = std::strtod(argv[++i], nullptr);
         }
+        else if (std::strcmp(argv[i], "--load-budget-ms") == 0 && i + 1 < argc)
+        {
+            options.loadBudgetMs = std::strtod(argv[++i], nullptr);
+        }
         else if (std::strcmp(argv[i], "--hidden") == 0)
         {
             options.hidden = true;
@@ -264,7 +255,8 @@ int main(int argc, char **argv)
         else
         {
             GENI_LOG_ERROR(
-                "Unknown argument '%s'. Usage: city [--frames N] [--warmup N] [--budget-ms MS] [--hidden] "
+                "Unknown argument '%s'. Usage: city [--frames N] [--warmup N] [--budget-ms MS] [--load-budget-ms MS] "
+                "[--hidden] "
                 "[--width W] [--height H] [--screenshot FILE]",
                 argv[i]
             );
@@ -297,6 +289,7 @@ int main(int argc, char **argv)
     }
     engine.Run();
     const double meanMs = app->MeanFrameMs();
+    const double slowestLoadingMs = app->SlowestLoadingFrameMs();
     engine.Destroy();
 
     if (const auto errors = Geni::rhi::GetValidationErrorCount())
@@ -317,6 +310,14 @@ int main(int argc, char **argv)
         {
             GENI_LOG_ERROR("city block over budget: %.2f ms > %.2f ms", meanMs, options.budgetMs);
             return 4;
+        }
+        std::printf("city: slowest frame while loading %.2f ms; budget %.2f ms\n", slowestLoadingMs, options.loadBudgetMs);
+        if (options.loadBudgetMs > 0.0 && slowestLoadingMs > options.loadBudgetMs)
+        {
+            GENI_LOG_ERROR(
+                "city block loading hitch: %.2f ms > %.2f ms", slowestLoadingMs, options.loadBudgetMs
+            );
+            return 5;
         }
     }
     return 0;

@@ -28,6 +28,19 @@ class RigidBody
 
     BodyType GetType() const;
 
+    const std::shared_ptr<Collider> &GetCollider() const
+    {
+        return m_collider;
+    }
+    float GetMass() const
+    {
+        return m_mass;
+    }
+    float GetFriction() const
+    {
+        return m_friction;
+    }
+
     void SetPosition(const glm::vec3 &pos);
     glm::vec3 GetPosition() const;
     void SetRotation(const glm::quat &rot);

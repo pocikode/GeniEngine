@@ -31,6 +31,12 @@ function(geni_add_sample name)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${compiled}" "$<TARGET_FILE_DIR:${name}>/assets"
       )
     endif()
+
+    # Convert glTF and images into cooked assets next to the executable (M3). The
+    # runtime never parses glTF.
+    if(TARGET geni_asset_cooker)
+      geni_cook_assets(${name} "${assets}" "$<TARGET_FILE_DIR:${name}>/assets")
+    endif()
   endif()
 endfunction()
 

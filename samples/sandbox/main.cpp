@@ -143,15 +143,28 @@ class SandboxApp : public Geni::Application
             SpawnCrate();
         }
 
-        // Skinned model. LoadGLTF picks up materials/skinned.mat for skinned primitives.
-        if (auto bar = Geni::GameObject::LoadGLTF("models/skinned_bar.gltf"))
+        // Skinned model, loaded from the cooked scene (M3): no glTF parser is linked
+        // into the runtime. The cooked mesh carries the joint names and bind matrices.
+        auto &assets = engine.GetAssetManager();
+        auto cookedScene = assets.LoadScene(assets.FindBySource(Geni::AssetType::Scene, "models/skinned_bar.gltf"), false);
+        if (cookedScene.IsReady())
         {
-            bar->SetName("SkinnedBar");
-            bar->SetPosition(glm::vec3(-4.0f, 0.0f, 0.0f));
-            bar->SetScale(glm::vec3(1.5f));
-            if (auto animation = bar->GetComponent<Geni::AnimationComponent>())
+            Geni::SerializationContext context{m_scene, &assets};
+            if (Geni::SceneSerializer::Load(*m_scene, cookedScene->document, context, nullptr, false))
             {
-                animation->PlayFirst(true);
+                if (auto bar = m_scene->FindObject("Result"))
+                {
+                    bar->SetName("SkinnedBar");
+                    bar->SetPosition(glm::vec3(-4.0f, 0.0f, 0.0f));
+                    bar->SetScale(glm::vec3(1.5f));
+                    if (auto animation = bar->GetComponent<Geni::AnimationComponent>())
+                    {
+                        animation->PlayFirst(true);
+                    }
+                }
+                // The first frame is part of the visual reference; finish the cooked
+                // mesh/material uploads before rendering it.
+                assets.WaitForAll();
             }
         }
         else

@@ -103,6 +103,11 @@ class Renderer
     {
         return m_defaultShader;
     }
+    // The built-in shader for skinned meshes (same surface, bone palette applied).
+    const std::shared_ptr<Shader> &GetSkinnedShader() const
+    {
+        return m_skinnedShader;
+    }
     rhi::SamplerHandle GetDefaultSampler() const
     {
         return m_sampler;
@@ -241,6 +246,7 @@ class Renderer
     rhi::SamplerHandle m_shadowSampler;
 
     std::shared_ptr<Shader> m_defaultShader;
+    std::shared_ptr<Shader> m_skinnedShader;
     std::shared_ptr<Shader> m_skyShader;
     rhi::ShaderModuleHandle m_shadowVertexModule;
     rhi::ShaderModuleHandle m_shadowSkinnedVertexModule;

@@ -29,6 +29,19 @@ class CameraComponent : public Component
         return m_fov;
     }
 
+    void SetFieldOfView(float fov)
+    {
+        m_fov = fov;
+    }
+    void SetNearPlane(float nearPlane)
+    {
+        m_nearPlane = nearPlane;
+    }
+    void SetFarPlane(float farPlane)
+    {
+        m_farPlane = farPlane;
+    }
+
   private:
     float m_fov = 60.0f;
     float m_nearPlane = 0.1f;

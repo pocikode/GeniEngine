@@ -36,6 +36,11 @@ struct FrameStats
     int shadowDraws = 0;
     int clusteredLights = 0;
     int overflowLights = 0;
+
+    // Cooked asset cache (M3).
+    int assetsLoaded = 0;
+    int assetsPending = 0;
+    double assetBytes = 0.0;
 };
 
 // Dear ImGui integration plus a built-in stats and log window (toggle with F1).

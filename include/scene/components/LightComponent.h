@@ -45,6 +45,14 @@ class LightComponent : public Component
 
     // Spot lights, in radians.
     void SetConeAngles(float innerRadians, float outerRadians);
+    void SetInnerConeAngle(float innerRadians)
+    {
+        m_innerConeAngle = innerRadians;
+    }
+    void SetOuterConeAngle(float outerRadians)
+    {
+        m_outerConeAngle = outerRadians;
+    }
     float GetInnerConeAngle() const
     {
         return m_innerConeAngle;

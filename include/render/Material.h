@@ -1,4 +1,5 @@
 #pragma once
+#include "assets/Asset.h"
 #include "rhi/Handle.h"
 #include <cstdint>
 #include <glm/vec4.hpp>
@@ -21,7 +22,7 @@ class Texture;
 // ones (zero for values, the white texture for textures).
 //
 // Copying a material copies its shader and parameters; GPU state is not shared.
-class Material
+class Material : public Asset
 {
   public:
     Material() = default;
@@ -43,6 +44,12 @@ class Material
     void SetParam(const std::string &name, float v0, float v1);
     void SetParam(const std::string &name, const glm::vec4 &value);
     void SetParam(const std::string &name, const std::shared_ptr<Texture> &texture);
+    // The texture bound to `name`, or nullptr.
+    std::shared_ptr<Texture> GetTexture(const std::string &name) const
+    {
+        auto it = m_textures.find(name);
+        return it == m_textures.end() ? nullptr : it->second;
+    }
 
     // Uploads changed parameters and returns the bind group for set 1. Used by Renderer.
     rhi::BindGroupHandle PrepareBindGroup(Renderer &renderer);

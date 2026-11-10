@@ -189,12 +189,12 @@ TEST_SUITE("gpu rendering")
         GeniTest::RequireEngine();
         auto &textures = Geni::Engine::GetInstance().GetTextureManager();
 
-        auto first = textures.GetOrLoadTexture("textures/checker.png");
+        auto first = textures.GetOrLoadTexture("cooked/textures/checker_rgba8.ktx2");
         REQUIRE(first != nullptr);
         CHECK(first->GetHandle().IsValid());
-        CHECK(textures.GetOrLoadTexture("textures/checker.png") == first);
+        CHECK(textures.GetOrLoadTexture("cooked/textures/checker_rgba8.ktx2") == first);
 
-        CHECK(textures.GetOrLoadTexture("textures/missing.png") == nullptr);
+        CHECK(textures.GetOrLoadTexture("cooked/textures/missing.ktx2") == nullptr);
     }
 
     TEST_CASE("the backbuffer follows a window resize without validation errors")

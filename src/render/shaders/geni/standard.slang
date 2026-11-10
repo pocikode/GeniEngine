@@ -101,10 +101,9 @@ float4 StandardFragment(StandardVaryings input)
 {
     float2 uv = input.uv;
 
-    // Colour textures are sRGB-encoded (glTF) but stored as UNORM; decode to linear here.
-    // The factors are already linear.
-    float4 baseSample = baseColorTexture.Sample(uv);
-    float4 base = float4(SrgbToLinear(baseSample.rgb), baseSample.a) * uMaterial.uBaseColorFactor;
+    // Colour textures are cooked as sRGB formats, so the sampler returns linear values
+    // (and filters in linear light). The factors are already linear.
+    float4 base = baseColorTexture.Sample(uv) * uMaterial.uBaseColorFactor;
     // Opaque geometry: alpha cut-outs are a later feature.
     if (base.a < 0.01)
     {
@@ -122,13 +121,16 @@ float4 StandardFragment(StandardVaryings input)
     s.normal = normalize(input.normal);
     if (uMaterial.uNormalScaleOcclusion.x > 0.0)
     {
-        float3 tangentNormal = normalTexture.Sample(uv).xyz * 2.0 - 1.0;
+        // Normal maps are cooked as BC5 on desktop, which stores only X and Y; rebuild Z.
+        // The RGBA8 and ASTC variants hold the same unit vectors, so this works for all.
+        float2 xy = normalTexture.Sample(uv).xy * 2.0 - 1.0;
+        float3 tangentNormal = float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));
         tangentNormal.xy *= uMaterial.uNormalScaleOcclusion.x;
         s.normal = normalize(mul(tangentNormal, CotangentFrame(s.normal, input.worldPosition, uv)));
     }
 
     float3 color = ShadeSurface(s, input.clipPosition.xy);
-    color += uMaterial.uEmissiveFactor.rgb * SrgbToLinear(emissiveTexture.Sample(uv).rgb);
+    color += uMaterial.uEmissiveFactor.rgb * emissiveTexture.Sample(uv).rgb;
     color = ApplyFog(color, input.worldPosition);
     return float4(color, 1.0);
 }

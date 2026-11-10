@@ -2,7 +2,7 @@
 
 A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
 
-Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based glTF materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph, glTF loading with skinning and animation, and rigid-body physics.
+Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, skinning, animation and rigid-body physics.
 
 ## Build and test
 
@@ -86,7 +86,45 @@ Each frame the engine runs zero or more **fixed steps** (physics, then `Applicat
 
 Asset paths are relative to an `assets/` folder: the top-level project's `assets/` during development, or the one next to the executable. `FileSystem::SetAssetsFolder` overrides it.
 
-Shaders are GLSL 450, compiled to SPIR-V at build time. List them with `geni_compile_shaders(<target> SOURCE_DIR ... OUTPUT_DIR ... SOURCES ...)` from `cmake/GeniShaders.cmake`; a `.mat` file names the GLSL source and the engine loads the compiled `.spv` next to it. The bindings every shader uses are described in `include/render/ShaderInterface.h`, and `samples/sandbox/assets/shaders/` has examples.
+Shaders are Slang, compiled to SPIR-V offline by a pinned `slangc`. List them with `geni_compile_shaders(<target> SOURCE_DIR ... OUTPUT_DIR ... SOURCES ...)` from `cmake/GeniShaders.cmake`; a `.mat` file names the Slang source and the engine loads the compiled `.spv` next to it. The bindings every shader uses are described in `include/render/ShaderInterface.h`, and `samples/sandbox/assets/shaders/` has examples. See `docs/design/0003-slang-shaders.md`.
+
+## Assets
+
+Runtime assets are cooked, not parsed. `tools/asset_cooker` reads glTF/GLB scenes and
+PNG/JPEG images and writes engine formats next to the game:
+
+- `.gscene` text scene (flat node array with parent indices and reflected components,
+  one node per line)
+- `.gmesh` meshes with their vertex layout, bounds and skin data
+- `.ganim` animation clips
+- `.gmat` materials (shader, parameters, texture IDs)
+- KTX2 textures with mip chains, one file per format: `_bc7` (or `_bc5` for normal
+  maps) on desktop, `_astc` on mobile, `_rgba8` as a fallback. Colour textures use the
+  sRGB formats; normal maps and data textures are linear.
+
+`cooked_manifest.json` maps stable asset IDs to those files. `AssetManager` loads by ID,
+decodes on the job system and creates GPU objects on the main thread; a handle can be
+held while the load is pending, and `CollectGarbage` releases assets nothing uses.
+`AssetManager::FindBySource` finds an ID from a source path. `samples/` and the tests
+cook their assets at build time through `geni_cook_assets`, so editing a glTF or image
+rebuilds the cooked files. The engine does not link cgltf or an image decoder; those
+live only in the cooker.
+
+IDs come from the source path unless the file has a `.meta` sidecar with a GUID; run
+`geni_asset_cooker --write-meta` to create them, and commit them, so that renaming or
+moving an asset keeps its ID. A `.meta` can also set a standalone image's usage
+(`"usage": "normal"`).
+
+A scene saved from code uses the same text format:
+
+```cpp
+Geni::SerializationContext context{scene, &engine.GetAssetManager()};
+Geni::SceneSerializer::Save(*scene, path);
+Geni::SceneSerializer::Load(*scene, document, context);
+```
+
+Components register their properties with `RegisterComponentType<T>` from
+`scene/Reflection.h`; see `docs/design/0005-scene-storage-and-serialization.md`.
 
 CMake options when embedding:
 
@@ -107,7 +145,7 @@ CMake options when embedding:
 
 Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers (and MoltenVK on macOS). Downloaded at configure time: the [Slang](https://github.com/shader-slang/slang) compiler, at a pinned version.
 
-Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
+Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect), [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) and [astc-encoder](https://github.com/ARM-software/astc-encoder) (cooker only). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
 
 ## Licence
 

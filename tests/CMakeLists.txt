@@ -8,10 +8,14 @@ add_executable(geni_tests
   test_scene.cpp
   test_transform.cpp
   test_engine_loop.cpp
-  test_gltf.cpp
+  test_cooked_assets.cpp
   test_render_math.cpp
   test_rhi.cpp
   test_shader_reflection.cpp
+  test_jobs.cpp
+  test_assets.cpp
+  test_serialization.cpp
+  test_ktx2.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
@@ -22,8 +26,12 @@ geni_embed_shaders(geni_tests
 )
 target_include_directories(geni_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/doctest)
 target_link_libraries(geni_tests PRIVATE GeniEngine)
-target_compile_definitions(geni_tests PRIVATE GENI_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
+target_compile_definitions(geni_tests PRIVATE GENI_TEST_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
 set_target_properties(geni_tests PROPERTIES ENABLE_EXPORTS ON)
+
+# Copy the source fixtures and cook them into the build folder. Tests load cooked
+# assets through cooked_manifest.json; the runtime has no glTF parser.
+geni_cook_assets(geni_tests "${CMAKE_CURRENT_SOURCE_DIR}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 
 # Test suites whose name starts with "gpu" need a window and a Vulkan 1.1 device.
 # Everything else runs anywhere. `ctest -LE gpu` skips the ones that need a GPU.
@@ -51,3 +59,11 @@ foreach(mode segfault abort assert exception)
              -P ${CMAKE_CURRENT_SOURCE_DIR}/run_crash_probe.cmake)
   set_tests_properties(crash_report_${mode} PROPERTIES TIMEOUT 60)
 endforeach()
+
+# The cooker is an offline tool; run it once as a test so its CLI stays working.
+add_test(NAME asset_cooker
+         COMMAND geni_asset_cooker
+                 --source-root ${CMAKE_CURRENT_SOURCE_DIR}/assets
+                 --output-root ${CMAKE_CURRENT_BINARY_DIR}/cooker_check
+                 --all)
+set_tests_properties(asset_cooker PROPERTIES TIMEOUT 120 LABELS "tools")

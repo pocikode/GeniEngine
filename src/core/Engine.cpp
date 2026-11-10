@@ -10,6 +10,7 @@
 #include "render/RenderQueue.h"
 #include "rhi/Device.h"
 #include "scene/components/CameraComponent.h"
+#include "scene/BuiltinComponents.h"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdio>
@@ -87,6 +88,10 @@ bool Engine::Init(const EngineConfig &config)
         return false;
     }
 
+    // Pull every built-in component's reflection registration out of the static library
+    // before any scene file is loaded.
+    RegisterBuiltinComponents();
+
     if (config.installCrashHandler)
     {
         CrashHandlerConfig crashConfig;
@@ -153,6 +158,9 @@ bool Engine::Init(const EngineConfig &config)
     }
 
     m_physicsManager.Init();
+
+    m_jobSystem = std::make_unique<JobSystem>(config.jobThreadCount);
+    m_assetManager.Init(&m_fileSystem, m_jobSystem.get(), &m_renderer);
 
     m_fixedTimestep = FixedTimestep(config.fixedTimestep, config.maxFixedStepsPerFrame);
     m_frameStats = FrameStats();
@@ -265,6 +273,16 @@ void Engine::Simulate(double frameSeconds)
     GENI_PROFILE_SCOPE("Simulate");
     const auto start = std::chrono::steady_clock::now();
 
+    // Finish asset decodes and GPU uploads before the application sees the frame.
+    m_assetManager.Update();
+    // Release cached assets nothing uses any more. Cheap (one pass over the cache), but
+    // there is no reason to do it every frame.
+    if (++m_framesSinceAssetCollection >= 240)
+    {
+        m_framesSinceAssetCollection = 0;
+        m_assetManager.CollectGarbage();
+    }
+
     const int steps = m_fixedTimestep.Advance(frameSeconds);
     const float fixedDelta = static_cast<float>(m_fixedTimestep.GetStep());
     for (int i = 0; i < steps; ++i)
@@ -278,6 +296,11 @@ void Engine::Simulate(double frameSeconds)
         GENI_PROFILE_SCOPE("Application::Update");
         m_application->Update(static_cast<float>(frameSeconds));
     }
+
+    const AssetLoadStats assetStats = m_assetManager.GetStats();
+    m_frameStats.assetsLoaded = static_cast<int>(assetStats.assetsLoaded);
+    m_frameStats.assetsPending = static_cast<int>(assetStats.pending);
+    m_frameStats.assetBytes = static_cast<double>(assetStats.bytesLoaded);
 
     m_frameStats.fixedSteps = steps;
     m_frameStats.interpolationAlpha = m_fixedTimestep.GetAlpha();
@@ -406,12 +429,14 @@ void Engine::Destroy()
 
     // Order matters: everything that owns GPU objects or rigid bodies goes before the
     // renderer, the device and the physics world.
+    m_assetManager.Shutdown();
     m_currentScene.reset();
     m_renderQueue.Clear();
     m_textureManager.Clear();
     m_debugOverlay.Shutdown();
     m_renderer.Shutdown();
     m_device.reset();
+    m_jobSystem.reset();
     m_physicsManager.Shutdown();
 
     glfwDestroyWindow(m_window);
@@ -460,6 +485,16 @@ FileSystem &Engine::GetFileSystem()
 TextureManager &Engine::GetTextureManager()
 {
     return m_textureManager;
+}
+
+AssetManager &Engine::GetAssetManager()
+{
+    return m_assetManager;
+}
+
+JobSystem *Engine::GetJobSystem()
+{
+    return m_jobSystem.get();
 }
 
 PhysicsManager &Engine::GetPhysicsManager()

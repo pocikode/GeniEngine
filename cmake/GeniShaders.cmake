@@ -125,13 +125,18 @@ function(_geni_add_slang_command in out entry stage comment)
   get_filename_component(out_dir "${out}" DIRECTORY)
   # Depfiles (imported modules) live outside the output folder, which samples copy as assets.
   string(MD5 key "${out}")
-  set(depfile "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/geni_shader_deps/${key}.d")
+  set(depfile_dir "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/geni_shader_deps")
+  set(depfile "${depfile_dir}/${key}.d")
+  # The engine's modules are listed explicitly as well: the depfile only exists after the
+  # first compile, and a missing depfile directory used to make slangc skip writing it,
+  # so edits to geni/*.slang did not rebuild the shaders that import them.
+  file(GLOB_RECURSE engine_modules CONFIGURE_DEPENDS "${GENI_SHADER_MODULE_DIR}/geni/*.slang")
   add_custom_command(
     OUTPUT "${out}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${out_dir}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${out_dir}" "${depfile_dir}"
     COMMAND "${GENI_SLANGC_EXECUTABLE}" "${in}" ${GENI_SLANG_FLAGS}
             -entry ${entry} -stage ${stage} -o "${out}" -depfile "${depfile}"
-    DEPENDS "${in}"
+    DEPENDS "${in}" ${engine_modules}
     DEPFILE "${depfile}"
     COMMENT "${comment}"
     VERBATIM

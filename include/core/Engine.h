@@ -1,6 +1,8 @@
 #pragma once
+#include "assets/AssetManager.h"
 #include "core/DebugOverlay.h"
 #include "core/FixedTimestep.h"
+#include "core/JobSystem.h"
 #include "graphics/Texture.h"
 #include "input/InputManager.h"
 #include "io/FileSystem.h"
@@ -42,6 +44,8 @@ struct EngineConfig
     bool debugOverlayVisible = true;
     // Simulation rate. Physics and Application::FixedUpdate run in steps of this size.
     double fixedTimestep = 1.0 / 60.0;
+    // Worker threads for asset decoding and animation. 0 uses hardware_concurrency - 1.
+    uint32_t jobThreadCount = 0;
     // Cap on fixed steps per rendered frame; beyond it the simulation slows down.
     int maxFixedStepsPerFrame = 8;
     // When above zero, every Tick advances by exactly this many seconds instead of the
@@ -101,6 +105,8 @@ class Engine
     RenderQueue &GetRenderQueue();
     FileSystem &GetFileSystem();
     TextureManager &GetTextureManager();
+    AssetManager &GetAssetManager();
+    JobSystem *GetJobSystem();
     PhysicsManager &GetPhysicsManager();
     DebugOverlay &GetDebugOverlay();
     FixedTimestep &GetFixedTimestep();
@@ -123,6 +129,9 @@ class Engine
     RenderQueue m_renderQueue;
     FileSystem m_fileSystem;
     TextureManager m_textureManager;
+    AssetManager m_assetManager;
+    uint32_t m_framesSinceAssetCollection = 0;
+    std::unique_ptr<JobSystem> m_jobSystem;
     PhysicsManager m_physicsManager;
     DebugOverlay m_debugOverlay;
     FixedTimestep m_fixedTimestep;

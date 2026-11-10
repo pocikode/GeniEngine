@@ -107,6 +107,24 @@ VkFormat ToVk(Format format)
         return VK_FORMAT_B8G8R8A8_UNORM;
     case Format::RGBA16Float:
         return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case Format::BC1Unorm:
+        return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+    case Format::BC3Unorm:
+        return VK_FORMAT_BC3_UNORM_BLOCK;
+    case Format::BC4Unorm:
+        return VK_FORMAT_BC4_UNORM_BLOCK;
+    case Format::BC5Unorm:
+        return VK_FORMAT_BC5_UNORM_BLOCK;
+    case Format::BC7Unorm:
+        return VK_FORMAT_BC7_UNORM_BLOCK;
+    case Format::ASTC4x4Unorm:
+        return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+    case Format::RGBA8Srgb:
+        return VK_FORMAT_R8G8B8A8_SRGB;
+    case Format::BC7Srgb:
+        return VK_FORMAT_BC7_SRGB_BLOCK;
+    case Format::ASTC4x4Srgb:
+        return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
     case Format::Depth32Float:
         return VK_FORMAT_D32_SFLOAT;
     case Format::Depth24UnormStencil8:
@@ -1406,7 +1424,14 @@ TextureHandle VulkanDevice::CreateTexture(const TextureDesc &desc, const void *c
 
     // Bytes per pixel for the staging upload (targets are never uploaded).
     const bool upload = mipData && !isDepth && HasFlag(desc.usage, TextureUsage::Sampled);
-    const uint32_t bytesPerPixel = desc.format == Format::RGBA16Float ? 8u : 4u;
+    const bool compressed = IsCompressedFormat(desc.format);
+    if (compressed && HasFlag(desc.usage, TextureUsage::RenderTarget))
+    {
+        GENI_LOG_ERROR(
+            "Vulkan: compressed texture '%s' cannot be a render target", desc.debugName ? desc.debugName : ""
+        );
+        return {};
+    }
 
     VkImageUsageFlags usage = 0;
     if (HasFlag(desc.usage, TextureUsage::Sampled))
@@ -1468,7 +1493,9 @@ TextureHandle VulkanDevice::CreateTexture(const TextureDesc &desc, const void *c
             region.imageSubresource = {record.aspect, level, 0, 1};
             region.imageExtent = {w, h, 1};
             regions.push_back(region);
-            totalSize += uint64_t(w) * h * bytesPerPixel;
+            const uint64_t levelSize =
+                desc.mipByteSizes.size() > level ? desc.mipByteSizes[level] : TextureLevelSize(desc.format, w, h);
+            totalSize += levelSize;
         }
     }
 
@@ -1479,8 +1506,10 @@ TextureHandle VulkanDevice::CreateTexture(const TextureDesc &desc, const void *c
         auto *dst = static_cast<uint8_t *>(MapBuffer(staging));
         for (uint32_t level = 0; level < mipLevels; ++level)
         {
+            const uint32_t w = std::max(1u, desc.width >> level);
+            const uint32_t h = std::max(1u, desc.height >> level);
             const uint64_t size =
-                uint64_t(regions[level].imageExtent.width) * regions[level].imageExtent.height * bytesPerPixel;
+                desc.mipByteSizes.size() > level ? desc.mipByteSizes[level] : TextureLevelSize(desc.format, w, h);
             if (mipData[level])
             {
                 std::memcpy(dst + regions[level].bufferOffset, mipData[level], size);
@@ -1569,6 +1598,21 @@ void VulkanDevice::DestroyTexture(TextureHandle texture)
         vkDestroyImageView(m_device, record.view, nullptr);
         vmaDestroyImage(m_allocator, record.image, record.allocation);
     });
+}
+
+bool VulkanDevice::IsTextureFormatSupported(Format format) const
+{
+    const VkFormat vkFormat = ToVk(format);
+    if (vkFormat == VK_FORMAT_UNDEFINED || m_physicalDevice == VK_NULL_HANDLE)
+    {
+        return false;
+    }
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(m_physicalDevice, vkFormat, &properties);
+    const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                                        VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    return (properties.optimalTilingFeatures & needed) == needed;
 }
 
 SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &desc)

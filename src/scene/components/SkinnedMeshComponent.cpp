@@ -1,10 +1,13 @@
 #include "scene/components/SkinnedMeshComponent.h"
 
+#include "assets/AssetManager.h"
 #include "core/Engine.h"
 #include "render/Material.h"
 #include "render/Mesh.h"
 #include "render/RenderQueue.h"
 #include "scene/GameObject.h"
+#include "scene/Reflection.h"
+#include "scene/Scene.h"
 #include "scene/Skeleton.h"
 
 #include <algorithm>
@@ -12,16 +15,80 @@
 namespace Geni
 {
 
-SkinnedMeshComponent::SkinnedMeshComponent(const std::shared_ptr<Material> &material,
-                                           const std::shared_ptr<Mesh> &mesh,
-                                           const std::shared_ptr<Skeleton> &skeleton)
+SkinnedMeshComponent::SkinnedMeshComponent(
+    const std::shared_ptr<Material> &material, const std::shared_ptr<Mesh> &mesh,
+    const std::shared_ptr<Skeleton> &skeleton
+)
     : m_material(material), m_mesh(mesh), m_skeleton(skeleton)
 {
+    if (material)
+    {
+        m_materialID = material->GetAssetID();
+    }
+    if (mesh)
+    {
+        m_meshID = mesh->GetAssetID();
+    }
+}
+
+void SkinnedMeshComponent::SetMesh(const std::shared_ptr<Mesh> &mesh)
+{
+    m_mesh = mesh;
+    m_meshHandle = AssetHandle<Mesh>();
+    if (mesh)
+    {
+        m_meshID = mesh->GetAssetID();
+    }
+}
+
+void SkinnedMeshComponent::SetMesh(const AssetHandle<Mesh> &mesh)
+{
+    m_meshHandle = mesh;
+    m_mesh = mesh.Shared();
+    m_meshID = mesh.GetID();
+}
+
+void SkinnedMeshComponent::SetMaterial(const std::shared_ptr<Material> &material)
+{
+    m_material = material;
+    m_materialHandle = AssetHandle<Material>();
+    if (material)
+    {
+        m_materialID = material->GetAssetID();
+    }
+}
+
+void SkinnedMeshComponent::SetMaterial(const AssetHandle<Material> &material)
+{
+    m_materialHandle = material;
+    m_material = material.Shared();
+    m_materialID = material.GetID();
+}
+
+Mesh *SkinnedMeshComponent::GetMesh() const
+{
+    return m_mesh ? m_mesh.get() : m_meshHandle.Get();
+}
+
+Material *SkinnedMeshComponent::GetMaterial() const
+{
+    return m_material ? m_material.get() : m_materialHandle.Get();
 }
 
 void SkinnedMeshComponent::Update(float /*deltaTime*/)
 {
-    if (!m_material || !m_mesh || !m_skeleton)
+    Material *material = GetMaterial();
+    Mesh *mesh = GetMesh();
+    if (!material || !mesh)
+    {
+        return;
+    }
+
+    if (!m_skeleton && mesh->IsSkinned())
+    {
+        BuildSkeletonFromMesh();
+    }
+    if (!m_skeleton)
     {
         return;
     }
@@ -31,8 +98,8 @@ void SkinnedMeshComponent::Update(float /*deltaTime*/)
     const auto &palette = m_skeleton->BuildPalette();
 
     RenderCommand command;
-    command.material = m_material.get();
-    command.mesh = m_mesh.get();
+    command.material = material;
+    command.mesh = mesh;
     // Per glTF spec, the skinned mesh node's transform is ignored in favour of the
     // joints' transforms, which already place vertices in world space via the palette.
     command.modelMatrix = glm::mat4(1.0f);
@@ -42,9 +109,76 @@ void SkinnedMeshComponent::Update(float /*deltaTime*/)
     Engine::GetInstance().GetRenderQueue().Submit(command);
 }
 
+void SkinnedMeshComponent::ResolveAssets(SerializationContext &context)
+{
+    if (context.assets)
+    {
+        if (m_meshID.IsValid() && !m_meshHandle.IsValid())
+        {
+            SetMesh(context.assets->LoadMesh(m_meshID, true));
+        }
+        if (m_materialID.IsValid() && !m_materialHandle.IsValid())
+        {
+            SetMaterial(context.assets->LoadMaterial(m_materialID, true));
+        }
+    }
+}
+
 const std::shared_ptr<Skeleton> &SkinnedMeshComponent::GetSkeleton() const
 {
     return m_skeleton;
 }
 
+void SkinnedMeshComponent::SetSkeleton(const std::shared_ptr<Skeleton> &skeleton)
+{
+    m_skeleton = skeleton;
+}
+
+bool SkinnedMeshComponent::BuildSkeletonFromMesh()
+{
+    Mesh *mesh = GetMesh();
+    Scene *scene = GetOwner() ? GetOwner()->GetScene() : nullptr;
+    if (!mesh || !mesh->IsSkinned() || !scene)
+    {
+        return false;
+    }
+
+    auto skeleton = std::make_shared<Skeleton>();
+    const auto &names = mesh->GetJointNames();
+    const auto &inverseBindMatrices = mesh->GetInverseBindMatrices();
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        GameObject *joint = scene->FindObject(names[i]);
+        if (!joint)
+        {
+            GENI_LOG_WARN("skinned mesh: joint '%s' is not in the scene", names[i].c_str());
+        }
+        skeleton->AddJoint(joint, i < inverseBindMatrices.size() ? inverseBindMatrices[i] : glm::mat4(1.0f));
+    }
+    m_skeleton = std::move(skeleton);
+    return true;
+}
+
+namespace
+{
+const bool s_registered = RegisterComponentType<SkinnedMeshComponent>(
+    "SkinnedMeshComponent",
+    {
+        AssetIDProperty<SkinnedMeshComponent>(
+            "mesh", PropertyType::Asset, &SkinnedMeshComponent::GetMeshID, &SkinnedMeshComponent::SetMeshID
+        ),
+        AssetIDProperty<SkinnedMeshComponent>(
+            "material", PropertyType::Asset, &SkinnedMeshComponent::GetMaterialID, &SkinnedMeshComponent::SetMaterialID
+        ),
+    }
+);
+} // namespace
+
+} // namespace Geni
+
+namespace Geni
+{
+void LinkSkinnedMeshComponent()
+{
+}
 } // namespace Geni

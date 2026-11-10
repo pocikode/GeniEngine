@@ -86,6 +86,9 @@ class Device
     // mipData holds desc.mipLevels pointers to tightly packed pixels, level 0 first.
     virtual TextureHandle CreateTexture(const TextureDesc &desc, const void *const *mipData) = 0;
     virtual void DestroyTexture(TextureHandle texture) = 0;
+    // Whether a sampled texture in this format can be created and linearly filtered.
+    // AssetManager uses it to choose between cooked BC and ASTC variants.
+    virtual bool IsTextureFormatSupported(Format format) const = 0;
 
     virtual SamplerHandle CreateSampler(const SamplerDesc &desc) = 0;
     virtual void DestroySampler(SamplerHandle sampler) = 0;

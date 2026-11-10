@@ -11,9 +11,9 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
-#include <limits>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <limits>
 
 // Built-in shaders, compiled at build time (geni_embed_shaders in CMakeLists.txt).
 #include "default_frag.spv.h"
@@ -21,6 +21,8 @@
 #include "shadow_frag.spv.h"
 #include "shadow_skinned_vert.spv.h"
 #include "shadow_vert.spv.h"
+#include "skinned_frag.spv.h"
+#include "skinned_vert.spv.h"
 #include "sky_frag.spv.h"
 #include "sky_vert.spv.h"
 #include "tonemap_frag.spv.h"
@@ -172,11 +174,15 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
         geni_spirv_default_vert, sizeof(geni_spirv_default_vert), geni_spirv_default_frag,
         sizeof(geni_spirv_default_frag), "builtin/default"
     );
+    m_skinnedShader = Shader::Create(
+        geni_spirv_skinned_vert, sizeof(geni_spirv_skinned_vert), geni_spirv_skinned_frag,
+        sizeof(geni_spirv_skinned_frag), "builtin/skinned"
+    );
     m_skyShader = Shader::Create(
         geni_spirv_sky_vert, sizeof(geni_spirv_sky_vert), geni_spirv_sky_frag, sizeof(geni_spirv_sky_frag),
         "builtin/sky"
     );
-    if (!m_defaultShader || !m_skyShader)
+    if (!m_defaultShader || !m_skinnedShader || !m_skyShader)
     {
         return false;
     }
@@ -234,6 +240,7 @@ void Renderer::Shutdown()
         return;
     }
     m_defaultShader.reset();
+    m_skinnedShader.reset();
     m_skyShader.reset();
     for (auto &entry : m_mainPipelines)
     {
@@ -725,9 +732,8 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
     uniforms.cascadeSplits = m_cascades.splits;
     // Depth bias in shadow texels (the shader converts it to each cascade's depth units, so
     // it does not grow with the caster distance), normal offset in metres.
-    uniforms.shadowParams = glm::vec4(
-        4.0f, 0.15f, static_cast<float>(m_cascades.count), 1.0f / static_cast<float>(m_config.shadowMapSize)
-    );
+    uniforms.shadowParams =
+        glm::vec4(4.0f, 0.15f, static_cast<float>(m_cascades.count), 1.0f / static_cast<float>(m_config.shadowMapSize));
     uniforms.clusterGrid = glm::vec4(
         static_cast<float>(m_config.clusterCountX), static_cast<float>(m_config.clusterCountY),
         static_cast<float>(m_config.clusterCountZ), static_cast<float>(m_config.maxLightsPerCluster)

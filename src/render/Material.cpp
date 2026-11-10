@@ -1,4 +1,5 @@
 #include "render/Material.h"
+#include "assets/AssetManager.h"
 #include "core/Engine.h"
 #include "core/Log.h"
 #include "graphics/Texture.h"
@@ -15,7 +16,7 @@ namespace Geni
 {
 
 Material::Material(const Material &other)
-    : m_shader(other.m_shader), m_floatParams(other.m_floatParams), m_float2Params(other.m_float2Params),
+    : Asset(other), m_shader(other.m_shader), m_floatParams(other.m_floatParams), m_float2Params(other.m_float2Params),
       m_float4Params(other.m_float4Params), m_textures(other.m_textures)
 {
 }
@@ -25,6 +26,7 @@ Material &Material::operator=(const Material &other)
     if (this != &other)
     {
         ReleaseGpuState();
+        Asset::operator=(other);
         m_shader = other.m_shader;
         m_floatParams = other.m_floatParams;
         m_float2Params = other.m_float2Params;
@@ -241,9 +243,25 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
             {
                 std::string name = p.value("name", "");
                 std::string texPath = p.value("path", "");
-                auto texture = Texture::Load(texPath);
+                std::replace(texPath.begin(), texPath.end(), '\\', '/');
+                std::shared_ptr<Texture> texture;
+                // Prefer the cooked KTX2 variant when the asset manifest has one; fall
+                // back to decoding the source image for an uncooked project.
+                auto &assets = Engine::GetInstance().GetAssetManager();
+                auto cooked = assets.LoadTexture(assets.FindBySource(AssetType::Texture, texPath), false);
+                if (cooked.IsReady())
+                {
+                    texture = cooked.Shared();
+                }
+                else
+                {
+                    GENI_LOG_WARN("material '%s': no cooked texture for '%s'", path.c_str(), texPath.c_str());
+                }
 
-                result->SetParam(name, texture);
+                if (texture)
+                {
+                    result->SetParam(name, texture);
+                }
             }
         }
     }

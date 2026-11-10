@@ -1,26 +1,87 @@
 #include "scene/components/AnimationComponent.h"
+#include "assets/AssetManager.h"
 #include "glm/common.hpp"
 #include "glm/ext/quaternion_common.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "scene/GameObject.h"
+#include "scene/Reflection.h"
 #include <cmath>
 #include <cstddef>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace Geni
 {
 
-void AnimationComponent::Update(float deltaTime)
+void AnimationComponent::ApplyAnimationAsset()
 {
-    if (!m_clip)
+    if (m_animationApplied || !m_animationHandle.IsReady())
     {
         return;
     }
-
-    if (!m_isPlaying)
+    m_animationApplied = true;
+    for (const auto &clip : m_animationHandle->clips)
     {
-        return;
+        if (clip)
+        {
+            RegisterClip(clip->name, clip);
+        }
+    }
+    if (!m_pendingClipName.empty())
+    {
+        Play(m_pendingClipName, m_looping);
+    }
+    else if (m_clip == nullptr)
+    {
+        PlayFirst(m_looping);
+    }
+}
+
+void AnimationComponent::ResolveAssets(SerializationContext &context)
+{
+    if (context.assets && m_animationID.IsValid() && !m_animationHandle.IsValid())
+    {
+        SetAnimation(context.assets->LoadAnimation(m_animationID, true));
+    }
+}
+
+void AnimationComponent::SetAnimation(const AssetHandle<AnimationAsset> &animation)
+{
+    m_animationHandle = animation;
+    m_animationID = animation.GetID();
+    m_animationApplied = false;
+}
+
+void AnimationComponent::SetClipName(const std::string &name)
+{
+    m_pendingClipName = name;
+    if (m_clips.find(name) != m_clips.end())
+    {
+        Play(name, m_looping);
+    }
+}
+
+void AnimationComponent::Update(float deltaTime)
+{
+    if (m_owner && m_owner->GetScene())
+    {
+        return; // Scene::Update has already run AdvanceClock, SamplePose and ApplyPose
+    }
+    if (AdvanceClock(deltaTime))
+    {
+        SamplePose();
+        ApplyPose();
+    }
+}
+
+bool AnimationComponent::AdvanceClock(float deltaTime)
+{
+    ApplyAnimationAsset();
+
+    if (!m_clip || !m_isPlaying)
+    {
+        return false;
     }
 
     m_time += deltaTime;
@@ -35,34 +96,65 @@ void AnimationComponent::Update(float deltaTime)
         {
             m_time = 0.0f;
             m_isPlaying = false;
-            return;
+            return false;
         }
     }
+    return true;
+}
 
+void AnimationComponent::SamplePose()
+{
+    m_pose.clear();
+    if (!m_clip)
+    {
+        return;
+    }
+    const float time = m_time;
     for (auto &binding : m_bindings)
     {
-        auto &obj = binding.first;
-        auto &trackIndices = binding.second->trackIndices;
-        for (auto i : trackIndices)
+        for (auto i : binding.second->trackIndices)
         {
-            auto &track = m_clip->tracks[i];
+            const auto &track = m_clip->tracks[i];
+            PoseEntry entry;
+            entry.object = binding.first;
             if (!track.positions.empty())
             {
-                auto pos = Interpolate(track.positions, m_time);
-                obj->SetPosition(pos);
+                entry.hasPosition = true;
+                entry.position = Interpolate(track.positions, time);
             }
             if (!track.rotations.empty())
             {
-                auto rot = Interpolate(track.rotations, m_time);
-                obj->SetRotation(rot);
+                entry.hasRotation = true;
+                entry.rotation = Interpolate(track.rotations, time);
             }
             if (!track.scales.empty())
             {
-                auto scale = Interpolate(track.scales, m_time);
-                obj->SetScale(scale);
+                entry.hasScale = true;
+                entry.scale = Interpolate(track.scales, time);
             }
+            m_pose.push_back(entry);
         }
     }
+}
+
+void AnimationComponent::ApplyPose()
+{
+    for (const auto &entry : m_pose)
+    {
+        if (entry.hasPosition)
+        {
+            entry.object->SetPosition(entry.position);
+        }
+        if (entry.hasRotation)
+        {
+            entry.object->SetRotation(entry.rotation);
+        }
+        if (entry.hasScale)
+        {
+            entry.object->SetScale(entry.scale);
+        }
+    }
+    m_pose.clear();
 }
 
 void AnimationComponent::SetClip(AnimationClip *clip)
@@ -109,7 +201,7 @@ void AnimationComponent::PlayFirst(bool loop)
     m_looping = loop;
 }
 
-glm::vec3 AnimationComponent::Interpolate(const std::vector<KeyFrameVec3> &keys, float time)
+glm::vec3 AnimationComponent::Interpolate(const std::vector<KeyFrameVec3> &keys, float time) const
 {
     if (keys.empty())
     {
@@ -156,7 +248,7 @@ glm::vec3 AnimationComponent::Interpolate(const std::vector<KeyFrameVec3> &keys,
     return keys.back().value;
 }
 
-glm::quat AnimationComponent::Interpolate(const std::vector<KeyFrameQuat> &keys, float time)
+glm::quat AnimationComponent::Interpolate(const std::vector<KeyFrameQuat> &keys, float time) const
 {
     if (keys.empty())
     {
@@ -233,4 +325,27 @@ void AnimationComponent::BuildBindings()
     }
 }
 
+namespace
+{
+const bool s_registered = RegisterComponentType<AnimationComponent>(
+    "AnimationComponent",
+    {
+        AssetIDProperty<AnimationComponent>(
+            "animation", PropertyType::Asset, &AnimationComponent::GetAnimationID, &AnimationComponent::SetAnimationID
+        ),
+        StringProperty<AnimationComponent>("clip", &AnimationComponent::GetClipName, &AnimationComponent::SetClipName),
+        FloatProperty<AnimationComponent>("time", &AnimationComponent::GetTime, &AnimationComponent::SetTime),
+        BoolProperty<AnimationComponent>("playing", &AnimationComponent::IsPlaying, &AnimationComponent::SetPlaying),
+        BoolProperty<AnimationComponent>("looping", &AnimationComponent::IsLooping, &AnimationComponent::SetLooping),
+    }
+);
+} // namespace
+
+} // namespace Geni
+
+namespace Geni
+{
+void LinkAnimationComponent()
+{
+}
 } // namespace Geni

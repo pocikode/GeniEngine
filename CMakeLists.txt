@@ -17,12 +17,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(GENI_BUILD_TESTS "Build the engine test suite" ${PROJECT_IS_TOP_LEVEL})
 option(GENI_BUILD_SAMPLES "Build the programs in samples/" ${PROJECT_IS_TOP_LEVEL})
+option(GENI_BUILD_TOOLS "Build the asset cooker and other offline tools" ${PROJECT_IS_TOP_LEVEL})
 option(GENI_ENABLE_IMGUI "Build Dear ImGui into the engine and enable the debug overlay" ON)
 option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
 
 include(cmake/GeniSubmodules.cmake)
-geni_require_submodules(glm nlohmann_json cgltf bullet3 VulkanMemoryAllocator SPIRV-Reflect)
+geni_require_submodules(glm nlohmann_json cgltf bullet3 VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder)
 
 # Vulkan: the loader and headers (Vulkan SDK, Homebrew vulkan-headers + vulkan-loader, or
 # apt libvulkan-dev). Shaders are compiled offline by a pinned slangc (cmake/GeniShaders.cmake).
@@ -55,7 +56,13 @@ set(SRC_FILES
   src/core/CrashHandler.cpp
   src/core/DebugOverlay.cpp
   src/core/FixedTimestep.cpp
+  src/core/JobSystem.cpp
   src/core/Log.cpp
+  src/assets/AssetID.cpp
+  src/assets/AssetManager.cpp
+  src/assets/AssetManifest.cpp
+  src/assets/CookedFormats.cpp
+  src/assets/Ktx2.cpp
   src/input/InputManager.cpp
   src/graphics/Texture.cpp
   src/render/Material.cpp
@@ -69,7 +76,9 @@ set(SRC_FILES
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
+  src/scene/SceneSerializer.cpp
   src/scene/Component.cpp
+  src/scene/Reflection.cpp
   src/scene/Skeleton.cpp
   src/scene/components/MeshComponent.cpp
   src/scene/components/SkinnedMeshComponent.cpp
@@ -97,7 +106,6 @@ add_library(${PROJECT_NAME} ${SRC_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
-  ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf
   ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/SPIRV-Reflect
 )
 
@@ -106,6 +114,7 @@ geni_embed_shaders(${PROJECT_NAME}
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/builtin_shaders
   SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/default.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/skinned.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow_skinned.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.slang
@@ -120,9 +129,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 
 # nlohmann json
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann_json)
-
-# cgltf
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/cgltf)
 
 # bullet3
 option(BUILD_UNIT_TESTS OFF)
@@ -221,6 +227,10 @@ if(GENI_BUILD_TESTS)
   # Standalone: compares a capture with a reference image (tests/run_screenshot.cmake).
   add_executable(image_compare tools/image_compare.cpp)
   target_include_directories(image_compare PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
+endif()
+
+if(GENI_BUILD_TOOLS)
+  add_subdirectory(tools)
 endif()
 
 if(GENI_BUILD_SAMPLES)

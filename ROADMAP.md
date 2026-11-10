@@ -90,6 +90,21 @@ Make it look modern and scale to many objects.
 
 ### M3: Assets, jobs and serialization (Feb – Jul 2028, about 200 h)
 
+**Status (2026-11-10):** implemented. Design pages `docs/design/0004-jobs-and-assets.md`
+and `docs/design/0005-scene-storage-and-serialization.md`. The city block loads from a
+cooked `.gscene` (10001 objects, 101 lights), instantiated 1,000 nodes per frame while
+its meshes and materials load on workers; `samples/sandbox` loads its skinned model
+from cooked assets, and all screenshot tests still match the M2 references. On Linux
+with an NVIDIA RTX 4060 Laptop GPU (release, 1280×720) the block loads in about 100
+frames with the slowest at 2.5 ms, and then runs at 3.0 ms/frame. `benchmark_city` fails
+on a loading hitch over `GENI_LOAD_FRAME_BUDGET_MS`. Unit, GPU and cooker tests pass
+locally on Linux with validation layers on: job system, asset IDs/manifest/handles and
+garbage collection, async loading with material texture dependencies, KTX2 layout and
+per-usage texture formats (sRGB colour, BC5 normal maps), scene save/load and
+step-by-step instantiation, malformed scenes, and component reflection. The runtime no
+longer links cgltf or an image decoder. Open until CI has run green on macOS, Windows
+and Linux, including the new `ktx validate` step.
+
 Everything streaming and the editor depend on.
 
 - Job system; asset loading and animation moved off the main thread

@@ -70,9 +70,30 @@ class GltfBuilder:
         return document
 
 
-def write_json(path, document):
+def write_json(path, document, compact=False):
+    """Writes indented JSON, or one line per top-level array entry when `compact`.
+
+    The city block is 10,000 nodes; indented it is 150,000 lines of diff noise, so it is
+    written with one node, accessor or buffer per line instead.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document, indent=1) + "\n")
+    if compact:
+        lines = ["{"]
+        items = list(document.items())
+        for i, (key, value) in enumerate(items):
+            end = "," if i + 1 < len(items) else ""
+            if isinstance(value, list) and value:
+                lines.append(" " + json.dumps(key) + ": [")
+                for j, entry in enumerate(value):
+                    sep = "," if j + 1 < len(value) else ""
+                    lines.append("  " + json.dumps(entry, separators=(",", ":")) + sep)
+                lines.append(" ]" + end)
+            else:
+                lines.append(" " + json.dumps(key) + ": " + json.dumps(value, separators=(",", ":")) + end)
+        lines.append("}")
+        path.write_text("\n".join(lines) + "\n")
+    else:
+        path.write_text(json.dumps(document, indent=1) + "\n")
     print("wrote", path.relative_to(ROOT))
 
 
@@ -133,6 +154,48 @@ def hierarchy_gltf():
                     ],
                 }
             ],
+        }
+    )
+
+
+def textured_quad_gltf():
+    """A quad whose material uses ../textures/checker.png twice: as base colour (cooked as
+    sRGB colour) and as a normal map (cooked as BC5/linear). Exercises material texture
+    dependencies and per-usage texture cooking.
+    """
+    b = GltfBuilder()
+    positions = b.add(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)], FLOAT, "VEC3", ARRAY_BUFFER, True
+    )
+    normals = b.add([(0.0, 0.0, 1.0)] * 4, FLOAT, "VEC3", ARRAY_BUFFER)
+    uvs = b.add([(0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)], FLOAT, "VEC2", ARRAY_BUFFER)
+    indices = b.add([0, 1, 2, 0, 2, 3], UNSIGNED_SHORT, "SCALAR", ELEMENT_ARRAY_BUFFER)
+    return b.finish(
+        {
+            "scene": 0,
+            "scenes": [{"nodes": [0]}],
+            "nodes": [{"name": "Quad", "mesh": 0}],
+            "meshes": [
+                {
+                    "name": "Quad",
+                    "primitives": [
+                        {
+                            "attributes": {"POSITION": positions, "NORMAL": normals, "TEXCOORD_0": uvs},
+                            "indices": indices,
+                            "material": 0,
+                        }
+                    ],
+                }
+            ],
+            "materials": [
+                {
+                    "name": "Checker",
+                    "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}},
+                    "normalTexture": {"index": 0, "scale": 1.0},
+                }
+            ],
+            "textures": [{"source": 0}],
+            "images": [{"uri": "../textures/checker.png"}],
         }
     )
 
@@ -236,6 +299,205 @@ def skinned_bar_gltf():
     )
 
 
+
+def f32(value):
+    """Rounds a double to the nearest float32, like a C++ float expression does."""
+    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+
+def city_hash(index):
+    """tools/gen_assets.py's copy of the reference game's building hash, in float32.
+
+    samples/city used `fabs(fmod(sin(index * 12.9898f) * 43758.5453f, 1.0f))`, with
+    std::sin/std::fmod taking floats and computing in double before rounding.
+    """
+    scaled = f32(float(index) * f32(12.9898))
+    sine = f32(math.sin(scaled))
+    product = f32(sine * f32(43758.5453))
+    return abs(f32(math.fmod(product, 1.0)))
+
+def _normalize(v):
+    import math
+    l = math.sqrt(sum(c * c for c in v))
+    return tuple(c / l for c in v) if l else (0.0, 0.0, 0.0)
+
+def _cross(a, b):
+    return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
+
+def _quat_look_at(direction, up):
+    """Matches glm::quatLookAt (right-handed): local -Z points along direction."""
+    d = _normalize(direction)
+    z = (-d[0], -d[1], -d[2])
+    right = _normalize(_cross(up, z))
+    y = _cross(z, right)
+    # mat3 columns: right, y, z
+    m00, m10, m20 = right
+    m01, m11, m21 = y
+    m02, m12, m22 = z
+    trace = m00 + m11 + m22
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        w = 0.25 * s
+        x = (m21 - m12) / s
+        yq = (m02 - m20) / s
+        zq = (m10 - m01) / s
+    elif m00 > m11 and m00 > m22:
+        s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
+        w = (m21 - m12) / s
+        x = 0.25 * s
+        yq = (m01 + m10) / s
+        zq = (m02 + m20) / s
+    elif m11 > m22:
+        s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
+        w = (m02 - m20) / s
+        x = (m01 + m10) / s
+        yq = 0.25 * s
+        zq = (m12 + m21) / s
+    else:
+        s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
+        w = (m10 - m01) / s
+        x = (m02 + m20) / s
+        yq = (m12 + m21) / s
+        zq = 0.25 * s
+    return (x, yq, zq, w)
+
+def city_gltf():
+    """The reference game's first block: 10,000 buildings, 100 lights and a camera.
+
+    The values mirror the original C++ setup in samples/city/main.cpp exactly, so the
+    cooked scene renders the same screenshot. Each palette entry gets its own mesh so a
+    glTF node can choose a material (glTF materials live on primitives, not nodes).
+    """
+    b = GltfBuilder()
+
+    # Unit cube, identical to Mesh::CreateBox(1.0): position, color, uv, normal, CCW.
+    h = 0.5
+    vertices = [
+        # Front face
+        (h, h, h, 1, 0, 0, 1, 1, 0, 0, 1),
+        (-h, h, h, 0, 1, 0, 0, 1, 0, 0, 1),
+        (-h, -h, h, 0, 0, 1, 0, 0, 0, 0, 1),
+        (h, -h, h, 1, 1, 0, 1, 0, 0, 0, 1),
+        # Top face
+        (h, h, -h, 1, 0, 0, 1, 0, 0, 1, 0),
+        (-h, h, -h, 0, 1, 0, 0, 0, 0, 1, 0),
+        (-h, h, h, 0, 0, 1, 0, 1, 0, 1, 0),
+        (h, h, h, 1, 1, 0, 1, 1, 0, 1, 0),
+        # Right face
+        (h, h, -h, 1, 0, 0, 1, 1, 1, 0, 0),
+        (h, h, h, 0, 1, 0, 0, 1, 1, 0, 0),
+        (h, -h, h, 0, 0, 1, 0, 0, 1, 0, 0),
+        (h, -h, -h, 1, 1, 0, 1, 0, 1, 0, 0),
+        # Left face
+        (-h, h, h, 1, 0, 0, 1, 1, -1, 0, 0),
+        (-h, h, -h, 0, 1, 0, 0, 1, -1, 0, 0),
+        (-h, -h, -h, 0, 0, 1, 0, 0, -1, 0, 0),
+        (-h, -h, h, 1, 1, 0, 1, 0, -1, 0, 0),
+        # Bottom face
+        (h, -h, h, 1, 0, 0, 1, 1, 0, -1, 0),
+        (-h, -h, h, 0, 1, 0, 0, 1, 0, -1, 0),
+        (-h, -h, -h, 0, 0, 1, 0, 0, 0, -1, 0),
+        (h, -h, -h, 1, 1, 0, 1, 0, 0, -1, 0),
+        # Back face
+        (-h, h, -h, 1, 0, 0, 1, 1, 0, 0, -1),
+        (h, h, -h, 0, 1, 0, 0, 1, 0, 0, -1),
+        (h, -h, -h, 0, 0, 1, 0, 0, 0, 0, -1),
+        (-h, -h, -h, 1, 1, 0, 1, 0, 0, 0, -1),
+    ]
+    indices = [
+        0,1,2, 0,2,3, 4,5,6, 4,6,7, 8,9,10, 8,10,11,
+        12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23,
+    ]
+    positions = b.add([v[0:3] for v in vertices], FLOAT, "VEC3", ARRAY_BUFFER, True)
+    colors = b.add([v[3:6] for v in vertices], FLOAT, "VEC3", ARRAY_BUFFER)
+    uvs = b.add([v[6:8] for v in vertices], FLOAT, "VEC2", ARRAY_BUFFER)
+    normals = b.add([v[8:11] for v in vertices], FLOAT, "VEC3", ARRAY_BUFFER)
+    index_accessor = b.add(indices, UNSIGNED_SHORT, "SCALAR", ELEMENT_ARRAY_BUFFER)
+
+    palette = [
+        (0.56, 0.56, 0.58), (0.42, 0.40, 0.38), (0.65, 0.61, 0.55), (0.34, 0.32, 0.31),
+        (0.52, 0.36, 0.30), (0.30, 0.37, 0.44), (0.68, 0.66, 0.62), (0.45, 0.29, 0.25),
+    ]
+    materials = []
+    for i, color in enumerate(palette):
+        glass = i == 5
+        materials.append({
+            "name": f"Palette{i}",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [color[0], color[1], color[2], 1.0],
+                "metallicFactor": 0.55 if glass else 0.02,
+                "roughnessFactor": 0.18 if glass else 0.62 + 0.1 * (i % 3),
+            },
+        })
+    materials.append({
+        "name": "Ground",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.20, 0.22, 0.24, 1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.92,
+        },
+    })
+
+    attributes = {"POSITION": positions, "COLOR_0": colors, "TEXCOORD_0": uvs, "NORMAL": normals}
+    meshes = []
+    for i in range(len(palette) + 1):
+        meshes.append({"name": f"Cube{i}", "primitives": [{
+            "attributes": attributes, "indices": index_accessor, "material": i,
+        }]})
+
+    nodes = [
+        {"name": "Camera", "extras": {"geni": {
+            "camera": {"fov": 60.0, "near": 0.1, "far": 1000.0},
+            "orbit": {"target": [0.0, 10.0, 0.0], "distance": 135.0, "yaw": 35.0, "pitch": 13.0},
+        }}},
+        {"name": "Sun", "rotation": list(_quat_look_at(_normalize((-0.5, -0.78, -0.36)), (0, 1, 0))),
+         "extras": {"geni": {"light": {"type": "directional", "color": [1.0, 0.95, 0.85], "intensity": 2.2}}}},
+        {"name": "Ground", "translation": [0.0, -0.5, 0.0], "scale": [360.0, 1.0, 360.0], "mesh": len(palette)},
+    ]
+
+    blocks = 100
+    for z in range(blocks):
+        for x in range(blocks):
+            index = z * blocks + x
+            # The same arithmetic the C++ reference did, rounded to float32 after every
+            # operation: the hash is chaotic, so float vs double precision changes every
+            # building height. Keeping it bit-exact keeps tests/reference/city_f60.png
+            # valid.
+            hsh = city_hash(index)
+            width = f32(f32(2.4) - f32(f32(f32(f32(1.2) * f32(float(index % 3))) * f32(0.15))))
+            height = f32(f32(2.0) + f32(f32(30.0) * hsh))
+            nodes.append({
+                "name": "Block",
+                "translation": [
+                    f32(f32(f32(float(x)) - f32(49.5)) * f32(2.6)),
+                    f32(height * f32(0.5)),
+                    f32(f32(f32(float(z)) - f32(49.5)) * f32(2.6)),
+                ],
+                "scale": [width, height, width],
+                "mesh": index % len(palette),
+            })
+
+    lights = 10
+    for z in range(lights):
+        for x in range(lights):
+            index = z * lights + x
+            hue = (index % lights) / float(lights)
+            color = (0.9, 0.6 + 0.4 * math.cos(6.2832 * hue), 0.4 + 0.6 * math.sin(6.2832 * hue))
+            nodes.append({
+                "name": "StreetLight",
+                "translation": [(x - (lights - 1) * 0.5) * 26.0, 6.0, (z - (lights - 1) * 0.5) * 26.0],
+                "extras": {"geni": {"light": {
+                    "type": "point", "color": list(color), "intensity": 5.0, "range": 34.0,
+                }}},
+            })
+
+    return b.finish({
+        "scene": 0,
+        "scenes": [{"nodes": list(range(len(nodes)))}],
+        "nodes": nodes,
+        "meshes": meshes,
+        "materials": materials,
+    })
+
 def write_png(path, width, height, pixel):
     """Writes an 8-bit RGB PNG. `pixel(x, y)` returns (r, g, b)."""
 
@@ -266,11 +528,13 @@ def checker(x, y):
 
 def main():
     write_json(ROOT / "tests/assets/models/hierarchy.gltf", hierarchy_gltf())
+    write_json(ROOT / "tests/assets/models/textured_quad.gltf", textured_quad_gltf())
     bar = skinned_bar_gltf()
     write_json(ROOT / "tests/assets/models/skinned_bar.gltf", bar)
     write_json(ROOT / "samples/sandbox/assets/models/skinned_bar.gltf", bar)
     write_png(ROOT / "tests/assets/textures/checker.png", 16, 16, checker)
     write_png(ROOT / "samples/sandbox/assets/textures/checker.png", 64, 64, checker)
+    write_json(ROOT / "samples/city/assets/models/city.gltf", city_gltf(), compact=True)
 
 
 if __name__ == "__main__":

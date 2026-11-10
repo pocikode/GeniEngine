@@ -1,6 +1,7 @@
 #include "core/Engine.h"
 
 #include "GLFW/glfw3.h"
+#include "scene/Reflection.h"
 #include "scene/components/PlayerControllerComponent.h"
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
@@ -60,4 +61,26 @@ void PlayerControllerComponent::Update(float deltaTime)
     m_owner->SetPosition(position);
 }
 
+namespace
+{
+const bool s_registered = RegisterComponentType<PlayerControllerComponent>(
+    "PlayerControllerComponent",
+    {
+        FloatProperty<PlayerControllerComponent>(
+            "sensitivity", &PlayerControllerComponent::GetSensitivity, &PlayerControllerComponent::SetSensitivity
+        ),
+        FloatProperty<PlayerControllerComponent>(
+            "moveSpeed", &PlayerControllerComponent::GetMoveSpeed, &PlayerControllerComponent::SetMoveSpeed
+        ),
+    }
+);
+} // namespace
+
+} // namespace Geni
+
+namespace Geni
+{
+void LinkPlayerControllerComponent()
+{
+}
 } // namespace Geni

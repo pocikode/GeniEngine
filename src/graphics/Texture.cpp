@@ -1,13 +1,12 @@
 #include "graphics/Texture.h"
+#include "assets/CookedFormats.h"
+#include "assets/Ktx2.h"
 #include "core/Engine.h"
 #include "core/Log.h"
 #include "rhi/Device.h"
 #include <algorithm>
 #include <memory>
 #include <vector>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 
 namespace Geni
 {
@@ -118,6 +117,39 @@ Texture::Texture(int width, int height, int numChannels, const unsigned char *da
     desc.debugName = "texture";
     m_handle = device->CreateTexture(desc, mipData.data());
     m_mipLevels = static_cast<int>(levels.size());
+    m_format = rhi::Format::RGBA8Unorm;
+}
+
+Texture::Texture(const Ktx2Image &image)
+    : m_width(static_cast<int>(image.width)), m_height(static_cast<int>(image.height)),
+      m_mipLevels(static_cast<int>(image.mipLevels)), m_format(image.format)
+{
+    rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
+    if (!device || image.width == 0 || image.height == 0 || image.levels.empty())
+    {
+        GENI_LOG_ERROR("KTX2 texture not created: %s", device ? "empty image" : "no render device");
+        return;
+    }
+
+    std::vector<const void *> mipData;
+    mipData.reserve(image.levels.size());
+    for (const auto &level : image.levels)
+    {
+        mipData.push_back(level.data());
+    }
+
+    rhi::TextureDesc desc;
+    desc.width = image.width;
+    desc.height = image.height;
+    desc.mipLevels = static_cast<uint32_t>(image.levels.size());
+    desc.format = image.format;
+    desc.debugName = "cooked texture";
+    desc.mipByteSizes.reserve(image.levels.size());
+    for (const auto &level : image.levels)
+    {
+        desc.mipByteSizes.push_back(level.size());
+    }
+    m_handle = device->CreateTexture(desc, mipData.data());
 }
 
 Texture::~Texture()
@@ -130,30 +162,30 @@ Texture::~Texture()
 
 std::shared_ptr<Texture> Texture::Load(const std::string &path)
 {
-    int width, height, numChannels;
+    // Runtime textures are cooked KTX2. Source images (PNG/JPEG) are converted by
+    // tools/asset_cooker; the engine does not link an image decoder.
+    auto &fs = Engine::GetInstance().GetFileSystem();
+    const auto fullPath = fs.ResolveAssetPath(path);
 
-    auto &fs = Geni::Engine::GetInstance().GetFileSystem();
-    auto fullPath = fs.ResolveAssetPath(path);
-
-    std::error_code ec;
-    if (!std::filesystem::exists(fullPath, ec))
+    std::vector<uint8_t> bytes;
+    if (!cooked::ReadFile(fullPath, bytes))
     {
         return nullptr;
     }
 
-    std::shared_ptr<Texture> result;
-
-    unsigned char *data = stbi_load(fullPath.string().c_str(), &width, &height, &numChannels, 0);
-    if (data)
+    Ktx2Image image;
+    std::string error;
+    if (!ReadKtx2(bytes, image, &error))
     {
-        result = std::make_shared<Texture>(width, height, numChannels, data);
-        stbi_image_free(data);
-        if (!result->GetHandle().IsValid())
-        {
-            result.reset();
-        }
+        GENI_LOG_ERROR("Texture::Load('%s'): %s", path.c_str(), error.c_str());
+        return nullptr;
     }
 
+    auto result = std::make_shared<Texture>(image);
+    if (!result->GetHandle().IsValid())
+    {
+        return nullptr;
+    }
     return result;
 }
 

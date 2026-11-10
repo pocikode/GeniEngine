@@ -25,7 +25,80 @@ enum class Format : uint8_t
     Depth32Float,
     Depth24UnormStencil8,
     Depth16Unorm,
+    // Block-compressed sampled textures, cooked by tools/asset_cooker.
+    BC1Unorm,
+    BC3Unorm,
+    BC4Unorm,
+    BC5Unorm,
+    BC7Unorm,
+    ASTC4x4Unorm,
+    // sRGB-encoded colour textures (base colour, emissive). The sampler decodes them to
+    // linear before filtering, so shaders read linear values.
+    RGBA8Srgb,
+    BC7Srgb,
+    ASTC4x4Srgb,
 };
+
+// True for the block-compressed formats above. Their sizes are counted in 4x4 blocks,
+// not pixels.
+inline bool IsCompressedFormat(Format format)
+{
+    switch (format)
+    {
+    case Format::BC1Unorm:
+    case Format::BC3Unorm:
+    case Format::BC4Unorm:
+    case Format::BC5Unorm:
+    case Format::BC7Unorm:
+    case Format::ASTC4x4Unorm:
+    case Format::BC7Srgb:
+    case Format::ASTC4x4Srgb:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Bytes in one 4x4 block (or one pixel for uncompressed formats).
+inline uint32_t BytesPerBlock(Format format)
+{
+    switch (format)
+    {
+    case Format::RGBA8Unorm:
+    case Format::BGRA8Unorm:
+    case Format::RGBA8Srgb:
+        return 4;
+    case Format::RGBA16Float:
+        return 8;
+    case Format::BC1Unorm:
+    case Format::BC4Unorm:
+        return 8;
+    case Format::BC3Unorm:
+    case Format::BC5Unorm:
+    case Format::BC7Unorm:
+    case Format::ASTC4x4Unorm:
+    case Format::BC7Srgb:
+    case Format::ASTC4x4Srgb:
+        return 16;
+    default:
+        return 0;
+    }
+}
+
+inline uint64_t TextureLevelSize(Format format, uint32_t width, uint32_t height)
+{
+    if (width == 0 || height == 0)
+    {
+        return 0;
+    }
+    if (IsCompressedFormat(format))
+    {
+        const uint64_t blocksX = (width + 3) / 4;
+        const uint64_t blocksY = (height + 3) / 4;
+        return blocksX * blocksY * BytesPerBlock(format);
+    }
+    return uint64_t(width) * height * BytesPerBlock(format);
+}
 
 enum class BufferUsage : uint32_t
 {
@@ -94,6 +167,10 @@ struct TextureDesc
     TextureUsage usage = TextureUsage::Sampled;
     // 1 for normal textures, 4 for 4x MSAA colour/depth attachments.
     uint32_t sampleCount = 1;
+    // Optional per-level byte sizes for uploaded textures (mipData). Cooked KTX2 textures
+    // fill this because a compressed level's size is not just width * height * bpp. Empty
+    // means TextureLevelSize(format, width, height) for every level.
+    std::vector<uint64_t> mipByteSizes;
     const char *debugName = nullptr;
 };
 

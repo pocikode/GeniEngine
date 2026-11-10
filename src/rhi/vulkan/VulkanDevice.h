@@ -117,6 +117,7 @@ class VulkanDevice final : public Device
 
     TextureHandle CreateTexture(const TextureDesc &desc, const void *const *mipData) override;
     void DestroyTexture(TextureHandle texture) override;
+    bool IsTextureFormatSupported(Format format) const override;
 
     SamplerHandle CreateSampler(const SamplerDesc &desc) override;
     void DestroySampler(SamplerHandle sampler) override;

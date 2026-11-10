@@ -1,6 +1,9 @@
 #include "scene/Scene.h"
 #include "core/Common.h"
 #include "scene/GameObject.h"
+#include "core/Engine.h"
+#include "core/JobSystem.h"
+#include "scene/components/AnimationComponent.h"
 #include "scene/components/LightComponent.h"
 #include <algorithm>
 #include <cstddef>
@@ -10,8 +13,74 @@
 namespace Geni
 {
 
+Scene::~Scene()
+{
+    // GameObjects unregister their components in their destructor, so objects must go
+    // before the component pools; member destruction would do the opposite.
+    Clear();
+}
+
+namespace
+{
+// True when the object and all its ancestors are active and not marked for destruction,
+// which is when GameObject::Update would have reached its components.
+bool IsUpdatedThisFrame(GameObject *object)
+{
+    for (GameObject *node = object; node; node = node->GetParent())
+    {
+        if (!node->IsActive() || !node->IsAlive())
+        {
+            return false;
+        }
+    }
+    return object != nullptr;
+}
+} // namespace
+
+void Scene::UpdateAnimation(float deltaTime)
+{
+    auto pool = m_componentPools.find(Component::StaticTypeID<AnimationComponent>());
+    if (pool == m_componentPools.end() || pool->second->Count() == 0)
+    {
+        return;
+    }
+
+    std::vector<AnimationComponent *> sampling;
+    pool->second->ForEach<AnimationComponent>([&](AnimationComponent &animation) {
+        if (IsUpdatedThisFrame(animation.GetOwner()) && animation.AdvanceClock(deltaTime))
+        {
+            sampling.push_back(&animation);
+        }
+    });
+
+    JobSystem *jobs = Engine::GetInstance().GetJobSystem();
+    if (jobs && sampling.size() > 1)
+    {
+        jobs->ParallelFor(sampling.size(), 1, [&sampling](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i)
+            {
+                sampling[i]->SamplePose();
+            }
+        });
+    }
+    else
+    {
+        for (AnimationComponent *animation : sampling)
+        {
+            animation->SamplePose();
+        }
+    }
+
+    for (AnimationComponent *animation : sampling)
+    {
+        animation->ApplyPose();
+    }
+}
+
 void Scene::Update(float deltaTime)
 {
+    UpdateAnimation(deltaTime);
+
     for (auto it = m_objects.begin(); it != m_objects.end();)
     {
         if ((*it)->IsAlive())
@@ -29,6 +98,39 @@ void Scene::Update(float deltaTime)
 void Scene::Clear()
 {
     m_objects.clear();
+    for (auto &[typeID, pool] : m_componentPools)
+    {
+        pool->Clear();
+    }
+    m_componentPools.clear();
+    m_mainCamera = nullptr;
+}
+
+void Scene::RegisterComponent(Component *component)
+{
+    if (!component)
+    {
+        return;
+    }
+    auto &pool = m_componentPools[component->GetTypeID()];
+    if (!pool)
+    {
+        pool = std::make_unique<ComponentPool>();
+    }
+    pool->Add(component);
+}
+
+void Scene::UnregisterComponent(Component *component)
+{
+    if (!component)
+    {
+        return;
+    }
+    auto it = m_componentPools.find(component->GetTypeID());
+    if (it != m_componentPools.end())
+    {
+        it->second->Remove(component);
+    }
 }
 
 GameObject *Scene::CreateObject(const std::string &name, GameObject *parent)
@@ -39,6 +141,18 @@ GameObject *Scene::CreateObject(const std::string &name, GameObject *parent)
     SetParent(obj, parent);
 
     return obj;
+}
+
+GameObject *Scene::FindObject(const std::string &name)
+{
+    for (auto &object : m_objects)
+    {
+        if (GameObject *found = object->FindChildByName(name))
+        {
+            return found;
+        }
+    }
+    return nullptr;
 }
 
 bool Scene::SetParent(GameObject *obj, GameObject *parent)
@@ -176,33 +290,32 @@ GameObject *Scene::GetMainCamera()
 std::vector<LightData> Scene::CollectLights()
 {
     std::vector<LightData> lights;
-    for (auto &obj : m_objects)
-    {
-        CollectLightsRecursive(obj.get(), lights);
-    }
+    ForEachComponent<LightComponent>([&lights](LightComponent &light) {
+        GameObject *owner = light.GetOwner();
+        if (!owner)
+        {
+            return;
+        }
+        for (GameObject *node = owner; node; node = node->GetParent())
+        {
+            if (!node->IsActive())
+            {
+                return;
+            }
+        }
+        LightData data;
+        data.type = light.GetType();
+        data.color = light.GetColor() * light.GetIntensity();
+        data.position = owner->GetWorldPosition();
+        data.direction = light.GetDirection();
+        data.range = light.GetRange();
+        data.innerConeAngle = light.GetInnerConeAngle();
+        data.outerConeAngle = light.GetOuterConeAngle();
+        lights.push_back(data);
+    });
 
     return lights;
 }
 
-void Scene::CollectLightsRecursive(GameObject *obj, std::vector<LightData> &out)
-{
-    if (auto light = obj->GetComponent<LightComponent>())
-    {
-        LightData data;
-        data.type = light->GetType();
-        data.color = light->GetColor() * light->GetIntensity();
-        data.position = obj->GetWorldPosition();
-        data.direction = light->GetDirection();
-        data.range = light->GetRange();
-        data.innerConeAngle = light->GetInnerConeAngle();
-        data.outerConeAngle = light->GetOuterConeAngle();
-        out.push_back(data);
-    }
-
-    for (auto &child : obj->m_children)
-    {
-        CollectLightsRecursive(child.get(), out);
-    }
-}
 
 } // namespace Geni

@@ -1,9 +1,35 @@
 #include "scene/components/LightComponent.h"
 #include "glm/geometric.hpp"
 #include "scene/GameObject.h"
+#include "scene/Reflection.h"
 
 namespace Geni
 {
+
+namespace
+{
+const bool s_registered = RegisterComponentType<LightComponent>(
+    "LightComponent",
+    {
+        EnumProperty<LightComponent, LightType>(
+            "type", &LightComponent::GetType, &LightComponent::SetType,
+            {{LightType::Directional, "directional"}, {LightType::Point, "point"}, {LightType::Spot, "spot"}}
+        ),
+        Vec3Property<LightComponent>(
+            "color", [](const LightComponent &light) { return light.GetColor(); },
+            [](LightComponent &light, const glm::vec3 &value) { light.SetColor(value); }
+        ),
+        FloatProperty<LightComponent>("intensity", &LightComponent::GetIntensity, &LightComponent::SetIntensity),
+        FloatProperty<LightComponent>("range", &LightComponent::GetRange, &LightComponent::SetRange),
+        FloatProperty<LightComponent>(
+            "innerConeAngle", &LightComponent::GetInnerConeAngle, &LightComponent::SetInnerConeAngle
+        ),
+        FloatProperty<LightComponent>(
+            "outerConeAngle", &LightComponent::GetOuterConeAngle, &LightComponent::SetOuterConeAngle
+        ),
+    }
+);
+} // namespace
 
 void LightComponent::Update(float deltaTime)
 {
@@ -47,4 +73,11 @@ glm::vec3 LightComponent::GetDirection() const
     return length > 1e-6f ? direction / length : glm::vec3(0.0f, -1.0f, 0.0f);
 }
 
+} // namespace Geni
+
+namespace Geni
+{
+void LinkLightComponent()
+{
+}
 } // namespace Geni

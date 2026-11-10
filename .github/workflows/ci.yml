@@ -96,6 +96,25 @@ jobs:
         if: runner.os != 'Linux'
         run: cmake --workflow --preset ${{ env.GENI_PRESET }}
 
+      # The cooker writes KTX2 by hand (tools/asset_cooker/Ktx2Writer.cpp); Khronos's own
+      # validator checks every cooked file against the specification.
+      - name: Validate cooked KTX2 files (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          version=4.4.2
+          sha1=c6b08c817f8c8dd299deccae4f2fbb8d55e9acd2
+          archive=KTX-Software-$version-Linux-x86_64.tar.bz2
+          curl -sfL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/KhronosGroup/KTX-Software/releases/download/v$version/$archive"
+          echo "$sha1  $RUNNER_TEMP/$archive" | sha1sum -c -
+          tar xjf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          ktx_root="$RUNNER_TEMP/KTX-Software-$version-Linux-x86_64"
+          status=0
+          while IFS= read -r -d '' file; do
+            LD_LIBRARY_PATH="$ktx_root/lib" "$ktx_root/bin/ktx" validate "$file" || { echo "::error file=$file::ktx validate failed"; status=1; }
+          done < <(find build/dev -name '*.ktx2' -print0)
+          exit $status
+
       - name: Upload logs, crash reports and screenshots
         if: failure()
         uses: actions/upload-artifact@v7

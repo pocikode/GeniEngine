@@ -18,7 +18,7 @@ class Scene;
 class GameObject
 {
   public:
-    virtual ~GameObject() = default;
+    virtual ~GameObject();
     virtual void Update(float deltaTime);
     const std::string &GetName() const;
     void SetName(const std::string &name);
@@ -48,6 +48,10 @@ class GameObject
 
     GameObject *FindChildByName(const std::string &name);
     const std::vector<std::unique_ptr<GameObject>> &GetChildren() const;
+    const std::vector<std::unique_ptr<Component>> &GetComponents() const
+    {
+        return m_components;
+    }
 
     glm::vec3 GetPosition() const;
     void SetPosition(const glm::vec3 &pos);
@@ -64,8 +68,6 @@ class GameObject
     // Rotation part of the world transform. A transform with scale gives an
     // approximate rotation; lights and cameras are normally unscaled.
     glm::quat GetWorldRotation() const;
-
-    static GameObject *LoadGLTF(const std::string &path);
 
   protected:
     GameObject() = default;
