@@ -22,7 +22,24 @@ option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
 
 include(cmake/GeniSubmodules.cmake)
-geni_require_submodules(glm nlohmann_json cgltf bullet3)
+geni_require_submodules(glm nlohmann_json cgltf bullet3 VulkanMemoryAllocator SPIRV-Reflect)
+
+# Vulkan: the loader and headers (Vulkan SDK, Homebrew vulkan-headers + vulkan-loader, or
+# apt libvulkan-dev), plus glslangValidator for offline shader compilation.
+find_package(Vulkan REQUIRED)
+include(cmake/GeniShaders.cmake)
+
+# Homebrew puts the validation layer manifest where the loader does not look; debug runs
+# point the loader at it (rhi::PrepareWindowSystem). Elsewhere the default search works.
+find_path(GENI_VULKAN_LAYER_DIR VkLayer_khronos_validation.json
+  PATHS
+    /opt/homebrew/share/vulkan/explicit_layer.d
+    /usr/local/share/vulkan/explicit_layer.d
+  NO_DEFAULT_PATH
+)
+if(NOT GENI_VULKAN_LAYER_DIR)
+  set(GENI_VULKAN_LAYER_DIR "")
+endif()
 
 # A game that embeds the engine with add_subdirectory owns the top-level assets/ folder.
 set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
@@ -63,6 +80,8 @@ set(SRC_FILES
   src/physics/PhysicsManager.cpp
   src/physics/Collider.cpp
   src/physics/RigidBody.cpp
+  src/rhi/vulkan/VulkanDevice.cpp
+  src/rhi/vulkan/VmaImplementation.cpp
 )
 
 # glfw
@@ -112,7 +131,16 @@ target_link_libraries(
     LinearMath
     BulletCollision
     BulletDynamics
+    Vulkan::Vulkan
 )
+
+# Only src/rhi/vulkan/ includes these (docs/design/0001).
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/VulkanMemoryAllocator/include
+)
+# Third-party code compiled into the engine: keep its warnings out of the build log.
+set_source_files_properties(src/rhi/vulkan/VmaImplementation.cpp PROPERTIES COMPILE_OPTIONS
+  "$<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-w>")
 
 if(APPLE)
   target_link_libraries(${PROJECT_NAME} PRIVATE "-framework OpenGL")
@@ -139,9 +167,10 @@ if(GENI_ENABLE_IMGUI)
     ${GENI_IMGUI_DIR}/imgui_widgets.cpp
     ${GENI_IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${GENI_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${GENI_IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
   )
   target_include_directories(geni_imgui PUBLIC ${GENI_IMGUI_DIR})
-  target_link_libraries(geni_imgui PUBLIC glfw)
+  target_link_libraries(geni_imgui PUBLIC glfw PRIVATE Vulkan::Vulkan)
   if(NOT APPLE)
     target_link_libraries(geni_imgui PUBLIC OpenGL::GL)
   endif()

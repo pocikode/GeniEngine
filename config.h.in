@@ -1,3 +1,7 @@
 #pragma once
 
 #define ASSETS_ROOT "@ASSETS_DIR@"
+
+// Folder holding VkLayer_khronos_validation.json when the loader would not find it on its
+// own (Homebrew). Empty otherwise.
+#define GENI_VULKAN_LAYER_DIR "@GENI_VULKAN_LAYER_DIR@"

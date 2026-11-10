@@ -9,6 +9,13 @@ add_executable(geni_tests
   test_transform.cpp
   test_engine_loop.cpp
   test_gltf.cpp
+  test_rhi.cpp
+)
+geni_embed_shaders(geni_tests
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
+  SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/rhi_triangle.frag
 )
 target_include_directories(geni_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/doctest)
 target_link_libraries(geni_tests PRIVATE GeniEngine)

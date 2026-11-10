@@ -9,6 +9,7 @@
 #include "graphics/GraphicsAPI.h"
 #include "io/ImageWriter.h"
 #include "render/RenderQueue.h"
+#include "rhi/Device.h"
 #include <algorithm>
 #include "scene/components/CameraComponent.h"
 #include <GL/glew.h>
@@ -138,6 +139,7 @@ bool Engine::Init(const EngineConfig &config)
     }
 
     glfwSetErrorCallback(glfwErrorCallback);
+    rhi::PrepareWindowSystem();
     if (!glfwInit())
     {
         GENI_LOG_ERROR("Failed to initialize GLFW");
