@@ -206,10 +206,10 @@ the editor screenshot, were fixed on the way). Unit tests cover input
 actions, the animation graph, characters, vehicles, casts and kinematic bodies,
 navigation and crowds, audio without a device, Lua bindings and hot reload, and menu
 navigation. Getting-started guide (`docs/getting-started.md`), Lua API reference
-(`docs/scripting.md`), `CONTRIBUTING.md` and `CHANGELOG.md` are written. Not done yet:
-CI on macOS, Windows and Linux; playing it on macOS, Windows and the Steam Deck; anyone
-other than the author playing it; and the outward steps, tagging **v0.1** and announcing
-it, which are the author's to take. Known limits, all in `CHANGELOG.md`: pedestrians are
+(`docs/scripting.md`), `CONTRIBUTING.md` and `CHANGELOG.md` are written. Tagged **v0.1**
+(2026-11-12). Not done yet: CI green on macOS, Windows and Linux (the run for the M6 commit did not start: the GitHub account is locked over billing); playing it on macOS,
+Windows and the Steam Deck; anyone other than the author playing it; and the public
+announcement, which is the author's to make. Known limits, all in `CHANGELOG.md`: pedestrians are
 not physical, traffic is scripted for the metro world's grid, navigation tiles are built
 at load rather than cooked, audio is not compressed per platform.
 
