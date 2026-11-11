@@ -24,7 +24,7 @@ option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
 
 include(cmake/GeniSubmodules.cmake)
-geni_require_submodules(glm nlohmann_json cgltf bullet3 VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder)
+geni_require_submodules(glm nlohmann_json cgltf JoltPhysics VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder)
 
 # Vulkan: the loader and headers (Vulkan SDK, Homebrew vulkan-headers + vulkan-loader, or
 # apt libvulkan-dev). Shaders are compiled offline by a pinned slangc (cmake/GeniShaders.cmake).
@@ -90,11 +90,13 @@ set(SRC_FILES
   src/scene/components/AnimationComponent.cpp
   src/scene/components/PhysicsComponent.cpp
   src/scene/components/OrbitCameraComponent.cpp
+  src/scene/components/FlyCameraComponent.cpp
+  src/world/WorldFormat.cpp
+  src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp
   src/io/FileWatcher.cpp
   src/io/ImageWriter.cpp
   src/physics/PhysicsManager.cpp
-  src/physics/Collider.cpp
   src/physics/RigidBody.cpp
   src/rhi/vulkan/VulkanDevice.cpp
   src/rhi/vulkan/VmaImplementation.cpp
@@ -133,14 +135,23 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 # nlohmann json
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann_json)
 
-# bullet3
-option(BUILD_UNIT_TESTS OFF)
-option(BUILD_BULLET2_DEMOS OFF)
-option(BUILD_EXTRAS OFF)
-option(BUILD_SHARED_LIBS OFF)
-# EXCLUDE_FROM_ALL: only the three Bullet libraries linked below get built.
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/bullet3 EXCLUDE_FROM_ALL)
-target_include_directories(${PROJECT_NAME} PRIVATE thirdparty/bullet3/src)
+# Jolt Physics (docs/design/0008). Double precision, so bodies live in world coordinates
+# and origin rebasing never moves them. Only src/physics/ includes Jolt.
+set(DOUBLE_PRECISION ON CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE)
+set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(PROFILER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
+# The engine derives from Jolt's interfaces and is built with RTTI and exceptions.
+set(CPP_RTTI_ENABLED ON CACHE BOOL "" FORCE)
+set(CPP_EXCEPTIONS_ENABLED ON CACHE BOOL "" FORCE)
+# The rest of the build uses the DLL runtime on Windows.
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+set(JPH_ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/JoltPhysics/Build ${CMAKE_BINARY_DIR}/JoltPhysics EXCLUDE_FROM_ALL)
 
 target_link_libraries(
   ${PROJECT_NAME}
@@ -149,10 +160,7 @@ target_link_libraries(
     nlohmann_json::nlohmann_json
     glfw
   PRIVATE
-    # Static archives are searched once, left to right: dependents before their dependencies.
-    BulletDynamics
-    BulletCollision
-    LinearMath
+    Jolt
     Vulkan::Vulkan
 )
 

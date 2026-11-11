@@ -1,0 +1,11 @@
+{
+  "format": "geni.scene",
+  "version": 1,
+  "mainCamera": -1,
+  "nodes": [
+    {"name":"Ground","parent":-1,"position":[16.0,-0.5,16.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[32.0,1.0,32.0],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"3584d29efdb7638e","mesh":"a3cc42af63aff6ca"}},{"type":"PhysicsComponent","properties":{"bodyType":"static","colliderType":"box","friction":0.800000011920929,"height":0.0,"mass":0.0,"radius":0.0,"size":[1.0,1.0,1.0]}}]},
+    {"name":"Pillar","parent":-1,"position":[16.0,4.0,16.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[2.0,8.0,2.0],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"3584d29efdb7638e","mesh":"a3cc42af63aff6ca"}},{"type":"PhysicsComponent","properties":{"bodyType":"static","colliderType":"box","friction":0.800000011920929,"height":0.0,"mass":0.0,"radius":0.0,"size":[1.0,1.0,1.0]}}]},
+    {"name":"Lamp","parent":-1,"position":[10.0,3.0,10.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"components":[{"type":"LightComponent","properties":{"color":[1.0,0.8999999761581421,0.699999988079071],"innerConeAngle":0.0,"intensity":2.0,"outerConeAngle":0.785398006439209,"range":12.0,"type":"point"}}]},
+    {"name":"Pair","parent":-1,"position":[16.0,0.0,26.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"prefab":"15c450141e4857e3","components":[]}
+  ]
+}

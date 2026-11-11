@@ -1,7 +1,6 @@
 #pragma once
 
 #include "glm/ext/vector_float3.hpp"
-class btCollisionShape;
 
 namespace Geni
 {
@@ -13,12 +12,15 @@ enum class ColliderType
     Capsule
 };
 
+// The shape of a rigid body, in the owning object's local space: PhysicsManager builds the
+// physics shape when the body is added, with the object's scale applied (docs/design/0008).
+// A collider can be shared by many bodies.
 class Collider
 {
   public:
-    virtual ~Collider();
-    btCollisionShape *GetShape();
+    virtual ~Collider() = default;
     virtual ColliderType GetType() const = 0;
+    // Full size of a box (not half extents).
     virtual glm::vec3 GetExtents() const
     {
         return glm::vec3(0.0f);
@@ -27,19 +29,19 @@ class Collider
     {
         return 0.0f;
     }
+    // Height of a capsule's cylinder, between the centres of its two half-spheres.
     virtual float GetHeight() const
     {
         return 0.0f;
     }
-
-  protected:
-    btCollisionShape *m_shape = nullptr;
 };
 
 class BoxCollider : public Collider
 {
   public:
-    BoxCollider(const glm::vec3 &extents);
+    explicit BoxCollider(const glm::vec3 &extents) : m_extents(extents)
+    {
+    }
     ColliderType GetType() const override
     {
         return ColliderType::Box;
@@ -56,7 +58,9 @@ class BoxCollider : public Collider
 class SphereCollider : public Collider
 {
   public:
-    SphereCollider(float radius);
+    explicit SphereCollider(float radius) : m_radius(radius)
+    {
+    }
     ColliderType GetType() const override
     {
         return ColliderType::Sphere;
@@ -73,7 +77,9 @@ class SphereCollider : public Collider
 class CapsuleCollider : public Collider
 {
   public:
-    CapsuleCollider(float radius, float height);
+    CapsuleCollider(float radius, float height) : m_radius(radius), m_height(height)
+    {
+    }
     ColliderType GetType() const override
     {
         return ColliderType::Capsule;

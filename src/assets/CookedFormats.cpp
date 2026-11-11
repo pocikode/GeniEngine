@@ -228,7 +228,10 @@ bool ReadBounds(Reader &reader, MeshBounds &bounds)
     return true;
 }
 
-bool ReadHeader(Reader &reader, uint32_t expectedMagic, const char *kind)
+bool ReadHeader(
+    Reader &reader, uint32_t expectedMagic, const char *kind, uint32_t *versionOut = nullptr,
+    uint32_t newestVersion = FormatVersion
+)
 {
     uint32_t magic = 0;
     uint32_t version = 0;
@@ -240,9 +243,13 @@ bool ReadHeader(Reader &reader, uint32_t expectedMagic, const char *kind)
     {
         return reader.Fail("not a GeniEngine cooked file (bad magic)");
     }
-    if (version != FormatVersion)
+    if (version < FormatVersion || version > newestVersion)
     {
         return reader.Fail("unsupported cooked file version");
+    }
+    if (versionOut)
+    {
+        *versionOut = version;
     }
     (void)kind;
     return true;
@@ -258,7 +265,8 @@ bool ReadMesh(const std::vector<uint8_t> &bytes, CookedMeshData &out, std::strin
         error->clear();
     }
     Reader reader(bytes, error);
-    if (!ReadHeader(reader, MeshMagic, "mesh"))
+    uint32_t version = 0;
+    if (!ReadHeader(reader, MeshMagic, "mesh", &version, MeshFormatVersion))
     {
         return false;
     }
@@ -321,6 +329,33 @@ bool ReadMesh(const std::vector<uint8_t> &bytes, CookedMeshData &out, std::strin
         out.inverseBindMatrices[i] = glm::make_mat4(values);
     }
 
+    // Version 2: LOD index ranges (docs/design/0007). Version 1 files have none, which
+    // means one LOD covering every index.
+    if (version >= 2)
+    {
+        uint32_t lodCount = 0;
+        if (!reader.U32(lodCount))
+        {
+            return false;
+        }
+        if (lodCount > MaxMeshLods)
+        {
+            return reader.Fail("mesh has too many LODs");
+        }
+        out.lods.resize(lodCount);
+        for (auto &lod : out.lods)
+        {
+            if (!reader.U32(lod.firstIndex) || !reader.U32(lod.indexCount) || !reader.Raw(&lod.error, sizeof(float)))
+            {
+                return false;
+            }
+            if (uint64_t(lod.firstIndex) + lod.indexCount > out.indices.size() || lod.indexCount == 0)
+            {
+                return reader.Fail("LOD index range is outside the index buffer");
+            }
+        }
+    }
+
     return reader.AtEnd() ? true : reader.Fail("unexpected data after the mesh");
 }
 
@@ -328,7 +363,7 @@ void WriteMesh(const CookedMeshData &data, std::vector<uint8_t> &out)
 {
     Writer writer;
     writer.U32(MeshMagic);
-    writer.U32(FormatVersion);
+    writer.U32(MeshFormatVersion);
     WriteLayout(writer, data.layout);
     writer.U32(static_cast<uint32_t>(data.topology));
     writer.U32(static_cast<uint32_t>(data.vertices.size()));
@@ -342,6 +377,13 @@ void WriteMesh(const CookedMeshData &data, std::vector<uint8_t> &out)
         writer.String(data.jointNames[i]);
         const glm::mat4 &matrix = data.inverseBindMatrices[i];
         writer.Raw(glm::value_ptr(matrix), 16 * sizeof(float));
+    }
+    writer.U32(static_cast<uint32_t>(data.lods.size()));
+    for (const auto &lod : data.lods)
+    {
+        writer.U32(lod.firstIndex);
+        writer.U32(lod.indexCount);
+        writer.Raw(&lod.error, sizeof(float));
     }
     out = std::move(writer.bytes);
 }

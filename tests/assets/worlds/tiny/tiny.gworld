@@ -1,0 +1,14 @@
+{
+  "format": "geni.world",
+  "version": 1,
+  "cellSize": 32.0,
+  "origin": [
+    -64.0,
+    0.0,
+    -64.0
+  ],
+  "cellsX": 4,
+  "cellsZ": 4,
+  "persistent": "persistent.gscene",
+  "cells": "cells"
+}

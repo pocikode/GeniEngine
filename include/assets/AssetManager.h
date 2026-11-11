@@ -5,6 +5,7 @@
 #include "assets/CookedFormats.h"
 #include "core/Log.h"
 #include "scene/components/AnimationComponent.h"
+#include "world/WorldFormat.h"
 
 #include <atomic>
 #include <cstdint>
@@ -41,6 +42,13 @@ class SceneAsset : public Asset
 {
   public:
     nlohmann::json document;
+};
+
+// A cooked world's cell table (docs/design/0007).
+class WorldAsset : public Asset
+{
+  public:
+    WorldDescription description;
 };
 
 struct AssetLoadStats
@@ -87,12 +95,17 @@ class AssetManager
     // device's deferred destruction. Returns how many assets were released. Streaming
     // calls this when it unloads a region; Engine also calls it periodically.
     size_t CollectGarbage();
+    // GPU bytes of every loaded mesh and texture: what streaming budgets
+    // (docs/design/0007) are checked against.
+    uint64_t GetResidentGpuBytes() const;
     size_t GetCachedAssetCount() const
     {
         return m_slots.size();
     }
 
     bool IsLoading() const;
+    // NotLoaded when the asset is not in the cache.
+    AssetLoadState GetState(AssetID id) const;
     AssetLoadStats GetStats() const;
 
     AssetHandle<Mesh> LoadMesh(AssetID id, bool async = false);
@@ -102,6 +115,7 @@ class AssetManager
     AssetHandle<SceneAsset> LoadScene(AssetID id, bool async = false);
     // A .gprefab document (the scene format with one root).
     AssetHandle<SceneAsset> LoadPrefab(AssetID id, bool async = false);
+    AssetHandle<WorldAsset> LoadWorld(AssetID id, bool async = false);
 
     // Makes a scene or prefab file usable before the next cook lists it: `sourcePath` is
     // relative to the assets folder. Returns the ID the cooker will give the file. The
@@ -165,6 +179,9 @@ class AssetManager
     );
     void FinishScene(
         const std::shared_ptr<Detail::AssetSlot<SceneAsset>> &slot, nlohmann::json &document, const std::string &source
+    );
+    void FinishWorld(
+        const std::shared_ptr<Detail::AssetSlot<WorldAsset>> &slot, WorldDescription &world, const std::string &source
     );
 
     // A material whose object exists but whose textures are still loading.

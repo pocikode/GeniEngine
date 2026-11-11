@@ -103,6 +103,12 @@ void Mesh::Create(
     m_layoutKey = HashLayout(layout);
     m_vertexCount = layout.stride > 0 ? (vertices.size() * sizeof(float)) / layout.stride : 0;
     m_bounds = ComputeBounds(layout, vertices);
+    m_lods.clear();
+    if (indices && !indices->empty())
+    {
+        m_lods.push_back(MeshLod{0, static_cast<uint32_t>(indices->size()), 0.0f});
+    }
+    m_gpuBytes = vertices.size() * sizeof(float) + (indices ? indices->size() * sizeof(uint32_t) : 0);
 
     rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
     if (!device)
@@ -125,6 +131,28 @@ void Mesh::Create(
             indices->data()
         );
     }
+}
+
+void Mesh::SetLods(std::vector<MeshLod> lods)
+{
+    lods.erase(
+        std::remove_if(
+            lods.begin(), lods.end(),
+            [this](const MeshLod &lod) {
+                return lod.indexCount == 0 || uint64_t(lod.firstIndex) + lod.indexCount > m_indexCount;
+            }
+        ),
+        lods.end()
+    );
+    if (lods.size() > MaxMeshLods)
+    {
+        lods.resize(MaxMeshLods);
+    }
+    if (lods.empty() && m_indexCount > 0)
+    {
+        lods.push_back(MeshLod{0, static_cast<uint32_t>(m_indexCount), 0.0f});
+    }
+    m_lods = std::move(lods);
 }
 
 Mesh::~Mesh()

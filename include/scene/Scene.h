@@ -3,6 +3,8 @@
 #include "core/Common.h"
 #include "scene/ComponentPool.h"
 #include "scene/GameObject.h"
+#include <glm/ext/vector_double3.hpp>
+#include <glm/vec3.hpp>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -71,6 +73,37 @@ class Scene
 
     std::vector<LightData> CollectLights();
 
+    // Origin rebasing (docs/design/0007). Scene coordinates are floats relative to a
+    // double-precision world origin, so a large world keeps full precision near the
+    // camera. World position = origin + scene position.
+    const glm::dvec3 &GetOrigin() const
+    {
+        return m_origin;
+    }
+    glm::dvec3 ToWorld(const glm::vec3 &scenePosition) const
+    {
+        return m_origin + glm::dvec3(scenePosition);
+    }
+    glm::vec3 ToScene(const glm::dvec3 &worldPosition) const
+    {
+        return glm::vec3(worldPosition - m_origin);
+    }
+    // Moves the origin to `newOrigin`: every root object moves by the difference so
+    // nothing changes in the world, then every component gets OnOriginShift. Called by
+    // the world streamer when the camera gets far from the origin; a new scene starts at 0.
+    void ShiftOrigin(const glm::dvec3 &newOrigin);
+    // Sets the origin without moving anything: for content that is already relative to
+    // it (a snapshot of this scene being restored after Clear).
+    void SetOrigin(const glm::dvec3 &origin)
+    {
+        m_origin = origin;
+    }
+    // How many times the origin moved (for tests and the overlay).
+    uint32_t GetOriginShiftCount() const
+    {
+        return m_originShifts;
+    }
+
     // Scene-wide component iteration. This is the system-facing API: it visits a dense
     // per-type array instead of walking the tree.
     template <typename T, typename Fn> void ForEachComponent(Fn &&fn)
@@ -106,6 +139,8 @@ class Scene
     std::unordered_map<uint64_t, GameObject *> m_objectsByID;
     uint64_t m_nextObjectID = 1;
     GameObject *m_mainCamera = nullptr;
+    glm::dvec3 m_origin{0.0};
+    uint32_t m_originShifts = 0;
 
     friend class GameObject;
 };

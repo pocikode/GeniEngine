@@ -149,6 +149,7 @@ class VulkanDevice final : public Device
     void GetBackbufferSize(uint32_t &width, uint32_t &height) const override;
     uint32_t GetUniformBufferAlignment() const override;
     std::string GetDescription() const override;
+    uint64_t GetAllocatedBytes() const override;
     Format GetDepthFormat() const override
     {
         return FromVkDepth(m_depthFormat);
@@ -308,6 +309,22 @@ class VulkanDevice final : public Device
 
     VkCommandPool m_uploadPool = VK_NULL_HANDLE;
     VkFence m_uploadFence = VK_NULL_HANDLE;
+
+    // Initial data for GPU-only buffers created between frames: copied at the start of the
+    // next frame's command buffer instead of a submit-and-wait per buffer, so streaming
+    // meshes in costs no CPU stall (docs/design/0007).
+    struct PendingUpload
+    {
+        VkBuffer staging = VK_NULL_HANDLE;
+        VmaAllocation stagingAllocation = VK_NULL_HANDLE;
+        VkBuffer destination = VK_NULL_HANDLE;
+        VkDeviceSize size = 0;
+    };
+    std::vector<PendingUpload> m_pendingUploads;
+    // Records the pending copies into `cmd`, followed by a barrier for every later read.
+    void RecordPendingUploads(VkCommandBuffer cmd);
+    // Submits the pending copies now and waits (before an operation that needs them done).
+    void FlushPendingUploads();
 
     std::vector<VkDescriptorPool> m_descriptorPools;
     std::vector<PendingDestroy> m_pendingDestroys;

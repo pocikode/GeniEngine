@@ -35,8 +35,15 @@ else()
 endif()
 add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty/astc-encoder ${CMAKE_BINARY_DIR}/astc-encoder EXCLUDE_FROM_ALL)
 
+# meshoptimizer: mesh LODs and HLOD simplification (docs/design/0007). Cooker only.
+geni_require_submodules(meshoptimizer)
+add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty/meshoptimizer ${CMAKE_BINARY_DIR}/meshoptimizer EXCLUDE_FROM_ALL)
+
 add_library(geni_cook STATIC
   asset_cooker/Cooker.cpp
+  asset_cooker/MeshProcessing.cpp
+  asset_cooker/WorldCooker.cpp
+  ${PROJECT_SOURCE_DIR}/src/world/WorldFormat.cpp
   asset_cooker/Ktx2Writer.cpp
   asset_cooker/TextureCooker.cpp
   ${PROJECT_SOURCE_DIR}/src/assets/AssetID.cpp
@@ -63,7 +70,7 @@ if(NOT MSVC)
     ${PROJECT_SOURCE_DIR}/thirdparty/bc7enc_rdo/rgbcx.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-strict-aliasing;-w")
 endif()
-target_link_libraries(geni_cook PRIVATE astcenc-${GENI_ASTCENC_ISA}-static)
+target_link_libraries(geni_cook PRIVATE astcenc-${GENI_ASTCENC_ISA}-static meshoptimizer)
 target_include_directories(geni_cook PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
 add_executable(geni_asset_cooker asset_cooker/main.cpp)
@@ -77,7 +84,7 @@ function(geni_cook_assets target source_dir output_dir)
     "${source_dir}/*.gltf" "${source_dir}/*.glb"
     "${source_dir}/*.png" "${source_dir}/*.jpg" "${source_dir}/*.jpeg"
     "${source_dir}/*.bin" "${source_dir}/*.meta"
-    "${source_dir}/*.gscene" "${source_dir}/*.gprefab")
+    "${source_dir}/*.gscene" "${source_dir}/*.gprefab" "${source_dir}/*.gworld")
   set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}_assets.stamp")
   add_custom_command(OUTPUT "${stamp}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${source_dir}" "${output_dir}"

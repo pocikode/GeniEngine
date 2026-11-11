@@ -27,7 +27,7 @@ function(geni_require_submodules)
   endif()
 
   message(STATUS "Fetching git submodules: ${missing}")
-  # Shallow first: the pinned commits are all that is needed, and bullet3's history is large.
+  # Shallow first: the pinned commits are all that is needed, and some histories are large.
   execute_process(
     COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --depth 1 -- ${missing}
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

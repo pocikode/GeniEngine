@@ -1,5 +1,7 @@
 #include "Cooker.h"
+#include "MeshProcessing.h"
 #include "TextureCooker.h"
+#include "WorldCooker.h"
 
 #include "assets/AssetID.h"
 #include "assets/CookedFormats.h"
@@ -227,6 +229,7 @@ struct Cooker::Impl
     std::map<std::pair<const cgltf_image *, TextureUsage>, AssetID> imageCache;
     std::unordered_map<std::string, SourceMeta> metaCache;
     bool fullCook = false;
+    std::unordered_map<uint64_t, nlohmann::json> prefabDocuments;
 
     bool Fail(const std::string &message)
     {
@@ -776,6 +779,8 @@ struct Cooker::Impl
             }
         }
         cooked.topology = rhi::PrimitiveTopology::TriangleList;
+        // Vertex cache and fetch order plus the LOD chain (docs/design/0007).
+        OptimizeAndBuildLods(cooked);
         cooked.bounds = ComputeBounds(layout, cooked.vertices);
 
         if (skinned && node->skin)
@@ -1259,6 +1264,11 @@ struct Cooker::Impl
             {
                 return Fail(relative + ": a prefab needs a root node");
             }
+            if (type == AssetType::Prefab)
+            {
+                // Worlds expand prefabs to count nodes and build HLODs.
+                prefabDocuments[AssetID::FromName("prefab:" + RootName(relative)).value] = document;
+            }
         }
         catch (const std::exception &e)
         {
@@ -1286,6 +1296,61 @@ struct Cooker::Impl
         entry.source = normalized;
         entry.path = normalized;
         return AddManifest(std::move(entry));
+    }
+
+    struct WorldHost : WorldCookHost
+    {
+        Impl &impl;
+        std::unordered_map<uint64_t, std::string> paths;
+        explicit WorldHost(Impl &owner) : impl(owner)
+        {
+            for (const auto &entry : impl.manifest)
+            {
+                paths[entry.id.value] = entry.path;
+            }
+        }
+        const std::filesystem::path &SourceRoot() const override
+        {
+            return impl.options.sourceRoot;
+        }
+        const std::filesystem::path &OutputRoot() const override
+        {
+            return impl.options.outputRoot;
+        }
+        std::string RootName(const std::string &relative) override
+        {
+            return impl.RootName(relative);
+        }
+        bool AddAsset(const WorldCookAsset &asset) override
+        {
+            ManifestEntry entry;
+            entry.id = asset.id;
+            entry.type = asset.type;
+            entry.source = asset.source;
+            entry.path = asset.path;
+            paths[asset.id.value] = asset.path;
+            return impl.AddManifest(std::move(entry));
+        }
+        std::string FindCookedPath(AssetID id) const override
+        {
+            const auto it = paths.find(id.value);
+            return it == paths.end() ? std::string() : it->second;
+        }
+        const nlohmann::json *FindPrefab(AssetID id) const override
+        {
+            const auto it = impl.prefabDocuments.find(id.value);
+            return it == impl.prefabDocuments.end() ? nullptr : &it->second;
+        }
+        bool Fail(const std::string &message) override
+        {
+            return impl.Fail(message);
+        }
+    };
+
+    bool CookWorldFile(const std::string &relative)
+    {
+        WorldHost host(*this);
+        return CookWorld(host, Normalize(relative));
     }
 
     // Deletes files under <output>/cooked that this cook did not write (the manifest lists
@@ -1380,7 +1445,7 @@ struct Cooker::Impl
                 return static_cast<char>(std::tolower(c));
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
-                extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab")
+                extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1446,6 +1511,15 @@ struct Cooker::Impl
                 return false;
             }
             if (extension == ".gprefab" && !CookSceneFile(input, AssetType::Prefab, "geni.prefab"))
+            {
+                return false;
+            }
+        }
+
+        // Worlds last: their cells and prefabs are cooked by now (docs/design/0007).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".gworld" && !CookWorldFile(input))
             {
                 return false;
             }

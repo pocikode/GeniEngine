@@ -28,6 +28,19 @@ struct MeshBounds
     float radius = 0.0f;
 };
 
+// One level of detail: a range of the mesh's index buffer (all LODs share the vertices).
+// `error` is the simplification error in model units, 0 for the full mesh; the renderer
+// projects it to pixels to choose a LOD.
+struct MeshLod
+{
+    uint32_t firstIndex = 0;
+    uint32_t indexCount = 0;
+    float error = 0.0f;
+};
+
+// The most LODs a mesh carries (the full mesh plus three simplified ones).
+constexpr uint32_t MaxMeshLods = 4;
+
 // Vertex (and optionally index) data on the GPU, with the layout and primitive type
 // pipelines are built for.
 class Mesh : public Asset
@@ -94,6 +107,20 @@ class Mesh : public Asset
     {
         return m_inverseBindMatrices;
     }
+    // Levels of detail, finest first. Always at least one when the mesh has indices.
+    const std::vector<MeshLod> &GetLods() const
+    {
+        return m_lods;
+    }
+    // Replaces the LOD table (ranges must lie inside the index buffer). An empty table
+    // means one LOD covering every index.
+    void SetLods(std::vector<MeshLod> lods);
+    // Bytes of vertex and index data on the GPU.
+    uint64_t GetGpuBytes() const
+    {
+        return m_gpuBytes;
+    }
+
     void SetSkinData(std::vector<std::string> jointNames, std::vector<glm::mat4> inverseBindMatrices)
     {
         m_jointNames = std::move(jointNames);
@@ -119,6 +146,8 @@ class Mesh : public Asset
     uint64_t m_layoutKey = 0;
     VertexLayout m_vertexLayout;
     MeshBounds m_bounds;
+    std::vector<MeshLod> m_lods;
+    uint64_t m_gpuBytes = 0;
     std::vector<std::string> m_jointNames;
     std::vector<glm::mat4> m_inverseBindMatrices;
 };

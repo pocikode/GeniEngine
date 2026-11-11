@@ -11,6 +11,7 @@
 #include "render/Renderer.h"
 #include "rhi/Device.h"
 #include "scene/Scene.h"
+#include "world/WorldStreamer.h"
 #include <chrono>
 #include <glm/ext/vector_int2.hpp>
 #include <glm/mat4x4.hpp>
@@ -65,6 +66,8 @@ struct EngineConfig
     std::string logFile;
     // Renderer v1 quality and art direction (MSAA, cascades, clusters, sky).
     RendererConfig renderer;
+    // World streaming radii and memory budgets (docs/design/0007), per platform.
+    StreamingBudget streaming = StreamingBudget::ForPlatform(StreamingBudget::CurrentPlatform());
 };
 
 // A camera that replaces the scene's main camera for rendering: the editor's own view
@@ -133,6 +136,19 @@ class Engine
     void SetScene(Scene *scene);
     Scene *GetScene();
 
+    // Streams a cooked world into the current scene (created if there is none) around the
+    // main camera, with EngineConfig::streaming as the budget (docs/design/0007). The
+    // scene is cleared and the world's persistent scene loaded into it. The streamer runs
+    // once per frame in Simulate, after assets update and before Application::Update.
+    bool OpenWorld(AssetID world, std::string *error = nullptr);
+    // The same, from the .gworld file's path relative to the assets folder.
+    bool OpenWorld(const std::string &sourcePath, std::string *error = nullptr);
+    void CloseWorld();
+    WorldStreamer &GetWorldStreamer()
+    {
+        return m_worldStreamer;
+    }
+
     // Renders with this camera instead of the scene's main camera until cleared.
     void SetViewOverride(const ViewOverride &view);
     void ClearViewOverride();
@@ -170,6 +186,8 @@ class Engine
     FileSystem m_fileSystem;
     TextureManager m_textureManager;
     AssetManager m_assetManager;
+    WorldStreamer m_worldStreamer;
+    StreamingBudget m_streamingBudget;
     uint32_t m_framesSinceAssetCollection = 0;
     std::unique_ptr<JobSystem> m_jobSystem;
     PhysicsManager m_physicsManager;

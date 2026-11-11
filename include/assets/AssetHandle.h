@@ -32,6 +32,9 @@ struct AssetSlotBase
     std::string path;
     std::string source;
     int64_t fileTime = 0;
+    // GPU memory the asset holds (vertex and index buffers, texture levels); 0 for assets
+    // without GPU data. AssetManager::GetResidentGpuBytes sums it.
+    uint64_t gpuBytes = 0;
     // Re-reads the file and swaps the new object into this slot. Set by AssetManager.
     std::function<bool()> reload;
     virtual ~AssetSlotBase() = default;

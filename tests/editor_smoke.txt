@@ -83,4 +83,22 @@ expect dirty 0
 open scenes/copy.gscene
 expect objects 10104
 
+# A streamed world, edited one region of cells at a time (M5). Moving the ground of cell
+# 7,7 300 m east puts it in cell 8,7 when the region is saved.
+world worlds/metro/metro.gworld
+expect cells 0
+region 7 7 8 8
+expect cells 4
+expect cell 7 7 5
+select Ground
+move 300 0 0
+expect dirty 1
+save
+expect dirty 0
+expect cell 7 7 4
+expect cell 8 7 6
+region 8 7 8 7
+expect cells 1
+expect cell 8 7 6
+
 quit

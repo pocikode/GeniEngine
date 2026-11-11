@@ -55,6 +55,9 @@ struct RendererConfig
     glm::vec3 fogColor{0.44f, 0.55f, 0.70f};
     float fogDensity = 0.0018f;
     float ambientIntensity = 0.15f;
+    // Mesh LOD selection (docs/design/0007): each object draws the coarsest LOD whose
+    // simplification error projects to at most this many pixels. 0 always draws LOD 0.
+    float lodErrorPixels = 1.0f;
 };
 
 // The part of the backbuffer the scene is drawn into, in pixels from the top-left corner.
@@ -81,6 +84,8 @@ struct RenderStats
     uint32_t instances = 0;
     uint32_t clusteredLights = 0;
     uint32_t overflowLights = 0;
+    // Visible instances drawn at each LOD (index 0 is the full mesh).
+    std::array<uint32_t, MaxMeshLods> lodInstances{};
 };
 
 // Turns the frame's render commands into the renderer-v1 frame: cascaded shadows, an HDR
@@ -192,6 +197,10 @@ class Renderer
         const Material *material = nullptr;
         const Mesh *mesh = nullptr;
         bool skinned = false;
+        // LOD and the index range it draws (indexCount 0: non-indexed mesh).
+        uint32_t lod = 0;
+        uint32_t firstIndex = 0;
+        uint32_t indexCount = 0;
         uint32_t instanceIndex = 0;
         uint32_t boneOffset = 0;
         float distance = 0.0f;
@@ -232,6 +241,8 @@ class Renderer
     void CreateFrameBindGroup(FrameResources &frame);
 
     void PrepareFrame(FrameResources &frame, const CameraData &camera, const std::vector<LightData> &lights);
+    // Chooses the item's LOD from its projected simplification error.
+    void SelectLod(DrawItem &item, float pixelsPerUnitAtOneMetre) const;
     // Shadow, HDR scene passes. False when nothing was drawn (resources missing).
     bool RenderScene(
         rhi::CommandList &cmd, const std::vector<RenderCommand> &commands, const CameraData &camera,
@@ -294,6 +305,9 @@ class Renderer
     std::vector<ShaderInterface::GpuLight> m_clusteredLights;
     std::vector<ShaderInterface::ClusterRange> m_clusters;
     std::vector<uint32_t> m_clusterIndices;
+    // Camera-relative rendering (docs/design/0007): everything uploaded this frame is
+    // relative to this point, the camera position, so shaders see the camera at zero.
+    glm::vec3 m_renderOrigin{0.0f};
 };
 
 } // namespace Geni

@@ -148,6 +148,28 @@ The point where other people can start using the engine.
 
 ### M5: World streaming (Feb – Sep 2029, about 270 h)
 
+**Status (2026-11-11):** implemented; design pages `docs/design/0007-world-streaming.md`
+and `docs/design/0008-physics-on-jolt.md`. `samples/city --world` streams
+`worlds/metro`, a 4 km × 4 km world of 16 × 16 cells of 256 m built from district prefabs
+(128,064 objects in total, about 1.3 MB of scene files). The cooker builds up to three
+mesh LODs per mesh and one HLOD per cell with meshoptimizer; the renderer picks LODs by
+projected error and renders camera-relative; the scene rebases its origin to the nearest
+cell corner every kilometre; physics is Jolt in double precision with each cell's
+collision added and removed in batches; `StreamingBudget` holds per-platform radii and
+memory budgets, shown in the debug overlay; the editor opens a `.gworld` and edits a
+region of cells at a time. Flying the full 5 km diagonal at 40 m/s (`city --world --route`,
+release, 1280×720, Apple M4): 8.3 ms mean, 9.7 ms p99, 18 ms slowest frame, no cell loaded
+late, at most 10,383 objects and 32 MiB of resident assets against a desktop budget of
+60,000 and 768 MiB; with the mobile budget (15,000 objects, 256 MiB) 6,588 objects and
+19 MiB, still with no late cell. Getting there needed one engine change outside the plan:
+GPU buffers made between frames are now uploaded inside the next frame instead of a
+blocking submit each, which removed 10–30 ms upload stalls. Bullet is gone; the sandbox's
+falling-crate screenshot was recaptured for Jolt. Tested on macOS (MoltenVK, validation
+layers on) in debug and release: `benchmark_world`, `screenshot_world`, the world cases in
+`geni_tests`, the cooker and editor tests, and the editor smoke session, which now edits a
+region of the metro world. Open until CI has run green on macOS, Windows and Linux, and
+until the flight has been measured on a Windows GPU and the Steam Deck.
+
 The engine's specialty.
 
 - World partitioned into grid cells that load and unload around the camera

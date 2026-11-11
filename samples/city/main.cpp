@@ -19,6 +19,13 @@
 //   --hidden         do not show the window
 //   --width/--height  window size (default 1280x720)
 //   --screenshot F   save the last frame as PNG (.png) or PPM
+//
+// World mode (ROADMAP M5): city --world [FILE] [--route] [--speed M/S] [--distance M]
+//             [--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--frames N]
+//             [--hidden] [--width W] [--height H] [--screenshot FILE]
+//   streams worlds/metro/metro.gworld (or FILE) around a flying camera; see WorldMode.cpp.
+
+#include "WorldMode.h"
 
 #include <geni.h>
 
@@ -238,8 +245,93 @@ class CityApp : public Geni::Application
 
 } // namespace
 
+namespace
+{
+// Arguments of `city --world`. Returns -1 when they parse, otherwise an exit code.
+int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        const char *arg = argv[i];
+        const bool hasValue = i + 1 < argc;
+        if (std::strcmp(arg, "--world") == 0)
+        {
+            if (hasValue && argv[i + 1][0] != '-')
+            {
+                options.world = argv[++i];
+            }
+        }
+        else if (std::strcmp(arg, "--route") == 0)
+        {
+            options.route = true;
+        }
+        else if (std::strcmp(arg, "--speed") == 0 && hasValue)
+        {
+            options.speed = std::strtod(argv[++i], nullptr);
+        }
+        else if (std::strcmp(arg, "--distance") == 0 && hasValue)
+        {
+            options.distance = std::strtod(argv[++i], nullptr);
+        }
+        else if (std::strcmp(arg, "--altitude") == 0 && hasValue)
+        {
+            options.altitude = std::strtod(argv[++i], nullptr);
+        }
+        else if (std::strcmp(arg, "--hitch-ms") == 0 && hasValue)
+        {
+            options.hitchMs = std::strtod(argv[++i], nullptr);
+        }
+        else if (std::strcmp(arg, "--platform") == 0 && hasValue)
+        {
+            options.platform = argv[++i];
+        }
+        else if (std::strcmp(arg, "--frames") == 0 && hasValue)
+        {
+            options.frames = std::strtol(argv[++i], nullptr, 10);
+        }
+        else if (std::strcmp(arg, "--hidden") == 0 || std::strcmp(arg, "--no-overlay") == 0)
+        {
+            options.hidden = true;
+        }
+        else if (std::strcmp(arg, "--width") == 0 && hasValue)
+        {
+            options.width = static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+        }
+        else if (std::strcmp(arg, "--height") == 0 && hasValue)
+        {
+            options.height = static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+        }
+        else if (std::strcmp(arg, "--screenshot") == 0 && hasValue)
+        {
+            options.screenshotPath = argv[++i];
+        }
+        else
+        {
+            GENI_LOG_ERROR(
+                "Unknown argument '%s'. Usage: city --world [FILE] [--route] [--speed M/S] [--distance M] "
+                "[--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--frames N] [--hidden] "
+                "[--width W] [--height H] [--screenshot FILE]",
+                arg
+            );
+            return 2;
+        }
+    }
+    return -1;
+}
+} // namespace
+
 int main(int argc, char **argv)
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--world") == 0)
+        {
+            WorldOptions worldOptions;
+            const int code = ParseWorldOptions(argc, argv, worldOptions);
+            return code >= 0 ? code : RunWorld(worldOptions);
+        }
+    }
+
     Options options;
     for (int i = 1; i < argc; ++i)
     {

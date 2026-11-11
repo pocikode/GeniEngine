@@ -190,6 +190,16 @@ void CreateNodeComponents(GameObject &object, const nlohmann::json &node, Serial
 
 bool ExpandPrefab(GameObject &instance, SerializationContext &context, int depth);
 
+size_t CountDescendants(const GameObject &object)
+{
+    size_t count = 0;
+    for (const auto &child : object.GetChildren())
+    {
+        count += 1 + CountDescendants(*child);
+    }
+    return count;
+}
+
 // Fills `instance` from a prefab document: the document's first node is the instance
 // itself (only its components are taken; the instance keeps its own name and transform),
 // every other node becomes a descendant flagged FromPrefab.
@@ -560,6 +570,10 @@ void SceneInstantiation::CreateComponents(size_t &budget)
         if (object.IsPrefabInstance())
         {
             ExpandPrefab(object, m_context, 0);
+            // Charge the objects the prefab created against the budget (the loop takes
+            // one more), so a node budget bounds the work per Step.
+            const size_t created = CountDescendants(object);
+            budget = budget > created + 1 ? budget - created : 1;
         }
         else
         {
@@ -574,7 +588,7 @@ void SceneInstantiation::CreateComponents(size_t &budget)
 
 void SceneInstantiation::Finish()
 {
-    const int cameraIndex = m_document.value("mainCamera", -1);
+    const int cameraIndex = m_applyMainCamera ? m_document.value("mainCamera", -1) : -1;
     if (cameraIndex >= 0 && cameraIndex < static_cast<int>(m_objects.size()))
     {
         m_scene.SetMainCamera(m_objects[static_cast<size_t>(cameraIndex)]);

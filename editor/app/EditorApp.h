@@ -55,6 +55,7 @@ class EditorApp : public Application
         None,
         NewScene,
         OpenScene,
+        OpenWorld,
         Quit
     };
 
@@ -78,6 +79,8 @@ class EditorApp : public Application
     bool DrawProperty(GameObject &object, int index, Component &component, const PropertyDesc &property);
     void DrawAssets();
     void DrawConsole();
+    // A world's cell grid: pick a region and load it (docs/design/0007).
+    void DrawWorldPanel();
     void ActivateAsset(AssetID id, const glm::vec3 *position = nullptr);
 
     // --- Viewport (EditorViewport.cpp) ---
@@ -92,6 +95,8 @@ class EditorApp : public Application
     void RequestAction(PendingAction action, const std::string &path = std::string());
     void PerformAction(PendingAction action, const std::string &path);
     bool OpenAssetPath(const std::string &assetPath);
+    bool OpenWorldAssetPath(const std::string &assetPath);
+    bool LoadRegion(int x0, int z0, int x1, int z1);
     bool SaveToAssetPath(const std::string &assetPath);
     void SaveOrAsk();
     void TogglePlay();
@@ -153,6 +158,9 @@ class EditorApp : public Application
     bool m_openConfirm = false;
     bool m_openSaveAs = false;
     bool m_openOpen = false;
+    bool m_openWorld = false;
+    // World panel: the region being picked (cell coordinates, inclusive).
+    int m_regionPick[4] = {0, 0, 1, 1};
     bool m_openPrefab = false;
     bool m_openGrid = false;
     char m_pathBuffer[512] = "";

@@ -42,6 +42,27 @@ struct FrameStats
     int assetsLoaded = 0;
     int assetsPending = 0;
     double assetBytes = 0.0;
+    // M5: memory (docs/design/0007).
+    double residentGpuBytes = 0.0;  // meshes and textures held by the asset manager
+    double gpuAllocatedBytes = 0.0; // everything the device allocated
+    double gpuBudgetBytes = 0.0;    // the streaming budget for resident assets
+    // Instances drawn per mesh LOD (0 = full detail).
+    int lodInstances[4] = {0, 0, 0, 0};
+    // World streaming; only filled while a world is open.
+    bool worldOpen = false;
+    int cellsLoaded = 0;
+    int cellsLoading = 0;
+    int cellsUnloading = 0;
+    int hlodCells = 0;
+    int loadedNodes = 0;
+    int maxLoadedNodes = 0;
+    bool streamingBudgetLimited = false;
+    double streamingMs = 0.0;
+    int lateStreamingFrames = 0;
+    double worldOrigin[3] = {0.0, 0.0, 0.0};
+    double cameraWorld[3] = {0.0, 0.0, 0.0};
+    float loadRadius = 0.0f;
+    float hlodRadius = 0.0f;
 };
 
 // Dear ImGui integration plus a built-in stats and log window (toggle with F1).
@@ -72,6 +93,7 @@ class DebugOverlay
 
   private:
     void DrawStatsWindow(const FrameStats &stats);
+    void DrawStreamingSection(const FrameStats &stats);
 
   private:
     rhi::Device *m_device = nullptr;

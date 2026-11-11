@@ -106,6 +106,25 @@ void Scene::Update(float deltaTime, SceneUpdateMode mode)
     }
 }
 
+void Scene::ShiftOrigin(const glm::dvec3 &newOrigin)
+{
+    const glm::vec3 offset(newOrigin - m_origin);
+    m_origin = newOrigin;
+    ++m_originShifts;
+    if (offset == glm::vec3(0.0f))
+    {
+        return;
+    }
+    for (auto &object : m_objects)
+    {
+        object->SetPosition(object->GetPosition() - offset);
+    }
+    for (auto &[typeID, pool] : m_componentPools)
+    {
+        pool->ForEach<Component>([&](Component &component) { component.OnOriginShift(offset); });
+    }
+}
+
 void Scene::Clear()
 {
     m_objects.clear();
@@ -116,6 +135,7 @@ void Scene::Clear()
     m_componentPools.clear();
     m_objectsByID.clear();
     m_mainCamera = nullptr;
+    m_origin = glm::dvec3(0.0);
 }
 
 void Scene::AdoptObject(GameObject *obj)

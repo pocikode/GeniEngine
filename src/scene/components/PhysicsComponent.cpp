@@ -3,6 +3,7 @@
 #include "physics/RigidBody.h"
 #include "scene/GameObject.h"
 #include "scene/Reflection.h"
+#include "scene/Scene.h"
 
 namespace Geni
 {
@@ -80,11 +81,16 @@ void PhysicsComponent::Init()
         m_rigidBody = std::make_shared<RigidBody>(m_bodyType, collider, m_mass, m_friction);
     }
 
-    const auto pos = m_owner->GetWorldPosition();
-    const auto rot = m_owner->GetRotation();
-
-    m_rigidBody->SetPosition(pos);
-    m_rigidBody->SetRotation(rot);
+    // Bodies live in world coordinates (docs/design/0008): add the scene's origin, so an
+    // origin shift never has to move them. The collider is sized in the object's space.
+    const glm::mat4 world = m_owner->GetWorldTransform();
+    const Scene *scene = m_owner->GetScene();
+    const glm::vec3 position(world[3]);
+    m_rigidBody->SetScale(
+        glm::vec3(glm::length(glm::vec3(world[0])), glm::length(glm::vec3(world[1])), glm::length(glm::vec3(world[2])))
+    );
+    m_rigidBody->SetWorldPosition(scene ? scene->ToWorld(position) : glm::dvec3(position));
+    m_rigidBody->SetRotation(m_owner->GetWorldRotation());
 
     Engine::GetInstance().GetPhysicsManager().AddRigidBody(m_rigidBody.get());
 }
@@ -99,8 +105,18 @@ void PhysicsComponent::Update(float deltaTime)
 
     if (m_rigidBody->GetType() == BodyType::Dynamic)
     {
-        m_owner->SetPosition(m_rigidBody->GetPosition());
-        m_owner->SetRotation(m_rigidBody->GetRotation());
+        const Scene *scene = m_owner->GetScene();
+        const glm::dvec3 world = m_rigidBody->GetWorldPosition();
+        glm::vec3 position = scene ? scene->ToScene(world) : glm::vec3(world);
+        glm::quat rotation = m_rigidBody->GetRotation();
+        if (GameObject *parent = m_owner->GetParent())
+        {
+            // The body's transform is in the world; the object's is local to its parent.
+            position = glm::vec3(glm::inverse(parent->GetWorldTransform()) * glm::vec4(position, 1.0f));
+            rotation = glm::inverse(parent->GetWorldRotation()) * rotation;
+        }
+        m_owner->SetPosition(position);
+        m_owner->SetRotation(rotation);
     }
 }
 

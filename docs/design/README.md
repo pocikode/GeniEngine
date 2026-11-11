@@ -12,6 +12,8 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0004 | [Jobs, assets and the cooker](0004-jobs-and-assets.md) | M3 | Done |
 | 0005 | [Scene storage and serialization](0005-scene-storage-and-serialization.md) | M3 | Done |
 | 0006 | [Editor v1](0006-editor.md) | M4 | Done |
+| 0007 | [World streaming](0007-world-streaming.md) | M5 | Done |
+| 0008 | [Physics on Jolt](0008-physics-on-jolt.md) | M5 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <glm/vec3.hpp>
 namespace Geni
 {
 
@@ -27,6 +28,14 @@ class Component
     virtual void ResolveAssets(SerializationContext &context)
     {
         (void)context;
+    }
+
+    // The scene's origin moved by `offset` (Scene::ShiftOrigin, docs/design/0007): every
+    // root object has already been moved by -offset. A component that stores a position
+    // in scene space outside its object's transform (a camera target) moves it too.
+    virtual void OnOriginShift(const glm::vec3 &offset)
+    {
+        (void)offset;
     }
 
     GameObject *GetOwner();

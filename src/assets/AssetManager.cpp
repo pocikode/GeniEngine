@@ -36,6 +36,12 @@ bool DecodeScene(const std::vector<uint8_t> &bytes, nlohmann::json &out, std::st
     }
 }
 
+bool DecodeWorld(const std::vector<uint8_t> &bytes, WorldDescription &out, std::string *error)
+{
+    nlohmann::json document;
+    return DecodeScene(bytes, document, error) && ParseCookedWorld(document, out, error);
+}
+
 int64_t FileTime(const std::filesystem::path &path)
 {
     std::error_code ec;
@@ -215,6 +221,25 @@ AssetLoadStats AssetManager::GetStats() const
     stats.pending = m_pending.load(std::memory_order_acquire);
     stats.failed = m_failed.load(std::memory_order_acquire);
     return stats;
+}
+
+AssetLoadState AssetManager::GetState(AssetID id) const
+{
+    const auto it = m_slots.find(id.value);
+    return it == m_slots.end() ? AssetLoadState::NotLoaded : it->second->state.load(std::memory_order_acquire);
+}
+
+uint64_t AssetManager::GetResidentGpuBytes() const
+{
+    uint64_t total = 0;
+    for (const auto &[id, slot] : m_slots)
+    {
+        if (slot->state.load(std::memory_order_acquire) == AssetLoadState::Ready)
+        {
+            total += slot->gpuBytes;
+        }
+    }
+    return total;
 }
 
 size_t AssetManager::CollectGarbage()
@@ -467,6 +492,29 @@ AssetHandle<SceneAsset> AssetManager::LoadPrefab(AssetID id, bool async)
     );
 }
 
+AssetHandle<WorldAsset> AssetManager::LoadWorld(AssetID id, bool async)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    const bool valid = entry && entry->type == AssetType::World;
+    return StartLoad<WorldAsset, WorldDescription>(
+        id, AssetType::World, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
+        &DecodeWorld, &AssetManager::FinishWorld
+    );
+}
+
+void AssetManager::FinishWorld(
+    const std::shared_ptr<Detail::AssetSlot<WorldAsset>> &slot, WorldDescription &world, const std::string &source
+)
+{
+    auto asset = std::make_shared<WorldAsset>();
+    asset->description = std::move(world);
+    asset->SetAssetID(slot->id);
+    asset->SetSourcePath(source);
+    slot->asset = std::move(asset);
+    MarkReady(*slot);
+    m_pending.fetch_sub(1, std::memory_order_acq_rel);
+}
+
 AssetID AssetManager::RegisterSourceAsset(AssetType type, const std::string &sourcePath)
 {
     FindEntry(AssetID{}); // the manifest first, so the registration lands on top of it
@@ -606,6 +654,8 @@ void AssetManager::FinishMesh(
     mesh->SetAssetID(slot->id);
     mesh->SetSourcePath(source);
     mesh->SetSkinData(data.jointNames, data.inverseBindMatrices);
+    mesh->SetLods(data.lods);
+    slot->gpuBytes = mesh->GetGpuBytes();
 
     slot->asset = std::move(mesh);
     MarkReady(*slot);
@@ -625,6 +675,12 @@ void AssetManager::FinishTexture(
     }
     texture->SetAssetID(slot->id);
     texture->SetSourcePath(source);
+    uint64_t bytes = 0;
+    for (const auto &level : image.levels)
+    {
+        bytes += level.size();
+    }
+    slot->gpuBytes = bytes;
     slot->asset = std::move(texture);
     MarkReady(*slot);
     m_pending.fetch_sub(1, std::memory_order_acq_rel);

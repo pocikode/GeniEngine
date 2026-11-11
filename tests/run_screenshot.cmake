@@ -2,6 +2,7 @@
 #
 # Inputs (-D): SAMPLE (executable), FRAMES, REFERENCE (png), COMPARE (image_compare),
 # OUT_DIR (where the capture and, on failure, the diff are written), and optionally
+# SAMPLE_ARGS (a list of arguments before the standard ones),
 # TOLERANCE (per-channel, default 8) and MAX_FRACTION (default 0.005). Denser scenes may
 # allow a slightly larger tolerance because another driver's MSAA/PCF edges move.
 
@@ -16,7 +17,7 @@ set(diff "${OUT_DIR}/${name}_diff.png")
 file(REMOVE "${actual}" "${diff}")
 
 execute_process(
-  COMMAND "${SAMPLE}" --hidden --no-overlay --frames ${FRAMES} --screenshot "${actual}"
+  COMMAND "${SAMPLE}" ${SAMPLE_ARGS} --hidden --no-overlay --frames ${FRAMES} --screenshot "${actual}"
   RESULT_VARIABLE result
 )
 if(NOT result EQUAL 0)

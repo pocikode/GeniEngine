@@ -123,6 +123,8 @@ class Device
     // Required alignment of dynamic offsets and of uniform buffer binding offsets.
     virtual uint32_t GetUniformBufferAlignment() const = 0;
     virtual std::string GetDescription() const = 0;
+    // Bytes of GPU memory currently allocated for buffers and images (all heaps).
+    virtual uint64_t GetAllocatedBytes() const = 0;
     // The depth format the device's swapchain depth buffer uses; renderer-created depth
     // targets should use the same one.
     virtual Format GetDepthFormat() const = 0;

@@ -159,6 +159,7 @@ bool Engine::Init(const EngineConfig &config)
     }
 
     m_physicsManager.Init();
+    m_streamingBudget = config.streaming;
 
     m_jobSystem = std::make_unique<JobSystem>(config.jobThreadCount);
     m_assetManager.Init(&m_fileSystem, m_jobSystem.get(), &m_renderer);
@@ -276,6 +277,9 @@ void Engine::Simulate(double frameSeconds)
 
     // Finish asset decodes and GPU uploads before the application sees the frame.
     m_assetManager.Update();
+    // World streaming (docs/design/0007): uses last frame's camera, so cells it activates
+    // now are drawn by this frame's Application::Update.
+    m_worldStreamer.Update();
     // Release cached assets nothing uses any more. Cheap (one pass over the cache), but
     // there is no reason to do it every frame.
     if (++m_framesSinceAssetCollection >= 240)
@@ -305,6 +309,32 @@ void Engine::Simulate(double frameSeconds)
     m_frameStats.assetsLoaded = static_cast<int>(assetStats.assetsLoaded);
     m_frameStats.assetsPending = static_cast<int>(assetStats.pending);
     m_frameStats.assetBytes = static_cast<double>(assetStats.bytesLoaded);
+    m_frameStats.residentGpuBytes = static_cast<double>(m_assetManager.GetResidentGpuBytes());
+    m_frameStats.gpuBudgetBytes = static_cast<double>(m_streamingBudget.gpuMemoryBytes);
+    m_frameStats.worldOpen = m_worldStreamer.IsOpen();
+    if (m_worldStreamer.IsOpen())
+    {
+        const StreamingStats &streaming = m_worldStreamer.GetStats();
+        const StreamingBudget &budget = m_worldStreamer.GetBudget();
+        m_frameStats.cellsLoaded = static_cast<int>(streaming.cellsLoaded);
+        m_frameStats.cellsLoading = static_cast<int>(streaming.cellsLoading);
+        m_frameStats.cellsUnloading = static_cast<int>(streaming.cellsUnloading);
+        m_frameStats.hlodCells = static_cast<int>(streaming.hlodCells);
+        m_frameStats.loadedNodes = static_cast<int>(streaming.loadedNodes);
+        m_frameStats.maxLoadedNodes = static_cast<int>(budget.maxLoadedNodes);
+        m_frameStats.gpuBudgetBytes = static_cast<double>(budget.gpuMemoryBytes);
+        m_frameStats.streamingBudgetLimited = streaming.budgetLimited;
+        m_frameStats.streamingMs = streaming.updateMs;
+        m_frameStats.lateStreamingFrames = static_cast<int>(streaming.lateFrames);
+        m_frameStats.worldOrigin[0] = streaming.origin.x;
+        m_frameStats.worldOrigin[1] = streaming.origin.y;
+        m_frameStats.worldOrigin[2] = streaming.origin.z;
+        m_frameStats.cameraWorld[0] = streaming.focus.x;
+        m_frameStats.cameraWorld[1] = streaming.focus.y;
+        m_frameStats.cameraWorld[2] = streaming.focus.z;
+        m_frameStats.loadRadius = budget.loadRadius;
+        m_frameStats.hlodRadius = budget.hlodRadius;
+    }
 
     m_frameStats.fixedSteps = steps;
     m_frameStats.interpolationAlpha = m_fixedTimestep.GetAlpha();
@@ -357,6 +387,11 @@ void Engine::RenderFrame()
         m_frameStats.shadowDraws = static_cast<int>(renderStats.shadowDraws);
         m_frameStats.clusteredLights = static_cast<int>(renderStats.clusteredLights);
         m_frameStats.overflowLights = static_cast<int>(renderStats.overflowLights);
+        for (size_t i = 0; i < renderStats.lodInstances.size(); ++i)
+        {
+            m_frameStats.lodInstances[i] = static_cast<int>(renderStats.lodInstances[i]);
+        }
+        m_frameStats.gpuAllocatedBytes = m_device ? static_cast<double>(m_device->GetAllocatedBytes()) : 0.0;
 
         m_application->Render();
 
@@ -414,6 +449,7 @@ void Engine::Destroy()
 
     // Order matters: everything that owns GPU objects or rigid bodies goes before the
     // renderer, the device and the physics world.
+    m_worldStreamer.Close();
     m_assetManager.Shutdown();
     m_currentScene.reset();
     m_renderQueue.Clear();
@@ -511,7 +547,49 @@ void Engine::RequestScreenshot(const std::string &path)
 
 void Engine::SetScene(Scene *scene)
 {
+    if (scene != m_currentScene.get())
+    {
+        // The streamer's cells live in the old scene.
+        m_worldStreamer.Close();
+    }
     m_currentScene.reset(scene);
+}
+
+bool Engine::OpenWorld(AssetID world, std::string *error)
+{
+    if (!m_initialized)
+    {
+        if (error)
+        {
+            *error = "the engine is not initialized";
+        }
+        return false;
+    }
+    if (!m_currentScene)
+    {
+        m_currentScene = std::make_unique<Scene>();
+    }
+    return m_worldStreamer.Open(*m_currentScene, m_assetManager, world, m_streamingBudget, error);
+}
+
+bool Engine::OpenWorld(const std::string &sourcePath, std::string *error)
+{
+    const AssetID id = m_assetManager.FindBySource(AssetType::World, sourcePath);
+    if (!id.IsValid())
+    {
+        if (error)
+        {
+            *error = sourcePath + " is not in the cooked manifest";
+        }
+        GENI_LOG_ERROR("%s is not a cooked world", sourcePath.c_str());
+        return false;
+    }
+    return OpenWorld(id, error);
+}
+
+void Engine::CloseWorld()
+{
+    m_worldStreamer.Close();
 }
 
 Scene *Engine::GetScene()

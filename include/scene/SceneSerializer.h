@@ -37,7 +37,18 @@ class SceneInstantiation
         Scene &scene, const nlohmann::json &document, const SerializationContext &context, bool clear = true
     );
 
-    // Creates up to `maxNodes` objects or component lists, then returns.
+    // Puts the document's root nodes under `parent` instead of at the scene root, and
+    // leaves the scene's main camera alone (a subtree must not move it). Call before the
+    // first Step. World cells are instantiated this way under their cell root.
+    void SetAttachParent(GameObject *parent)
+    {
+        m_attachParent = parent;
+        m_applyMainCamera = false;
+    }
+
+    // Creates up to `maxNodes` objects or component lists, then returns. A prefab
+    // instance counts as the number of objects its prefab created, so a budget bounds the
+    // work done whatever the document contains.
     Status Step(size_t maxNodes);
     Status GetStatus() const
     {
@@ -82,6 +93,7 @@ class SceneInstantiation
     bool m_preserveIds = false;
     // Parent for the document's root nodes (InstantiateSubtree); nullptr: scene roots.
     GameObject *m_attachParent = nullptr;
+    bool m_applyMainCamera = true;
 
     friend class SceneSerializer;
 };

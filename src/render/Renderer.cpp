@@ -13,6 +13,7 @@
 #include <functional>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <limits>
 
 // Built-in shaders, compiled at build time (geni_embed_shaders in CMakeLists.txt).
@@ -76,6 +77,14 @@ float MaxScale(const glm::mat4 &matrix)
     return std::max(
         {glm::length(glm::vec3(matrix[0])), glm::length(glm::vec3(matrix[1])), glm::length(glm::vec3(matrix[2]))}
     );
+}
+
+// A world transform moved into the camera-relative space the shaders use.
+glm::mat4 RelativeTo(const glm::mat4 &model, const glm::vec3 &origin)
+{
+    glm::mat4 relative = model;
+    relative[3] -= glm::vec4(origin, 0.0f);
+    return relative;
 }
 
 // World-space bounding sphere of a command. Returns radius 0 when the mesh has no bounds.
@@ -609,6 +618,7 @@ uint64_t Renderer::Align(uint64_t size) const
 
 void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, const std::vector<LightData> &lights)
 {
+    m_renderOrigin = camera.position;
 
     m_hasSun = false;
     for (const auto &light : lights)
@@ -641,7 +651,7 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
             continue;
         }
         GpuLight gpu;
-        gpu.positionRange = glm::vec4(light.position, EffectiveLightRange(light));
+        gpu.positionRange = glm::vec4(light.position - m_renderOrigin, EffectiveLightRange(light));
         gpu.colorIntensity = glm::vec4(light.color, 1.0f);
         if (light.type == LightType::Spot)
         {
@@ -705,12 +715,15 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
         );
     }
 
+    // Shaders work relative to the camera: `fromRender` takes a camera-relative position
+    // back to the world, so every world-space matrix is multiplied by it.
+    const glm::mat4 fromRender = glm::translate(glm::mat4(1.0f), m_renderOrigin);
     FrameUniforms uniforms{};
-    uniforms.view = camera.viewMatrix;
+    uniforms.view = camera.viewMatrix * fromRender;
     uniforms.projection = kDepthZeroToOne * camera.projectionMatrix;
     uniforms.viewProjection = uniforms.projection * uniforms.view;
     uniforms.inverseViewProjection = glm::inverse(uniforms.viewProjection);
-    uniforms.cameraPosition = glm::vec4(camera.position, m_config.exposure);
+    uniforms.cameraPosition = glm::vec4(0.0f, 0.0f, 0.0f, m_config.exposure);
     if (m_hasSun)
     {
         uniforms.sunDirection = glm::vec4(glm::normalize(-m_sun.direction), 1.0f);
@@ -727,7 +740,7 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
     for (uint32_t i = 0; i < Cascades; ++i)
     {
         // The cascades are fitted with OpenGL-style depth; the RHI clips at 0..1.
-        uniforms.shadowMatrices[i] = kDepthZeroToOne * m_cascades.cascades[i].viewProjection;
+        uniforms.shadowMatrices[i] = kDepthZeroToOne * m_cascades.cascades[i].viewProjection * fromRender;
     }
     uniforms.cascadeSplits = m_cascades.splits;
     // Depth bias in shadow texels (the shader converts it to each cascade's depth units, so
@@ -939,6 +952,9 @@ void Renderer::RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &caste
     {
         const Mesh *mesh = nullptr;
         bool skinned = false;
+        uint32_t lod = 0;
+        uint32_t firstIndex = 0;
+        uint32_t indexCount = 0;
         uint32_t firstInstance = 0;
         uint32_t count = 0;
         uint32_t boneOffset = 0;
@@ -951,7 +967,11 @@ void Renderer::RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &caste
         {
             return a.skinned < b.skinned;
         }
-        return std::less<const Mesh *>()(a.mesh, b.mesh);
+        if (a.mesh != b.mesh)
+        {
+            return std::less<const Mesh *>()(a.mesh, b.mesh);
+        }
+        return a.lod < b.lod;
     });
 
     for (uint32_t cascade = 0; cascade < m_cascades.count; ++cascade)
@@ -980,18 +1000,22 @@ void Renderer::RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &caste
                 continue;
             }
             ShadowInstance instance;
-            instance.model = item.command->modelMatrix;
+            instance.model = RelativeTo(item.command->modelMatrix, m_renderOrigin);
             instance.cascade = static_cast<float>(cascade);
             std::memcpy(mapped + size_t(written) * kShadowInstanceStride, &instance, kShadowInstanceStride);
             ++written;
 
             // Skinned items never merge: each has its own bone palette.
-            const bool newRun = item.skinned || runs.empty() || runs.back().skinned || runs.back().mesh != item.mesh;
+            const bool newRun = item.skinned || runs.empty() || runs.back().skinned || runs.back().mesh != item.mesh ||
+                                runs.back().lod != item.lod;
             if (newRun)
             {
                 ShadowRun run;
                 run.mesh = item.mesh;
                 run.skinned = item.skinned;
+                run.lod = item.lod;
+                run.firstIndex = item.firstIndex;
+                run.indexCount = item.indexCount;
                 run.firstInstance = written - 1;
                 run.count = 1;
                 run.boneOffset = item.boneOffset;
@@ -1029,7 +1053,7 @@ void Renderer::RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &caste
             if (run.mesh->GetIndexBuffer().IsValid())
             {
                 cmd.SetIndexBuffer(run.mesh->GetIndexBuffer(), rhi::IndexFormat::Uint32);
-                cmd.DrawIndexedInstanced(run.mesh->GetIndexCount(), run.count, 0, 0, run.firstInstance);
+                cmd.DrawIndexedInstanced(run.indexCount, run.count, run.firstIndex, 0, run.firstInstance);
             }
             else
             {
@@ -1091,9 +1115,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
         auto drawInstances = [&](uint32_t instances, uint32_t firstInstance) {
             if (item.mesh->GetIndexBuffer().IsValid())
             {
-                cmd.DrawIndexedInstanced(
-                    static_cast<uint32_t>(item.mesh->GetIndexCount()), instances, 0, 0, firstInstance
-                );
+                cmd.DrawIndexedInstanced(item.indexCount, instances, item.firstIndex, 0, firstInstance);
             }
             else
             {
@@ -1108,6 +1130,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
             drawInstances(1, item.instanceIndex);
             ++m_stats.mainDraws;
             ++m_stats.instances;
+            ++m_stats.lodInstances[item.lod];
             ++i;
             continue;
         }
@@ -1118,7 +1141,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
         while (i + count < items.size())
         {
             const DrawItem &next = items[i + count];
-            if (next.skinned || next.mesh != item.mesh || next.material != item.material)
+            if (next.skinned || next.mesh != item.mesh || next.material != item.material || next.lod != item.lod)
             {
                 break;
             }
@@ -1129,6 +1152,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
         drawInstances(static_cast<uint32_t>(count), item.instanceIndex);
         ++m_stats.mainDraws;
         m_stats.instances += static_cast<uint32_t>(count);
+        m_stats.lodInstances[item.lod] += static_cast<uint32_t>(count);
         i += count;
     }
 
@@ -1226,6 +1250,8 @@ bool Renderer::RenderScene(
 
     // Every drawable command with its world bounds. Shadow casters come from this list,
     // so objects the camera does not see still cast into the visible area.
+    // Pixels covered by one metre one metre from the camera, for LOD selection.
+    const float pixelsPerUnit = 0.5f * static_cast<float>(height) * std::abs(camera.projectionMatrix[1][1]);
     std::vector<DrawItem> all;
     all.reserve(commands.size());
     for (const auto &command : commands)
@@ -1242,6 +1268,7 @@ bool Renderer::RenderScene(
         item.skinned = command.bonePalette != nullptr && !command.bonePalette->empty();
         WorldBounds(command, item.center, item.radius);
         item.distance = glm::distance(item.center, camera.position);
+        SelectLod(item, pixelsPerUnit);
         all.push_back(item);
     }
 
@@ -1304,6 +1331,10 @@ bool Renderer::RenderScene(
         {
             return a.skinned < b.skinned;
         }
+        if (a.lod != b.lod)
+        {
+            return a.lod < b.lod;
+        }
         return a.distance < b.distance;
     });
     m_stats.visible = static_cast<uint32_t>(items.size());
@@ -1317,12 +1348,45 @@ bool Renderer::RenderScene(
     for (size_t i = 0; i < items.size(); ++i)
     {
         items[i].instanceIndex = static_cast<uint32_t>(i);
-        std::memcpy(instanceBase + i * kInstanceStride, &items[i].command->modelMatrix, kInstanceStride);
+        const glm::mat4 model = RelativeTo(items[i].command->modelMatrix, m_renderOrigin);
+        std::memcpy(instanceBase + i * kInstanceStride, &model, kInstanceStride);
     }
 
     RenderShadows(cmd, all);
     RenderMain(cmd, items);
     return true;
+}
+
+void Renderer::SelectLod(DrawItem &item, float pixelsPerUnit) const
+{
+    const auto &lods = item.mesh->GetLods();
+    item.lod = 0;
+    if (lods.empty())
+    {
+        item.firstIndex = 0;
+        item.indexCount = 0;
+        return;
+    }
+    // Skinned meshes deform; their simplification error is only valid in the bind pose.
+    if (!item.skinned && lods.size() > 1 && m_config.lodErrorPixels > 0.0f)
+    {
+        const float distance = std::max(item.distance - item.radius, 0.0f);
+        if (distance > 0.0f)
+        {
+            const float scale = MaxScale(item.command->modelMatrix);
+            const float pixelsPerModelUnit = pixelsPerUnit * scale / distance;
+            for (uint32_t i = static_cast<uint32_t>(lods.size()) - 1; i > 0; --i)
+            {
+                if (lods[i].error * pixelsPerModelUnit <= m_config.lodErrorPixels)
+                {
+                    item.lod = i;
+                    break;
+                }
+            }
+        }
+    }
+    item.firstIndex = lods[item.lod].firstIndex;
+    item.indexCount = lods[item.lod].indexCount;
 }
 
 void Renderer::ReleasePipelines(uint64_t shaderId)

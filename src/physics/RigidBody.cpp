@@ -1,16 +1,7 @@
 #include "physics/RigidBody.h"
-#include "BulletCollision/CollisionDispatch/btCollisionObject.h"
-#include "BulletCollision/CollisionShapes/btCollisionShape.h"
-#include "BulletDynamics/Dynamics/btRigidBody.h"
-#include "LinearMath/btDefaultMotionState.h"
-#include "LinearMath/btQuaternion.h"
-#include "LinearMath/btScalar.h"
-#include "LinearMath/btTransform.h"
-#include "LinearMath/btVector3.h"
+
 #include "core/Engine.h"
-#include "glm/ext/quaternion_float.hpp"
-#include "glm/ext/vector_float3.hpp"
-#include <memory>
+#include "physics/PhysicsManager.h"
 
 namespace Geni
 {
@@ -18,106 +9,44 @@ namespace Geni
 RigidBody::RigidBody(BodyType type, const std::shared_ptr<Collider> &collider, float mass, float friction)
     : m_type(type), m_collider(collider), m_mass(mass), m_friction(friction)
 {
-    if (!collider)
-    {
-        return;
-    }
-
-    btVector3 inertia(0, 0, 0);
-    if (m_type == BodyType::Dynamic && mass > 0.0f && m_collider->GetShape())
-    {
-        m_collider->GetShape()->calculateLocalInertia(btScalar(mass), inertia);
-    }
-
-    btTransform transform;
-    transform.setIdentity();
-    btDefaultMotionState *motionState = new btDefaultMotionState(transform);
-
-    btRigidBody::btRigidBodyConstructionInfo info(
-        (m_type == BodyType::Dynamic) ? btScalar(mass) : btScalar(0), motionState, m_collider->GetShape(), inertia
-    );
-
-    m_body = std::make_unique<btRigidBody>(info);
-    m_body->setFriction(friction);
-
-    if (m_type == BodyType::Kinematic)
-    {
-        m_body->setCollisionFlags(m_body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-        m_body->setActivationState(DISABLE_DEACTIVATION);
-    }
 }
 
 RigidBody::~RigidBody()
 {
-    if (m_addedToWorld)
+    if (IsAddedToWorld())
     {
         Engine::GetInstance().GetPhysicsManager().RemoveRigidBody(this);
     }
 }
 
-btRigidBody *RigidBody::GetBody()
+void RigidBody::SetWorldPosition(const glm::dvec3 &position)
 {
-    return m_body.get();
-}
-
-void RigidBody::SetAddedToWorld(bool added)
-{
-    m_addedToWorld = added;
-}
-
-bool RigidBody::IsAddedToWorld() const
-{
-    return m_addedToWorld;
-}
-
-BodyType RigidBody::GetType() const
-{
-    return m_type;
-}
-
-void RigidBody::SetPosition(const glm::vec3 &pos)
-{
-    if (!m_body)
+    m_position = position;
+    if (IsAddedToWorld())
     {
-        return;
+        m_rotation = GetRotation();
+        Engine::GetInstance().GetPhysicsManager().SetBodyTransform(m_bodyId, m_position, m_rotation);
     }
-
-    auto &tr = m_body->getWorldTransform();
-    tr.setOrigin(btVector3(btScalar(pos.x), btScalar(pos.y), btScalar(pos.z)));
-    if (m_body->getMotionState())
-    {
-        m_body->getMotionState()->setWorldTransform(tr);
-    }
-    m_body->setWorldTransform(tr);
 }
 
-glm::vec3 RigidBody::GetPosition() const
+glm::dvec3 RigidBody::GetWorldPosition() const
 {
-    const auto &pos = m_body->getWorldTransform().getOrigin();
-    return glm::vec3(pos.x(), pos.y(), pos.z());
+    return IsAddedToWorld() ? Engine::GetInstance().GetPhysicsManager().GetBodyPosition(m_bodyId) : m_position;
 }
 
-void RigidBody::SetRotation(const glm::quat &rot)
+void RigidBody::SetRotation(const glm::quat &rotation)
 {
-    if (!m_body)
+    m_rotation = rotation;
+    if (IsAddedToWorld())
     {
-        return;
+        m_position = GetWorldPosition();
+        Engine::GetInstance().GetPhysicsManager().SetBodyTransform(m_bodyId, m_position, m_rotation);
     }
-
-    auto &tr = m_body->getWorldTransform();
-    tr.setRotation(btQuaternion(btScalar(rot.x), btScalar(rot.y), btScalar(rot.z), btScalar(rot.w)));
-    if (m_body->getMotionState())
-    {
-        m_body->getMotionState()->setWorldTransform(tr);
-    }
-
-    m_body->setWorldTransform(tr);
 }
 
 glm::quat RigidBody::GetRotation() const
 {
-    const auto &rot = m_body->getWorldTransform().getRotation();
-    return glm::quat(rot.w(), rot.x(), rot.y(), rot.z());
+    return IsAddedToWorld() ? Engine::GetInstance().GetPhysicsManager().GetBodyRotation(m_bodyId) : m_rotation;
 }
 
 } // namespace Geni

@@ -22,6 +22,8 @@ const char *AssetTypeName(AssetType type)
         return "scene";
     case AssetType::Prefab:
         return "prefab";
+    case AssetType::World:
+        return "world";
     case AssetType::Unknown:
         break;
     }
@@ -42,6 +44,8 @@ AssetType AssetTypeFromName(std::string_view name)
         return AssetType::Scene;
     if (name == "prefab")
         return AssetType::Prefab;
+    if (name == "world")
+        return AssetType::World;
     return AssetType::Unknown;
 }
 

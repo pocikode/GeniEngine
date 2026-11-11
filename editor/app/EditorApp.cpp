@@ -109,6 +109,7 @@ void EditorApp::Update(float deltaTime)
     // starts in front.
     DrawConsole();
     DrawAssets();
+    DrawWorldPanel();
     HandleShortcuts();
     UpdateViewport(deltaTime);
     DrawOverlays();
@@ -247,6 +248,10 @@ void EditorApp::DrawMenuBar()
         if (ImGui::MenuItem("Open...", "Ctrl+O"))
         {
             m_openOpen = true;
+        }
+        if (ImGui::MenuItem("Open World..."))
+        {
+            m_openWorld = true;
         }
         if (ImGui::MenuItem("Save", "Ctrl+S", false, !playing))
         {
@@ -553,6 +558,9 @@ void EditorApp::PerformAction(PendingAction action, const std::string &path)
     case PendingAction::OpenScene:
         OpenAssetPath(path);
         break;
+    case PendingAction::OpenWorld:
+        OpenWorldAssetPath(path);
+        break;
     case PendingAction::Quit:
         SetNeedsToBeClosed(true);
         break;
@@ -597,6 +605,51 @@ bool EditorApp::OpenAssetPath(const std::string &assetPath)
     }
     m_camera.SetAngles(-35.0f, -25.0f);
     m_camera.Focus((low + high) * 0.5f, std::max(glm::length(high - low) * 0.25f, 5.0f));
+    return true;
+}
+
+bool EditorApp::OpenWorldAssetPath(const std::string &assetPath)
+{
+    std::string error;
+    if (!m_document->OpenWorld(m_project.ToAbsolute(assetPath), &error))
+    {
+        GENI_LOG_ERROR("editor: %s", error.c_str());
+        m_document->SetStatus("Could not open " + assetPath + ": " + error);
+        return false;
+    }
+    m_expanded.clear();
+    // Start the region pick in the middle of the world.
+    const WorldSource &world = m_document->GetWorld();
+    m_regionPick[0] = m_regionPick[2] = world.cellsX / 2;
+    m_regionPick[1] = m_regionPick[3] = world.cellsZ / 2;
+    return true;
+}
+
+bool EditorApp::LoadRegion(int x0, int z0, int x1, int z1)
+{
+    std::string error;
+    if (!m_document->LoadRegion(x0, z0, x1, z1, &error))
+    {
+        GENI_LOG_ERROR("editor: %s", error.c_str());
+        m_document->SetStatus("Could not load the region: " + error);
+        return false;
+    }
+    m_expanded.clear();
+    // Frame the region: the origin is its first corner.
+    const auto &cells = m_document->GetRegionCells();
+    if (!cells.empty())
+    {
+        m_regionPick[0] = cells.front().x;
+        m_regionPick[1] = cells.front().z;
+        m_regionPick[2] = cells.back().x;
+        m_regionPick[3] = cells.back().z;
+    }
+    const float size = m_document->GetWorld().cellSize;
+    const int columns = cells.empty() ? 1 : cells.back().x - cells.front().x + 1;
+    const int rows = cells.empty() ? 1 : cells.back().z - cells.front().z + 1;
+    const glm::vec3 centre(0.5f * size * columns, 0.0f, 0.5f * size * rows);
+    m_camera.SetAngles(-35.0f, -35.0f);
+    m_camera.Focus(centre, 0.45f * size * static_cast<float>(std::max(columns, rows)));
     return true;
 }
 
@@ -728,6 +781,26 @@ void EditorApp::DrawDialogs()
         ImGui::EndPopup();
     }
 
+    if (openModal(m_openWorld, "Open World"))
+    {
+        ImGui::TextUnformatted("Worlds in the assets folder:");
+        ImGui::BeginChild("##worlds", ImVec2(440.0f, 200.0f), ImGuiChildFlags_Borders);
+        for (const std::string &path : m_project.ListAssets(".gworld"))
+        {
+            if (ImGui::Selectable(path.c_str()))
+            {
+                RequestAction(PendingAction::OpenWorld, path);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::EndChild();
+        if (ImGui::Button("Cancel"))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     if (openModal(m_openPrefab, "Create Prefab"))
     {
         ImGui::TextUnformatted("The object becomes an instance of the new prefab.\nPath in the assets folder:");
@@ -847,6 +920,20 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
     if (command == "open")
     {
         return OpenAssetPath(rest()) || fail("could not open the scene");
+    }
+    if (command == "world")
+    {
+        return OpenWorldAssetPath(rest()) || fail("could not open the world");
+    }
+    if (command == "region")
+    {
+        int x0 = 0, z0 = 0, x1 = 0, z1 = 0;
+        stream >> x0 >> z0 >> x1 >> z1;
+        if (!stream)
+        {
+            return fail("usage: region X0 Z0 X1 Z1");
+        }
+        return LoadRegion(x0, z0, x1, z1) || fail("could not load the region");
     }
     if (command == "import")
     {
@@ -1106,6 +1193,35 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
             const glm::vec3 actual = primary->GetPosition();
             return glm::length(actual - expected) < 1e-3f ||
                    fail("position is " + std::to_string(actual.x) + " " + std::to_string(actual.y) + " " + std::to_string(actual.z));
+        }
+        if (what == "cells")
+        {
+            long expected = 0;
+            stream >> expected;
+            const long actual = static_cast<long>(m_document->GetRegionCells().size());
+            return actual == expected ||
+                   fail("expected " + std::to_string(expected) + " cells, found " + std::to_string(actual));
+        }
+        if (what == "cell")
+        {
+            // expect cell X Z N: the cell's root has N objects directly under it.
+            int x = 0, z = 0;
+            long expected = 0;
+            stream >> x >> z >> expected;
+            for (const auto &cell : m_document->GetRegionCells())
+            {
+                if (cell.x == x && cell.z == z)
+                {
+                    GameObject *root = m_scene->FindObjectByID(cell.root);
+                    const long actual = root ? static_cast<long>(root->GetChildren().size()) : -1;
+                    return actual == expected ||
+                           fail(
+                               "cell " + std::to_string(x) + "," + std::to_string(z) + " has " +
+                               std::to_string(actual) + " objects, expected " + std::to_string(expected)
+                           );
+                }
+            }
+            return fail("cell " + std::to_string(x) + "," + std::to_string(z) + " is not loaded");
         }
         if (what == "playing")
         {

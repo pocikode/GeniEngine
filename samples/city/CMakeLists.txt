@@ -3,7 +3,7 @@
 # `city` runs the reference game's first block: a cooked scene with 10,000 buildings
 # (nine meshes, one per material), 100 point lights and a sun. Interactive when run
 # normally; --budget-ms turns it into the CI performance check.
-geni_add_sample(city main.cpp)
+geni_add_sample(city main.cpp WorldMode.cpp)
 
 # Frame-time budget (ROADMAP M2, rule 4). The default is loose because CI may run on
 # software Vulkan (lavapipe) and on shared runners; the target on real hardware is
@@ -22,6 +22,18 @@ add_test(NAME benchmark_city
                  --load-budget-ms ${GENI_LOAD_FRAME_BUDGET_MS})
 set_tests_properties(benchmark_city PROPERTIES LABELS "gpu;perf" TIMEOUT 300)
 
+# The streamed world (ROADMAP M5, docs/design/0007): fly through the middle of the 4 km
+# metro world at 60 m/s, one 1/60 s step per frame, and fail on a hitch (exit 6), on a
+# nearby cell that was not loaded in time (exit 7) or on going over the memory budget
+# (exit 8). The hitch budget is loose for software Vulkan in CI; on real hardware use
+# about two frames, e.g. -DGENI_WORLD_HITCH_MS=33. The full crossing is
+#   city --world --route
+set(GENI_WORLD_HITCH_MS 4000 CACHE STRING "Slowest allowed frame while flying through the streamed world, in milliseconds")
+add_test(NAME benchmark_world
+         COMMAND city --world --route --speed 60 --distance 480 --hidden --width 640 --height 360
+                 --hitch-ms ${GENI_WORLD_HITCH_MS})
+set_tests_properties(benchmark_world PROPERTIES LABELS "gpu;perf" TIMEOUT 600)
+
 # Screenshot comparison: the instanced, cascaded, tonemapped path must look the same
 # every run (see tests/run_screenshot.cmake).
 if(GENI_BUILD_TESTS)
@@ -38,6 +50,22 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.02
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_city PROPERTIES LABELS "gpu" TIMEOUT 300)
+
+  # The world from 600 m south-west of its centre, looking at downtown: full cells near
+  # the camera, HLOD cells behind them, mesh LODs, camera-relative rendering. The camera
+  # does not move, so everything the streamer loads before the first frame is all there is.
+  add_test(NAME screenshot_world
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--world;--route;--speed;0;--distance;1200"
+             -DFRAMES=10
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/world_metro.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.02
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_world PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
 
 # The editor on this sample (ROADMAP M4): `cmake --build <dir> --target edit_city`.

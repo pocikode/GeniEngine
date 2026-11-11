@@ -17,7 +17,9 @@ enum class AssetType
     Animation,
     Scene,
     // A .gprefab: a scene-format subtree that scenes instantiate (docs/design/0006).
-    Prefab
+    Prefab,
+    // A cooked .gworld: the cell table of a streamed world (docs/design/0007).
+    World
 };
 
 const char *AssetTypeName(AssetType type);

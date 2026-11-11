@@ -7,9 +7,6 @@
 [submodule "thirdparty/cgltf"]
 	path = thirdparty/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
-[submodule "thirdparty/bullet3"]
-	path = thirdparty/bullet3
-	url = https://github.com/bulletphysics/bullet3.git
 [submodule "thirdparty/tracy"]
 	path = thirdparty/tracy
 	url = https://github.com/wolfpld/tracy.git
@@ -31,3 +28,9 @@
 [submodule "thirdparty/astc-encoder"]
 	path = thirdparty/astc-encoder
 	url = https://github.com/ARM-software/astc-encoder.git
+[submodule "thirdparty/meshoptimizer"]
+	path = thirdparty/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git
+[submodule "thirdparty/JoltPhysics"]
+	path = thirdparty/JoltPhysics
+	url = https://github.com/jrouwe/JoltPhysics.git

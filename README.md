@@ -2,7 +2,7 @@
 
 A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
 
-Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, prefabs, skinning, animation and rigid-body physics. It comes with a scene editor (`geni_editor`): viewport, hierarchy, inspector and asset browser, gizmos with undo and redo, play-in-editor, and hot reload for shaders and assets.
+Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, prefabs, skinning, animation and rigid-body physics (Jolt). Large worlds stream in grid cells around the camera, with mesh LODs and simplified distant cells (HLOD) made by the cooker, camera-relative rendering, origin rebasing, collision streamed per cell and per-platform memory budgets. It comes with a scene editor (`geni_editor`): viewport, hierarchy, inspector and asset browser, gizmos with undo and redo, play-in-editor, and hot reload for shaders and assets.
 
 ## Build and test
 
@@ -43,11 +43,14 @@ The `screenshot_sandbox_*` tests render the sample off-screen and compare it wit
 ```sh
 build/dev/samples/sandbox/sandbox   # everything the engine can do, in one scene
 build/dev/samples/city/city         # the reference game's first city block
+build/dev/samples/city/city --world # its streamed 4 km x 4 km world
 ```
 
 `samples/sandbox` uses every engine feature in one scene: PBR textured meshes, a sun and a ring of point lights, an orbit camera, physics, and a skinned animated model. Left drag orbits, right drag pans, scroll zooms, Space spawns a crate, Esc quits.
 
 `samples/city` is the reference game (and the M2 performance benchmark): 10,000 instanced buildings, 100 point lights and cascaded shadows. The block is a scene file, `samples/city/assets/scenes/city.gscene`, built and edited in the editor; the program only loads it. Run it with `--hidden --frames N --budget-ms M` to measure: it exits with code 4 when the mean frame time is over budget. CTest runs it as `benchmark_city`.
+
+`city --world` streams `samples/city/assets/worlds/metro`, 16 x 16 cells of 256 m, around a free camera (W/A/S/D, Q/E, Shift, right mouse button to look; F1 shows memory and streaming against the budget). With `--route` the camera flies across the world at 40 m/s and the program exits non-zero on a hitch (`--hitch-ms`), on a nearby cell that was not loaded in time, or over the memory budget (`--platform desktop|mobile|web` picks the budget). CTest runs a shorter flight as `benchmark_world`.
 
 ## Edit a scene
 
@@ -56,7 +59,7 @@ cmake --build build/dev --target edit_city      # the editor on samples/city
 build/dev/editor/geni_editor --project my_game  # or on any folder with an assets/ folder
 ```
 
-The editor opens the project's first scene. Panels dock around the scene viewport: the hierarchy on the left, the inspector on the right, assets and the console below.
+The editor opens the project's first scene. `File > Open World` opens a `.gworld` instead; pick a region of cells in the World panel and load it to edit those cells (saving writes each cell to its own file). Panels dock around the scene viewport: the hierarchy on the left, the inspector on the right, assets and the console below.
 
 | To | Do |
 |---|---|
@@ -170,7 +173,7 @@ CMake options when embedding:
 
 Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers (and MoltenVK on macOS). Downloaded at configure time: the [Slang](https://github.com/shader-slang/slang) compiler, at a pinned version.
 
-Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Bullet](https://github.com/bulletphysics/bullet3), [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect), [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) and [astc-encoder](https://github.com/ARM-software/astc-encoder) (cooker only). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
+Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.5.0, [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect), [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) and [astc-encoder](https://github.com/ARM-software/astc-encoder) and [meshoptimizer](https://github.com/zeux/meshoptimizer) 1.2 (cooker only). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
 
 ## Licence
 

@@ -5,9 +5,11 @@
 
 #include "Cooker.h"
 #include "Ktx2Writer.h"
+#include "MeshProcessing.h"
 #include "TextureCooker.h"
 #include "assets/CookedFormats.h"
 #include "assets/Ktx2.h"
+#include "world/WorldFormat.h"
 
 #include <chrono>
 #include <cmath>
@@ -417,5 +419,157 @@ TEST_SUITE("cooker")
                 );
             }
         }
+    }
+
+    TEST_CASE("dense meshes get a LOD chain; each LOD is smaller and no more accurate than the last")
+    {
+        const auto output = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "lod_output";
+        std::filesystem::remove_all(output);
+        Geni::cook::CookOptions options;
+        options.sourceRoot = GENI_COOKER_TEST_SOURCE;
+        options.outputRoot = output;
+        options.inputs = {"models/lod_sphere.gltf", "models/hierarchy.gltf"};
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        const auto manifest = nlohmann::json::parse(manifestFile);
+        std::map<std::string, std::string> meshes;
+        for (const auto &asset : manifest["assets"])
+        {
+            if (asset["type"] == "mesh")
+            {
+                meshes[asset["source"].get<std::string>()] = asset["path"].get<std::string>();
+            }
+        }
+        REQUIRE(meshes.count("models/lod_sphere.gltf#mesh0:0") == 1);
+        std::vector<uint8_t> bytes;
+        REQUIRE(Geni::cooked::ReadFile(output / meshes["models/lod_sphere.gltf#mesh0:0"], bytes));
+        Geni::cooked::CookedMeshData sphere;
+        REQUIRE_MESSAGE(Geni::cooked::ReadMesh(bytes, sphere, &error), error);
+        REQUIRE(sphere.lods.size() >= 3);
+        CHECK(sphere.lods[0].firstIndex == 0);
+        CHECK(sphere.lods[0].error == 0.0f);
+        for (size_t i = 1; i < sphere.lods.size(); ++i)
+        {
+            CHECK(sphere.lods[i].indexCount < sphere.lods[i - 1].indexCount);
+            CHECK(sphere.lods[i].error >= sphere.lods[i - 1].error);
+            CHECK(sphere.lods[i].indexCount % 3 == 0);
+        }
+        CHECK(sphere.lods.back().error > 0.0f);
+
+        // A small mesh keeps one LOD: there is nothing worth simplifying.
+        for (const auto &[source, path] : meshes)
+        {
+            if (source.rfind("models/hierarchy.gltf", 0) == 0)
+            {
+                REQUIRE(Geni::cooked::ReadFile(output / path, bytes));
+                Geni::cooked::CookedMeshData small;
+                REQUIRE(Geni::cooked::ReadMesh(bytes, small, &error));
+                CHECK(small.lods.size() == 1);
+            }
+        }
+    }
+
+    TEST_CASE("version 1 meshes still load, as one LOD")
+    {
+        Geni::cooked::CookedMeshData mesh;
+        mesh.layout.stride = 3 * sizeof(float);
+        mesh.layout.elements.push_back({Geni::VertexElement::PositionIndex, 3, Geni::VertexElementType::Float, 0});
+        mesh.vertices = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+        mesh.indices = {0, 1, 2};
+        std::vector<uint8_t> bytes;
+        Geni::cooked::WriteMesh(mesh, bytes);
+        // Rewrite it as version 1: same layout without the LOD table at the end.
+        bytes[4] = 1;
+        bytes.resize(bytes.size() - 4);
+        Geni::cooked::CookedMeshData read;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cooked::ReadMesh(bytes, read, &error), error);
+        CHECK(read.lods.empty());
+        CHECK(read.indices.size() == 3);
+    }
+
+    TEST_CASE("a world is cooked into a cell table with HLOD scenes, prefabs expanded")
+    {
+        const auto output = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "world_output";
+        std::filesystem::remove_all(output);
+        Geni::cook::CookOptions options;
+        options.sourceRoot = GENI_COOKER_TEST_SOURCE;
+        options.outputRoot = output;
+        options.cookAll = true;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        const auto manifest = nlohmann::json::parse(manifestFile);
+        std::map<std::string, nlohmann::json> byID;
+        nlohmann::json world;
+        for (const auto &asset : manifest["assets"])
+        {
+            byID[asset["id"].get<std::string>()] = asset;
+            if (asset["type"] == "world")
+            {
+                world = asset;
+            }
+        }
+        REQUIRE(world.is_object());
+        CHECK(world["source"] == "worlds/tiny/tiny.gworld");
+        CHECK(world["id"] == Geni::AssetID::FromName("world:worlds/tiny/tiny.gworld").ToHex());
+
+        std::vector<uint8_t> bytes;
+        REQUIRE(Geni::cooked::ReadFile(output / world["path"].get<std::string>(), bytes));
+        Geni::WorldDescription description;
+        REQUIRE_MESSAGE(
+            Geni::ParseCookedWorld(nlohmann::json::parse(bytes.begin(), bytes.end()), description, &error), error
+        );
+        CHECK(description.cellsX == 4);
+        CHECK(description.cellsZ == 4);
+        CHECK(description.cellSize == 32.0f);
+        CHECK(description.origin.x == -64.0);
+        REQUIRE(description.cells.size() == 16);
+        CHECK(byID.count(description.persistent.ToHex()) == 1);
+
+        const Geni::WorldCellInfo *cell = description.FindCell(2, 1);
+        REQUIRE(cell != nullptr);
+        // 4 nodes in the file, plus the prefab's two spheres.
+        CHECK(cell->nodeCount == 6);
+        REQUIRE(cell->prefabs.size() == 1);
+        CHECK(cell->prefabs[0] == Geni::AssetID::FromName("prefab:worlds/tiny/prefabs/pair.gprefab"));
+        CHECK(byID[cell->scene.ToHex()]["source"] == "worlds/tiny/cells/cell_2_1.gscene");
+        // The pillar is 8 m high on a ground whose top is at 0.
+        CHECK(cell->minY == doctest::Approx(-1.0f));
+        CHECK(cell->maxY == doctest::Approx(8.0f));
+
+        // The HLOD is a scene of merged meshes in the same material.
+        REQUIRE(byID.count(cell->hlod.ToHex()) == 1);
+        CHECK(cell->hlodBytes > 0);
+        REQUIRE(Geni::cooked::ReadFile(output / byID[cell->hlod.ToHex()]["path"].get<std::string>(), bytes));
+        const auto hlod = nlohmann::json::parse(bytes.begin(), bytes.end());
+        REQUIRE(hlod["nodes"].size() == 1); // one material
+        const auto &properties = hlod["nodes"][0]["components"][0]["properties"];
+        CHECK(properties["material"] == Geni::AssetID::FromName("material:models/lod_sphere.gltf:@Stone").ToHex());
+        const auto hlodMesh = byID[properties["mesh"].get<std::string>()];
+        CHECK(hlodMesh["type"] == "mesh");
+        REQUIRE(Geni::cooked::ReadFile(output / hlodMesh["path"].get<std::string>(), bytes));
+        Geni::cooked::CookedMeshData merged;
+        REQUIRE_MESSAGE(Geni::cooked::ReadMesh(bytes, merged, &error), error);
+        // Four spheres (ground, pillar, two from the prefab), each 1,024 triangles at full
+        // detail; the HLOD merges their coarsest LODs and simplifies further.
+        CHECK(merged.indices.size() / 3 < 4 * 1024 / 4);
+        CHECK(merged.bounds.max.y == doctest::Approx(8.0f).epsilon(0.05));
+    }
+
+    TEST_CASE("HLOD simplification never drops a mesh to nothing")
+    {
+        // Two far-apart tiny triangles: pruning would remove both at a large error.
+        Geni::cooked::CookedMeshData mesh;
+        mesh.layout.stride = 3 * sizeof(float);
+        mesh.layout.elements.push_back({Geni::VertexElement::PositionIndex, 3, Geni::VertexElementType::Float, 0});
+        mesh.vertices = {0, 0, 0, 0.01f, 0, 0, 0, 0.01f, 0, 100, 0, 0, 100.01f, 0, 0, 100, 0.01f, 0};
+        mesh.indices = {0, 1, 2, 3, 4, 5};
+        Geni::cook::SimplifyInPlace(mesh, 0.1f, 0.5f);
+        CHECK(mesh.indices.size() >= 3);
+        CHECK(mesh.vertices.size() / 3 <= 6);
     }
 }

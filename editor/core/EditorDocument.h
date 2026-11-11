@@ -5,6 +5,7 @@
 
 #include "assets/AssetID.h"
 #include "core/Common.h"
+#include "world/WorldFormat.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -60,6 +61,41 @@ class EditorDocument
     {
         return m_commands.IsDirty();
     }
+
+    // --- Worlds (docs/design/0007) -----------------------------------------------------
+    // A world is edited one region (a rectangle of cells) at a time. OpenWorld loads the
+    // .gworld and its persistent scene; LoadRegion adds the cells. Each loaded cell is a
+    // root object that cannot be moved or deleted, holding the cell's content. Save
+    // writes the persistent scene and every loaded cell to its own file; an object that
+    // was moved into another loaded cell is saved there.
+    bool OpenWorld(const std::filesystem::path &worldFile, std::string *error = nullptr);
+    // Replaces the loaded cells. Refused while there are unsaved edits (save first) or
+    // while playing. The scene origin moves to the region's first corner.
+    bool LoadRegion(int x0, int z0, int x1, int z1, std::string *error = nullptr);
+    bool IsWorldDocument() const
+    {
+        return m_isWorld;
+    }
+    const WorldSource &GetWorld() const
+    {
+        return m_world;
+    }
+    struct RegionCell
+    {
+        int x = 0;
+        int z = 0;
+        uint64_t root = 0;
+        // False when the cell's file exists but could not be read: it is never written.
+        bool loaded = true;
+    };
+    const std::vector<RegionCell> &GetRegionCells() const
+    {
+        return m_regionCells;
+    }
+    bool IsCellRoot(uint64_t id) const;
+    // True when the cell has a scene file.
+    bool CellFileExists(int x, int z) const;
+    std::filesystem::path CellPath(int x, int z) const;
 
     // --- Selection (object IDs; the last one is the primary) ---------------------------
     const std::vector<uint64_t> &GetSelection() const
@@ -156,6 +192,10 @@ class EditorDocument
 
   private:
     void RecordCreated(const char *name, const std::vector<GameObject *> &roots, bool select);
+    // Where an object created without a parent goes: in a world, the region's first cell.
+    GameObject *DefaultParent();
+    bool SaveWorld(std::string *error);
+    void LeaveWorld();
     bool RestoreSnapshot();
     void ResetDocument();
 
@@ -170,6 +210,11 @@ class EditorDocument
     nlohmann::json m_playSnapshot;
     uint64_t m_playMainCamera = 0;
     std::string m_status;
+
+    bool m_isWorld = false;
+    std::filesystem::path m_worldPath;
+    WorldSource m_world;
+    std::vector<RegionCell> m_regionCells;
 };
 
 } // namespace Geni::Editor

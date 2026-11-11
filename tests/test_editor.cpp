@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <fstream>
 #include <glm/gtc/quaternion.hpp>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -86,6 +87,16 @@ class AddCommand : public Command
     int &m_target;
     int m_amount;
 };
+
+size_t CellFileCount(const EditorDocument &document)
+{
+    size_t count = 0;
+    for (const auto &cell : document.GetRegionCells())
+    {
+        count += document.CellFileExists(cell.x, cell.z) ? 1 : 0;
+    }
+    return count;
+}
 
 // A scratch project folder with an asset manager reading from it.
 struct ProjectFixture
@@ -632,6 +643,181 @@ TEST_SUITE("editor document")
         CHECK(scene.GetMainCamera() == nullptr);
 
         CHECK_FALSE(document.ImportScene(nlohmann::json{{"format", "something else"}}, &error));
+    }
+}
+
+TEST_SUITE("editor world")
+{
+    // A 3 x 1 world of 100 m cells at x = -150: a persistent scene with a camera far from
+    // the origin, cell 0 with two objects, cell 1 with one, cell 2 empty (no file).
+    std::filesystem::path WriteWorld(const std::filesystem::path &assets)
+    {
+        const auto folder = assets / "worlds" / "strip";
+        std::filesystem::create_directories(folder / "cells");
+        std::ofstream(folder / "strip.gworld")
+            << R"({"format":"geni.world","version":1,"cellSize":100,"origin":[-150,0,0],"cellsX":3,"cellsZ":1})";
+        std::ofstream(
+            folder / "persistent.gscene"
+        ) << R"({"format":"geni.scene","version":1,"mainCamera":1,"nodes":[)"
+          << R"({"name":"Sun","parent":-1,"components":[]},)"
+          << R"({"name":"Camera","parent":-1,"position":[1000,20,5],"components":[{"type":"CameraComponent","properties":{}}]}]})";
+        std::ofstream(folder / "cells" / "cell_0_0.gscene")
+            << R"({"format":"geni.scene","version":1,"nodes":[)"
+            << R"({"name":"House","parent":-1,"position":[10,0,50],"components":[]},)"
+            << R"({"name":"Door","parent":0,"position":[0,1,1],"components":[]},)"
+            << R"({"name":"Tree","parent":-1,"position":[90,0,50],"components":[]}]})";
+        std::ofstream(
+            folder / "cells" / "cell_1_0.gscene"
+        ) << R"({"format":"geni.scene","version":1,"nodes":[{"name":"Shop","parent":-1,"position":[50,0,50],"components":[]}]})";
+        return folder / "strip.gworld";
+    }
+
+    nlohmann::json ReadJson(const std::filesystem::path &path)
+    {
+        std::ifstream file(path);
+        return nlohmann::json::parse(file);
+    }
+
+    TEST_CASE("a world opens with its persistent scene and loads a region of cells")
+    {
+        RegisterBuiltinComponents();
+        ProjectFixture fixture("world_region");
+        const auto worldFile = WriteWorld(fixture.root / "assets");
+        Scene scene;
+        EditorDocument document(scene, &fixture.assets);
+        std::string error;
+        REQUIRE_MESSAGE(document.OpenWorld(worldFile, &error), error);
+        CHECK(document.IsWorldDocument());
+        CHECK(document.GetRegionCells().empty());
+        CHECK(scene.GetObjects().size() == 2);
+        REQUIRE(scene.GetMainCamera() != nullptr);
+
+        REQUIRE_MESSAGE(document.LoadRegion(1, 0, 0, 0, &error), error); // corners in any order
+        REQUIRE(document.GetRegionCells().size() == 2);
+        // The region's first corner is the scene origin: cell 0's corner is (-150, 0, 0).
+        CHECK(scene.GetOrigin().x == doctest::Approx(-150.0));
+        GameObject *cell0 = scene.FindObjectByID(document.GetRegionCells()[0].root);
+        GameObject *cell1 = scene.FindObjectByID(document.GetRegionCells()[1].root);
+        REQUIRE(cell0 != nullptr);
+        REQUIRE(cell1 != nullptr);
+        CHECK(cell0->GetChildren().size() == 2);
+        CHECK(cell1->GetChildren().size() == 1);
+        CHECK(Near(cell1->GetPosition(), glm::vec3(100.0f, 0.0f, 0.0f)));
+        // The persistent camera keeps its world position.
+        CHECK(scene.ToWorld(scene.GetMainCamera()->GetWorldPosition()).x == doctest::Approx(1000.0));
+        CHECK(CellFileCount(document) == 2);
+
+        // Cells are not objects you can edit: no delete, no move, no duplicate.
+        CHECK_FALSE(document.CanEdit(cell0));
+        document.Select(cell0->GetID());
+        CHECK_FALSE(document.DeleteSelection());
+        CHECK(document.DuplicateSelection().empty());
+        CHECK(document.CanEdit(cell0->GetChildren().front().get()));
+
+        // New objects go into the region's first cell.
+        GameObject *lamp = document.CreateLight(LightType::Point);
+        CHECK(lamp->GetParent() == cell0);
+        CHECK(document.IsDirty());
+        // With unsaved edits the region cannot change.
+        CHECK_FALSE(document.LoadRegion(2, 0, 2, 0, &error));
+        CHECK(error.find("save") != std::string::npos);
+    }
+
+    TEST_CASE("saving writes each cell and the persistent scene, moving objects into the cell they are in now")
+    {
+        RegisterBuiltinComponents();
+        ProjectFixture fixture("world_save");
+        const auto worldFile = WriteWorld(fixture.root / "assets");
+        const auto cells = worldFile.parent_path() / "cells";
+        Scene scene;
+        EditorDocument document(scene, &fixture.assets);
+        std::string error;
+        REQUIRE(document.OpenWorld(worldFile, &error));
+        REQUIRE(document.LoadRegion(0, 0, 2, 0, &error));
+
+        // Move the tree (cell 0, x = 90) 30 m east: it is now in cell 1, at x = 20 there.
+        GameObject *tree = scene.FindObject("Tree");
+        REQUIRE(tree != nullptr);
+        NodeState state = NodeState::Capture(*tree);
+        state.position.x += 30.0f;
+        REQUIRE(document.SetNodeState(*tree, state));
+        // And the house 250 m east, into cell 2, which has no file yet.
+        GameObject *house = scene.FindObject("House");
+        state = NodeState::Capture(*house);
+        state.position.x += 250.0f;
+        REQUIRE(document.SetNodeState(*house, state));
+        // Move the camera; the persistent scene is written in world coordinates.
+        GameObject *camera = scene.GetMainCamera();
+        state = NodeState::Capture(*camera);
+        state.position.y = 30.0f;
+        REQUIRE(document.SetNodeState(*camera, state));
+
+        REQUIRE_MESSAGE(document.Save(&error), error);
+        CHECK_FALSE(document.IsDirty());
+
+        const auto cell0 = ReadJson(cells / "cell_0_0.gscene");
+        CHECK(cell0["nodes"].empty());
+        const auto cell1 = ReadJson(cells / "cell_1_0.gscene");
+        REQUIRE(cell1["nodes"].size() == 2);
+        CHECK(cell1["nodes"][1]["name"] == "Tree");
+        CHECK(cell1["nodes"][1]["position"][0].get<double>() == doctest::Approx(20.0));
+        // A new file for the house, its child with it, relative to cell 2's corner.
+        REQUIRE(std::filesystem::exists(cells / "cell_2_0.gscene"));
+        const auto cell2 = ReadJson(cells / "cell_2_0.gscene");
+        REQUIRE(cell2["nodes"].size() == 2);
+        CHECK(cell2["nodes"][0]["name"] == "House");
+        CHECK(cell2["nodes"][0]["position"][0].get<double>() == doctest::Approx(60.0));
+        CHECK(cell2["nodes"][1]["parent"] == 0);
+        const auto persistent = ReadJson(worldFile.parent_path() / "persistent.gscene");
+        CHECK(persistent["mainCamera"] == 1);
+        CHECK(persistent["nodes"][1]["position"][0].get<double>() == doctest::Approx(1000.0));
+        CHECK(persistent["nodes"][1]["position"][1].get<double>() == doctest::Approx(30.0));
+
+        // The scene was rearranged to match: the tree is under cell 1 now.
+        CHECK(tree->GetParent()->GetID() == document.GetRegionCells()[1].root);
+        CHECK(scene.ToWorld(tree->GetWorldPosition()).x == doctest::Approx(-30.0));
+
+        // Opening it again shows the same world.
+        Scene other;
+        EditorDocument reopened(other, &fixture.assets);
+        REQUIRE(reopened.OpenWorld(worldFile, &error));
+        REQUIRE(reopened.LoadRegion(0, 0, 2, 0, &error));
+        CHECK(other.FindObjectByID(reopened.GetRegionCells()[2].root)->GetChildren().size() == 1);
+        GameObject *treeAgain = other.FindObject("Tree");
+        REQUIRE(treeAgain != nullptr);
+        CHECK(other.ToWorld(treeAgain->GetWorldPosition()).x == doctest::Approx(-30.0));
+        CHECK(other.ToWorld(other.GetMainCamera()->GetWorldPosition()).y == doctest::Approx(30.0));
+
+        // A saved world cannot be saved somewhere else, and play keeps the region origin.
+        CHECK_FALSE(reopened.SaveAs(fixture.root / "assets" / "elsewhere.gscene", &error));
+        const glm::vec3 before = treeAgain->GetPosition();
+        REQUIRE(reopened.Play());
+        REQUIRE(reopened.Stop());
+        CHECK(other.GetOrigin().x == doctest::Approx(-150.0));
+        GameObject *treeAfterPlay = other.FindObject("Tree");
+        REQUIRE(treeAfterPlay != nullptr);
+        CHECK(Near(treeAfterPlay->GetPosition(), before));
+        CHECK(reopened.IsCellRoot(treeAfterPlay->GetParent()->GetID()));
+    }
+
+    TEST_CASE("a cell that cannot be read is never overwritten")
+    {
+        RegisterBuiltinComponents();
+        ProjectFixture fixture("world_broken");
+        const auto worldFile = WriteWorld(fixture.root / "assets");
+        const auto broken = worldFile.parent_path() / "cells" / "cell_1_0.gscene";
+        std::ofstream(broken) << "{ not json";
+        Scene scene;
+        EditorDocument document(scene, &fixture.assets);
+        std::string error;
+        REQUIRE(document.OpenWorld(worldFile, &error));
+        REQUIRE(document.LoadRegion(0, 0, 1, 0, &error));
+        CHECK_FALSE(document.GetRegionCells()[1].loaded);
+        document.CreateEmpty("new");
+        REQUIRE(document.Save(&error));
+        std::ifstream file(broken);
+        const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        CHECK(text == "{ not json");
     }
 }
 

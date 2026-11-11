@@ -26,6 +26,9 @@ constexpr uint32_t MeshMagic = 0x48534d47;      // "GMSH"
 constexpr uint32_t AnimationMagic = 0x4e4e4147; // "GANN"
 constexpr uint32_t MaterialMagic = 0x54414d47;  // "GMAT"
 constexpr uint32_t FormatVersion = 1;
+// Meshes are at version 2 since M5: version 2 appends LOD index ranges. Version 1 meshes
+// still load (one LOD).
+constexpr uint32_t MeshFormatVersion = 2;
 
 struct CookedMeshData
 {
@@ -38,6 +41,9 @@ struct CookedMeshData
     // inverse bind matrices are in the same order.
     std::vector<std::string> jointNames;
     std::vector<glm::mat4> inverseBindMatrices;
+    // Index ranges, finest first (docs/design/0007). Empty: the whole index buffer is the
+    // only LOD.
+    std::vector<MeshLod> lods;
 
     bool IsSkinned() const
     {

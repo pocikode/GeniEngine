@@ -1102,6 +1102,11 @@ VulkanDevice::~VulkanDevice()
     {
         vkDeviceWaitIdle(m_device);
         ShutdownImGui();
+        for (const PendingUpload &upload : m_pendingUploads)
+        {
+            vmaDestroyBuffer(m_allocator, upload.staging, upload.stagingAllocation);
+        }
+        m_pendingUploads.clear();
         RunDeferred(true);
         DestroyAllLiveObjects();
 
@@ -1327,8 +1332,37 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
         {
             std::memcpy(record.mapped, initialData, desc.size);
         }
+        else if (!m_frameActive)
+        {
+            // Between frames: stage now, copy at the start of the next frame.
+            VkBufferCreateInfo stagingInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+            stagingInfo.size = desc.size;
+            stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            VmaAllocationCreateInfo stagingAlloc{};
+            stagingAlloc.usage = VMA_MEMORY_USAGE_AUTO;
+            stagingAlloc.flags =
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            stagingAlloc.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            PendingUpload upload;
+            VmaAllocationInfo stagingResult{};
+            if (vmaCreateBuffer(
+                    m_allocator, &stagingInfo, &stagingAlloc, &upload.staging, &upload.stagingAllocation, &stagingResult
+                ) != VK_SUCCESS)
+            {
+                GENI_LOG_ERROR(
+                    "Vulkan: cannot create a staging buffer for a %llu-byte upload",
+                    static_cast<unsigned long long>(desc.size)
+                );
+                return handle;
+            }
+            std::memcpy(stagingResult.pMappedData, initialData, desc.size);
+            upload.destination = record.buffer;
+            upload.size = desc.size;
+            m_pendingUploads.push_back(upload);
+        }
         else
         {
+            // Inside a frame the copy must happen before this frame's draws: submit it now.
             // A new buffer is not in use yet, so no need to wait for the GPU.
             BufferDesc stagingDesc{desc.size, BufferUsage::Vertex, MemoryUsage::CpuToGpu, "staging"};
             BufferHandle staging = CreateBuffer(stagingDesc, initialData);
@@ -1345,12 +1379,63 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
     return handle;
 }
 
+void VulkanDevice::RecordPendingUploads(VkCommandBuffer cmd)
+{
+    if (m_pendingUploads.empty())
+    {
+        return;
+    }
+    for (const PendingUpload &upload : m_pendingUploads)
+    {
+        VkBufferCopy region{0, 0, upload.size};
+        vkCmdCopyBuffer(cmd, upload.staging, upload.destination, 1, &region);
+    }
+    VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
+                            VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(
+        cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 1, &barrier, 0, nullptr, 0, nullptr
+    );
+    for (const PendingUpload &upload : m_pendingUploads)
+    {
+        Defer([this, upload]() { vmaDestroyBuffer(m_allocator, upload.staging, upload.stagingAllocation); });
+    }
+    m_pendingUploads.clear();
+}
+
+void VulkanDevice::FlushPendingUploads()
+{
+    if (m_pendingUploads.empty())
+    {
+        return;
+    }
+    ImmediateSubmit([&](VkCommandBuffer cmd) { RecordPendingUploads(cmd); });
+}
+
 void VulkanDevice::DestroyBuffer(BufferHandle buffer)
 {
     BufferRecord record;
     if (!m_buffers.Remove(buffer, record))
     {
         return;
+    }
+    // A buffer destroyed before its first frame never needs its upload.
+    for (size_t i = 0; i < m_pendingUploads.size();)
+    {
+        if (m_pendingUploads[i].destination == record.buffer)
+        {
+            vmaDestroyBuffer(m_allocator, m_pendingUploads[i].staging, m_pendingUploads[i].stagingAllocation);
+            m_pendingUploads[i] = m_pendingUploads.back();
+            m_pendingUploads.pop_back();
+        }
+        else
+        {
+            ++i;
+        }
     }
     Defer([this, record]() { vmaDestroyBuffer(m_allocator, record.buffer, record.allocation); });
 }
@@ -1364,6 +1449,8 @@ void VulkanDevice::UpdateBuffer(BufferHandle buffer, uint64_t offset, const void
     }
     GENI_ASSERT(offset + size <= record->size);
 
+    // A pending first upload must not land after (and over) this update.
+    FlushPendingUploads();
     // The buffer may be read by frames still in flight.
     vkQueueWaitIdle(m_queue);
 
@@ -2052,6 +2139,8 @@ CommandList *VulkanDevice::BeginFrame()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(frame.commandBuffer, &beginInfo);
 
+    RecordPendingUploads(frame.commandBuffer);
+
     m_commandList.m_device = this;
     m_commandList.m_cmd = frame.commandBuffer;
     m_commandList.m_layout = VK_NULL_HANDLE;
@@ -2218,6 +2307,24 @@ void VulkanDevice::GetBackbufferSize(uint32_t &width, uint32_t &height) const
 uint32_t VulkanDevice::GetUniformBufferAlignment() const
 {
     return static_cast<uint32_t>(m_properties.limits.minUniformBufferOffsetAlignment);
+}
+
+uint64_t VulkanDevice::GetAllocatedBytes() const
+{
+    if (!m_allocator)
+    {
+        return 0;
+    }
+    VkPhysicalDeviceMemoryProperties properties{};
+    vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &properties);
+    std::vector<VmaBudget> budgets(properties.memoryHeapCount);
+    vmaGetHeapBudgets(m_allocator, budgets.data());
+    uint64_t total = 0;
+    for (const auto &budget : budgets)
+    {
+        total += budget.statistics.allocationBytes;
+    }
+    return total;
 }
 
 std::string VulkanDevice::GetDescription() const

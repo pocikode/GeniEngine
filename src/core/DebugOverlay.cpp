@@ -1,6 +1,9 @@
 #include "core/DebugOverlay.h"
+
 #include "core/Log.h"
 #include "core/Profiler.h"
+#include <algorithm>
+#include <cstdio>
 
 #if defined(GENI_ENABLE_IMGUI)
 
@@ -127,6 +130,52 @@ void DebugOverlay::Render(const FrameStats &stats, rhi::CommandList *cmd)
     m_frameStarted = false;
 }
 
+// Memory against the per-platform budget and the world streamer's state
+// (docs/design/0007).
+void DebugOverlay::DrawStreamingSection(const FrameStats &stats)
+{
+    constexpr double kMiB = 1024.0 * 1024.0;
+    if (!ImGui::CollapsingHeader("Memory and streaming", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        return;
+    }
+    const double budget = stats.gpuBudgetBytes;
+    const float fraction = budget > 0.0 ? static_cast<float>(stats.residentGpuBytes / budget) : 0.0f;
+    char label[96];
+    std::snprintf(label, sizeof(label), "%.1f / %.0f MiB assets", stats.residentGpuBytes / kMiB, budget / kMiB);
+    ImGui::PushStyleColor(
+        ImGuiCol_PlotHistogram, fraction > 1.0f ? ImVec4(0.9f, 0.3f, 0.2f, 1.0f) : ImVec4(0.3f, 0.6f, 0.9f, 1.0f)
+    );
+    ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), label);
+    ImGui::PopStyleColor();
+    ImGui::Text("GPU allocated %.1f MiB", stats.gpuAllocatedBytes / kMiB);
+    if (!stats.worldOpen)
+    {
+        ImGui::TextDisabled("No world open");
+        return;
+    }
+    const float nodes = stats.maxLoadedNodes > 0 ? static_cast<float>(stats.loadedNodes) / stats.maxLoadedNodes : 0.0f;
+    std::snprintf(label, sizeof(label), "%d / %d nodes", stats.loadedNodes, stats.maxLoadedNodes);
+    ImGui::ProgressBar(std::min(nodes, 1.0f), ImVec2(-1.0f, 0.0f), label);
+    ImGui::Text(
+        "Cells %d loaded   %d loading   %d unloading   %d HLOD", stats.cellsLoaded, stats.cellsLoading,
+        stats.cellsUnloading, stats.hlodCells
+    );
+    ImGui::Text(
+        "Radius %.0f m full, %.0f m HLOD   stream %.2f ms", stats.loadRadius, stats.hlodRadius, stats.streamingMs
+    );
+    ImGui::Text("Camera (%.0f, %.0f, %.0f)", stats.cameraWorld[0], stats.cameraWorld[1], stats.cameraWorld[2]);
+    ImGui::Text("Origin (%.0f, %.0f, %.0f)", stats.worldOrigin[0], stats.worldOrigin[1], stats.worldOrigin[2]);
+    if (stats.streamingBudgetLimited)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Budget limited: nearer cells first");
+    }
+    if (stats.lateStreamingFrames > 0)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Late frames: %d", stats.lateStreamingFrames);
+    }
+}
+
 void DebugOverlay::DrawStatsWindow(const FrameStats &stats)
 {
     ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_FirstUseEver);
@@ -164,6 +213,11 @@ void DebugOverlay::DrawStatsWindow(const FrameStats &stats)
         "Assets %d loaded   %d pending   %.1f KiB decoded", stats.assetsLoaded, stats.assetsPending,
         stats.assetBytes / 1024.0
     );
+    ImGui::Text(
+        "LOD instances %d / %d / %d / %d", stats.lodInstances[0], stats.lodInstances[1], stats.lodInstances[2],
+        stats.lodInstances[3]
+    );
+    DrawStreamingSection(stats);
 
 #if defined(GENI_ENABLE_TRACY)
     ImGui::TextDisabled("Tracy: enabled (on demand)");
@@ -264,6 +318,10 @@ void DebugOverlay::Render(const FrameStats &, rhi::CommandList *)
 }
 
 void DebugOverlay::DrawStatsWindow(const FrameStats &)
+{
+}
+
+void DebugOverlay::DrawStreamingSection(const FrameStats &)
 {
 }
 

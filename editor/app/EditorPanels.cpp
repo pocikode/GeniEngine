@@ -946,3 +946,105 @@ void EditorApp::DrawConsole()
 }
 
 } // namespace Geni::Editor
+
+namespace Geni::Editor
+{
+
+// The open world's cell grid (docs/design/0007). Click a cell to start a region, Shift+click
+// to extend it, then load it. Cells with a file are filled, loaded cells are outlined.
+void EditorApp::DrawWorldPanel()
+{
+    if (!m_document->IsWorldDocument())
+    {
+        return;
+    }
+    ImGui::SetNextWindowSize(ImVec2(280.0f, 360.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("World"))
+    {
+        ImGui::End();
+        return;
+    }
+    const WorldSource &world = m_document->GetWorld();
+    ImGui::Text("%d x %d cells of %.0f m", world.cellsX, world.cellsZ, world.cellSize);
+    const int x0 = std::min(m_regionPick[0], m_regionPick[2]);
+    const int x1 = std::max(m_regionPick[0], m_regionPick[2]);
+    const int z0 = std::min(m_regionPick[1], m_regionPick[3]);
+    const int z1 = std::max(m_regionPick[1], m_regionPick[3]);
+    ImGui::Text("Region %d,%d to %d,%d (%d cells)", x0, z0, x1, z1, (x1 - x0 + 1) * (z1 - z0 + 1));
+
+    const bool playing = m_document->IsPlaying();
+    if (ImGui::Button("Load region") && !playing)
+    {
+        LoadRegion(x0, z0, x1, z1);
+    }
+    if (m_document->IsDirty())
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("Save and load") && !playing)
+        {
+            std::string error;
+            if (m_document->Save(&error))
+            {
+                LoadRegion(x0, z0, x1, z1);
+            }
+            else
+            {
+                m_document->SetStatus("Could not save: " + error);
+            }
+        }
+    }
+
+    const float cell = 14.0f;
+    ImGui::BeginChild("##cells", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##grid", ImVec2(cell * world.cellsX, cell * world.cellsZ));
+    const bool hovered = ImGui::IsItemHovered();
+    // +Z (south) is drawn downwards, matching the editor camera's default view.
+    for (int z = 0; z < world.cellsZ; ++z)
+    {
+        for (int x = 0; x < world.cellsX; ++x)
+        {
+            const ImVec2 lo(origin.x + x * cell, origin.y + z * cell);
+            const ImVec2 hi(lo.x + cell - 1.0f, lo.y + cell - 1.0f);
+            const bool picked = x >= x0 && x <= x1 && z >= z0 && z <= z1;
+            const ImU32 fill = picked                             ? IM_COL32(200, 160, 60, 255)
+                               : m_document->CellFileExists(x, z) ? IM_COL32(90, 95, 105, 255)
+                                                                  : IM_COL32(45, 48, 54, 255);
+            draw->AddRectFilled(lo, hi, fill);
+        }
+    }
+    for (const auto &loaded : m_document->GetRegionCells())
+    {
+        const ImVec2 lo(origin.x + loaded.x * cell, origin.y + loaded.z * cell);
+        draw->AddRect(lo, ImVec2(lo.x + cell - 1.0f, lo.y + cell - 1.0f), IM_COL32(90, 170, 255, 255), 0.0f, 0, 2.0f);
+    }
+    if (hovered)
+    {
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const int x = static_cast<int>((mouse.x - origin.x) / cell);
+        const int z = static_cast<int>((mouse.y - origin.y) / cell);
+        if (x >= 0 && z >= 0 && x < world.cellsX && z < world.cellsZ)
+        {
+            ImGui::SetTooltip("Cell %d,%d%s", x, z, m_document->CellFileExists(x, z) ? "" : " (empty)");
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                if (!ImGui::GetIO().KeyShift)
+                {
+                    m_regionPick[0] = x;
+                    m_regionPick[1] = z;
+                }
+                m_regionPick[2] = x;
+                m_regionPick[3] = z;
+            }
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !playing)
+            {
+                LoadRegion(x0, z0, x1, z1);
+            }
+        }
+    }
+    ImGui::EndChild();
+    ImGui::End();
+}
+
+} // namespace Geni::Editor
