@@ -3,6 +3,8 @@
 #include "assets/Asset.h"
 
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -25,6 +27,13 @@ struct AssetSlotBase
     AssetType type = AssetType::Unknown;
     std::atomic<AssetLoadState> state{AssetLoadState::NotLoaded};
     std::string error;
+    // Where the asset was read from (relative to the assets folder), its source name and
+    // the file's modification time then: AssetManager::ReloadChanged compares them.
+    std::string path;
+    std::string source;
+    int64_t fileTime = 0;
+    // Re-reads the file and swaps the new object into this slot. Set by AssetManager.
+    std::function<bool()> reload;
     virtual ~AssetSlotBase() = default;
     // References to the loaded object held outside this slot (0 when nothing is loaded).
     virtual long ExternalAssetReferences() const = 0;

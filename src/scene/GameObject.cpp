@@ -17,7 +17,75 @@ GameObject::~GameObject()
         {
             m_scene->UnregisterComponent(component.get());
         }
+        m_scene->UnregisterObject(this);
     }
+}
+
+void GameObject::UpdateEditMode()
+{
+    if (!m_active)
+    {
+        return;
+    }
+
+    for (auto &component : m_components)
+    {
+        component->EditUpdate();
+    }
+
+    for (auto it = m_children.begin(); it != m_children.end();)
+    {
+        if ((*it)->IsAlive())
+        {
+            (*it)->UpdateEditMode();
+            ++it;
+        }
+        else
+        {
+            it = m_children.erase(it);
+        }
+    }
+}
+
+bool GameObject::RemoveComponent(Component *component)
+{
+    for (auto it = m_components.begin(); it != m_components.end(); ++it)
+    {
+        if (it->get() == component)
+        {
+            if (m_scene)
+            {
+                m_scene->UnregisterComponent(component);
+            }
+            m_components.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
+int GameObject::GetSiblingIndex() const
+{
+    const std::vector<std::unique_ptr<GameObject>> *siblings = nullptr;
+    if (m_parent)
+    {
+        siblings = &m_parent->m_children;
+    }
+    else if (m_scene)
+    {
+        siblings = &m_scene->GetObjects();
+    }
+    if (siblings)
+    {
+        for (size_t i = 0; i < siblings->size(); ++i)
+        {
+            if ((*siblings)[i].get() == this)
+            {
+                return static_cast<int>(i);
+            }
+        }
+    }
+    return -1;
 }
 
 void GameObject::Update(float deltaTime)
@@ -119,14 +187,21 @@ const std::vector<std::unique_ptr<GameObject>> &GameObject::GetChildren() const
     return m_children;
 }
 
-void GameObject::AddComponent(Component *component)
+void GameObject::AddComponent(Component *component, int index)
 {
     if (!component)
     {
         return;
     }
 
-    m_components.emplace_back(component);
+    if (index < 0 || static_cast<size_t>(index) >= m_components.size())
+    {
+        m_components.emplace_back(component);
+    }
+    else
+    {
+        m_components.emplace(m_components.begin() + index, component);
+    }
     component->m_owner = this;
     if (m_scene)
     {

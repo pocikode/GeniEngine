@@ -18,6 +18,11 @@ class MeshComponent : public Component
     MeshComponent() = default;
     MeshComponent(const std::shared_ptr<Material> &material, const std::shared_ptr<Mesh> &mesh);
     void Update(float deltaTime) override;
+    // An edited scene is still drawn.
+    void EditUpdate() override
+    {
+        Update(0.0f);
+    }
     void ResolveAssets(SerializationContext &context) override;
 
     void SetMesh(const std::shared_ptr<Mesh> &mesh);
@@ -40,18 +45,13 @@ class MeshComponent : public Component
     {
         return m_meshID;
     }
-    void SetMeshID(AssetID id)
-    {
-        m_meshID = id;
-    }
+    // Changing an ID drops the loaded asset; ResolveAssets loads the new one.
+    void SetMeshID(AssetID id);
     AssetID GetMaterialID() const
     {
         return m_materialID;
     }
-    void SetMaterialID(AssetID id)
-    {
-        m_materialID = id;
-    }
+    void SetMaterialID(AssetID id);
 
   private:
     AssetHandle<Material> m_materialHandle;

@@ -15,7 +15,9 @@ enum class AssetType
     Texture,
     Material,
     Animation,
-    Scene
+    Scene,
+    // A .gprefab: a scene-format subtree that scenes instantiate (docs/design/0006).
+    Prefab
 };
 
 const char *AssetTypeName(AssetType type);

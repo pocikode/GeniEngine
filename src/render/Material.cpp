@@ -84,6 +84,24 @@ void Material::SetParam(const std::string &name, const std::shared_ptr<Texture> 
     m_bindingsDirty = true;
 }
 
+int Material::ReplaceTexture(const Texture *previous, const std::shared_ptr<Texture> &replacement)
+{
+    int replaced = 0;
+    for (auto &slot : m_textures)
+    {
+        if (slot.second.get() == previous)
+        {
+            slot.second = replacement;
+            ++replaced;
+        }
+    }
+    if (replaced > 0)
+    {
+        m_bindingsDirty = true;
+    }
+    return replaced;
+}
+
 rhi::BindGroupHandle Material::PrepareBindGroup(Renderer &renderer)
 {
     rhi::Device *device = renderer.GetDevice();

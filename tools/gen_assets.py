@@ -300,72 +300,15 @@ def skinned_bar_gltf():
 
 
 
-def f32(value):
-    """Rounds a double to the nearest float32, like a C++ float expression does."""
-    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+def city_kit_gltf():
+    """The reference game's building kit: nine unit cubes, one per material.
 
-def city_hash(index):
-    """tools/gen_assets.py's copy of the reference game's building hash, in float32.
-
-    samples/city used `fabs(fmod(sin(index * 12.9898f) * 43758.5453f, 1.0f))`, with
-    std::sin/std::fmod taking floats and computing in double before rounding.
-    """
-    scaled = f32(float(index) * f32(12.9898))
-    sine = f32(math.sin(scaled))
-    product = f32(sine * f32(43758.5453))
-    return abs(f32(math.fmod(product, 1.0)))
-
-def _normalize(v):
-    import math
-    l = math.sqrt(sum(c * c for c in v))
-    return tuple(c / l for c in v) if l else (0.0, 0.0, 0.0)
-
-def _cross(a, b):
-    return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
-
-def _quat_look_at(direction, up):
-    """Matches glm::quatLookAt (right-handed): local -Z points along direction."""
-    d = _normalize(direction)
-    z = (-d[0], -d[1], -d[2])
-    right = _normalize(_cross(up, z))
-    y = _cross(z, right)
-    # mat3 columns: right, y, z
-    m00, m10, m20 = right
-    m01, m11, m21 = y
-    m02, m12, m22 = z
-    trace = m00 + m11 + m22
-    if trace > 0.0:
-        s = math.sqrt(trace + 1.0) * 2.0
-        w = 0.25 * s
-        x = (m21 - m12) / s
-        yq = (m02 - m20) / s
-        zq = (m10 - m01) / s
-    elif m00 > m11 and m00 > m22:
-        s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
-        w = (m21 - m12) / s
-        x = 0.25 * s
-        yq = (m01 + m10) / s
-        zq = (m02 + m20) / s
-    elif m11 > m22:
-        s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
-        w = (m02 - m20) / s
-        x = (m01 + m10) / s
-        yq = 0.25 * s
-        zq = (m12 + m21) / s
-    else:
-        s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
-        w = (m10 - m01) / s
-        x = (m02 + m20) / s
-        yq = (m12 + m21) / s
-        zq = 0.25 * s
-    return (x, yq, zq, w)
-
-def city_gltf():
-    """The reference game's first block: 10,000 buildings, 100 lights and a camera.
-
-    The values mirror the original C++ setup in samples/city/main.cpp exactly, so the
-    cooked scene renders the same screenshot. Each palette entry gets its own mesh so a
-    glTF node can choose a material (glTF materials live on primitives, not nodes).
+    Only meshes and materials. The city block's layout (10,000 buildings, 100 lights, the
+    camera) used to be generated here too; since M4 it is a scene edited in the editor,
+    samples/city/assets/scenes/city.gscene, which refers to these meshes and materials by
+    asset ID. The IDs come from this file's path and the mesh and material names, so
+    renaming either breaks that scene. Each palette entry gets its own mesh so a glTF
+    node can choose a material (glTF materials live on primitives, not nodes).
     """
     b = GltfBuilder()
 
@@ -444,51 +387,12 @@ def city_gltf():
             "attributes": attributes, "indices": index_accessor, "material": i,
         }]})
 
-    nodes = [
-        {"name": "Camera", "extras": {"geni": {
-            "camera": {"fov": 60.0, "near": 0.1, "far": 1000.0},
-            "orbit": {"target": [0.0, 10.0, 0.0], "distance": 135.0, "yaw": 35.0, "pitch": 13.0},
-        }}},
-        {"name": "Sun", "rotation": list(_quat_look_at(_normalize((-0.5, -0.78, -0.36)), (0, 1, 0))),
-         "extras": {"geni": {"light": {"type": "directional", "color": [1.0, 0.95, 0.85], "intensity": 2.2}}}},
-        {"name": "Ground", "translation": [0.0, -0.5, 0.0], "scale": [360.0, 1.0, 360.0], "mesh": len(palette)},
-    ]
-
-    blocks = 100
-    for z in range(blocks):
-        for x in range(blocks):
-            index = z * blocks + x
-            # The same arithmetic the C++ reference did, rounded to float32 after every
-            # operation: the hash is chaotic, so float vs double precision changes every
-            # building height. Keeping it bit-exact keeps tests/reference/city_f60.png
-            # valid.
-            hsh = city_hash(index)
-            width = f32(f32(2.4) - f32(f32(f32(f32(1.2) * f32(float(index % 3))) * f32(0.15))))
-            height = f32(f32(2.0) + f32(f32(30.0) * hsh))
-            nodes.append({
-                "name": "Block",
-                "translation": [
-                    f32(f32(f32(float(x)) - f32(49.5)) * f32(2.6)),
-                    f32(height * f32(0.5)),
-                    f32(f32(f32(float(z)) - f32(49.5)) * f32(2.6)),
-                ],
-                "scale": [width, height, width],
-                "mesh": index % len(palette),
-            })
-
-    lights = 10
-    for z in range(lights):
-        for x in range(lights):
-            index = z * lights + x
-            hue = (index % lights) / float(lights)
-            color = (0.9, 0.6 + 0.4 * math.cos(6.2832 * hue), 0.4 + 0.6 * math.sin(6.2832 * hue))
-            nodes.append({
-                "name": "StreetLight",
-                "translation": [(x - (lights - 1) * 0.5) * 26.0, 6.0, (z - (lights - 1) * 0.5) * 26.0],
-                "extras": {"geni": {"light": {
-                    "type": "point", "color": list(color), "intensity": 5.0, "range": 34.0,
-                }}},
-            })
+    # One node per mesh, in a row, so importing the kit into a scene shows every piece.
+    nodes = []
+    for i in range(len(palette)):
+        nodes.append({"name": f"Building{i}", "translation": [(i - 3.5) * 3.0, 0.5, 0.0], "mesh": i})
+    nodes.append({"name": "Ground", "translation": [0.0, -0.5, 0.0], "scale": [30.0, 1.0, 30.0],
+                  "mesh": len(palette)})
 
     return b.finish({
         "scene": 0,
@@ -534,7 +438,7 @@ def main():
     write_json(ROOT / "samples/sandbox/assets/models/skinned_bar.gltf", bar)
     write_png(ROOT / "tests/assets/textures/checker.png", 16, 16, checker)
     write_png(ROOT / "samples/sandbox/assets/textures/checker.png", 64, 64, checker)
-    write_json(ROOT / "samples/city/assets/models/city.gltf", city_gltf(), compact=True)
+    write_json(ROOT / "samples/city/assets/models/city_kit.gltf", city_kit_gltf(), compact=True)
 
 
 if __name__ == "__main__":

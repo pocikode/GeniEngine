@@ -46,6 +46,10 @@ struct PropertyDesc
 {
     std::string name;
     PropertyType type = PropertyType::String;
+    // Enum: the allowed values, in declaration order. Asset: the kind of asset the
+    // property refers to. Both are for tools (the inspector); files do not need them.
+    std::vector<std::string> enumNames;
+    AssetType assetType = AssetType::Unknown;
     std::function<nlohmann::json(const Component &)> get;
     std::function<bool(Component &, const nlohmann::json &, SerializationContext &)> set;
 };
@@ -278,12 +282,13 @@ PropertyDesc StringProperty(std::string name, std::string (C::*getter)() const, 
 
 template <typename C>
 PropertyDesc AssetIDProperty(
-    std::string name, PropertyType type, AssetID (C::*getter)() const, void (C::*setter)(AssetID)
+    std::string name, AssetType assetType, AssetID (C::*getter)() const, void (C::*setter)(AssetID)
 )
 {
     PropertyDesc property;
     property.name = std::move(name);
-    property.type = type;
+    property.type = PropertyType::Asset;
+    property.assetType = assetType;
     property.get = [getter](const Component &component) {
         const AssetID id = (static_cast<const C &>(component).*getter)();
         return nlohmann::json(id.IsValid() ? id.ToHex() : std::string());
@@ -303,6 +308,10 @@ PropertyDesc EnumProperty(
     PropertyDesc property;
     property.name = std::move(name);
     property.type = PropertyType::Enum;
+    for (const auto &entry : names)
+    {
+        property.enumNames.push_back(entry.second);
+    }
     property.get = [getter, names](const Component &component) {
         const E value = (static_cast<const C &>(component).*getter)();
         for (const auto &[candidate, text] : names)

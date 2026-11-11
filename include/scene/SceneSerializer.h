@@ -79,6 +79,11 @@ class SceneInstantiation
     const nlohmann::json *m_nodes = nullptr;
     std::vector<GameObject *> m_objects;
     size_t m_cursor = 0;
+    bool m_preserveIds = false;
+    // Parent for the document's root nodes (InstantiateSubtree); nullptr: scene roots.
+    GameObject *m_attachParent = nullptr;
+
+    friend class SceneSerializer;
 };
 
 // Text scene format (docs/design/0005): a flat node array with parent indices and
@@ -104,6 +109,32 @@ class SceneSerializer
     static bool Instantiate(
         Scene &scene, const SceneAsset &asset, SerializationContext &context, std::string *error = nullptr
     );
+
+    // Part of a scene in the scene format: each root and everything under it. With
+    // `includeIds` every node carries its object ID, which InstantiateSubtree can restore
+    // (undo of a delete, play/stop). `format` is "geni.scene" or "geni.prefab".
+    static nlohmann::ordered_json SaveSubtree(
+        const std::vector<GameObject *> &roots, bool includeIds = false, const char *format = "geni.scene"
+    );
+    // Adds a document's nodes under `parent` (nullptr: as scene roots) without touching
+    // the rest of the scene. `roots` receives the objects created for the document's
+    // root nodes. On failure nothing is left behind.
+    static bool InstantiateSubtree(
+        Scene &scene, const nlohmann::json &document, SerializationContext &context, GameObject *parent,
+        std::vector<GameObject *> *roots = nullptr, std::string *error = nullptr, bool preserveIds = false
+    );
+
+    // Prefabs (docs/design/0006). SavePrefab writes `root` and its subtree as a .gprefab.
+    static bool SavePrefab(GameObject &root, const std::filesystem::path &path, std::string *error = nullptr);
+    // Creates an object named after the prefab's root under `parent` and fills it from
+    // the prefab asset. nullptr when the prefab cannot be loaded.
+    static GameObject *InstantiatePrefab(
+        Scene &scene, AssetID prefab, SerializationContext &context, GameObject *parent = nullptr
+    );
+    // Rebuilds what an instance got from its prefab (after the prefab file changed).
+    static bool RefreshPrefabInstance(GameObject &instance, SerializationContext &context);
+    // Turns an instance into plain objects: its contents stay, the link to the prefab goes.
+    static void UnpackPrefabInstance(GameObject &instance);
 };
 
 } // namespace Geni

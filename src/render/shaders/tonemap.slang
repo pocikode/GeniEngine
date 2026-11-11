@@ -4,10 +4,23 @@ import geni.frame;
 
 [[vk::binding(0, 1)]] Sampler2D hdrColor;
 
-[shader("vertex")]
-float4 vertexMain(uint vertexIndex : SV_VulkanVertexID) : SV_Position
+// The HDR image is addressed by an interpolated coordinate, not by the pixel position:
+// the pass may draw into a rectangle of the backbuffer (Renderer::SetSceneViewport).
+struct VertexOutput
 {
-    return float4(FullScreenTrianglePosition(vertexIndex), 0.0, 1.0);
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+[shader("vertex")]
+VertexOutput vertexMain(uint vertexIndex : SV_VulkanVertexID)
+{
+    VertexOutput output;
+    float2 clip = FullScreenTrianglePosition(vertexIndex);
+    output.position = float4(clip, 0.0, 1.0);
+    // Clip-space Y points up; the image's first row is the top.
+    output.uv = float2(0.5 * clip.x + 0.5, 0.5 - 0.5 * clip.y);
+    return output;
 }
 
 float3 AcesFilmic(float3 x)
@@ -21,10 +34,9 @@ float3 AcesFilmic(float3 x)
 }
 
 [shader("fragment")]
-float4 fragmentMain(float4 fragCoord : SV_Position) : SV_Target
+float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    float2 uv = fragCoord.xy * uFrame.screenParams.zw;
-    float3 color = hdrColor.Sample(uv).rgb * uFrame.cameraPosition.w; // w = exposure
+    float3 color = hdrColor.Sample(input.uv).rgb * uFrame.cameraPosition.w; // w = exposure
     color = AcesFilmic(color);
     color = pow(color, float3(1.0 / 2.2));
     return float4(color, 1.0);

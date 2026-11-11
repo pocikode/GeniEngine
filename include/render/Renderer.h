@@ -57,6 +57,17 @@ struct RendererConfig
     float ambientIntensity = 0.15f;
 };
 
+// The part of the backbuffer the scene is drawn into, in pixels from the top-left corner.
+// A zero width or height means the whole backbuffer (the default). The editor sets it to
+// the area its panels leave free.
+struct SceneViewport
+{
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+};
+
 // What the most recent frame did, for the debug overlay and the benchmark.
 struct RenderStats
 {
@@ -94,6 +105,16 @@ class Renderer
     {
         return m_stats;
     }
+
+    // The HDR targets take the viewport's size and the tonemap pass draws into its
+    // rectangle; the rest of the backbuffer is cleared to black.
+    void SetSceneViewport(const SceneViewport &viewport)
+    {
+        m_sceneViewport = viewport;
+    }
+    // The rectangle the scene is drawn into this frame: the viewport clipped to the
+    // backbuffer, or the whole backbuffer. Cameras take their aspect ratio from it.
+    SceneViewport GetSceneRect() const;
 
     // Built-in PBR shader (glTF metallic-roughness). Material parameters are
     // `uBaseColorFactor`, `uMetallicRoughness`, `uEmissiveFactor`,
@@ -235,6 +256,7 @@ class Renderer
     rhi::Device *m_device = nullptr;
     RendererConfig m_config;
     RenderStats m_stats;
+    SceneViewport m_sceneViewport;
 
     rhi::BindGroupLayoutHandle m_frameLayout;
     rhi::BindGroupLayoutHandle m_drawLayout;

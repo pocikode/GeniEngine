@@ -36,7 +36,7 @@ void MeshComponent::SetMesh(const std::shared_ptr<Mesh> &mesh)
 void MeshComponent::SetMesh(const AssetHandle<Mesh> &mesh)
 {
     m_meshHandle = mesh;
-    m_mesh = mesh.Shared();
+    m_mesh.reset();
     m_meshID = mesh.GetID();
 }
 
@@ -53,18 +53,39 @@ void MeshComponent::SetMaterial(const std::shared_ptr<Material> &material)
 void MeshComponent::SetMaterial(const AssetHandle<Material> &material)
 {
     m_materialHandle = material;
-    m_material = material.Shared();
+    m_material.reset();
     m_materialID = material.GetID();
+}
+
+void MeshComponent::SetMeshID(AssetID id)
+{
+    if (id != m_meshID)
+    {
+        m_meshHandle.Reset();
+        m_mesh.reset();
+    }
+    m_meshID = id;
+}
+
+void MeshComponent::SetMaterialID(AssetID id)
+{
+    if (id != m_materialID)
+    {
+        m_materialHandle.Reset();
+        m_material.reset();
+    }
+    m_materialID = id;
 }
 
 Mesh *MeshComponent::GetMesh() const
 {
-    return m_mesh ? m_mesh.get() : m_meshHandle.Get();
+    // The handle first: after a hot reload its slot holds the new object.
+    return m_meshHandle.IsValid() ? m_meshHandle.Get() : m_mesh.get();
 }
 
 Material *MeshComponent::GetMaterial() const
 {
-    return m_material ? m_material.get() : m_materialHandle.Get();
+    return m_materialHandle.IsValid() ? m_materialHandle.Get() : m_material.get();
 }
 
 void MeshComponent::Update(float deltaTime)
@@ -107,10 +128,10 @@ const bool s_registered = RegisterComponentType<MeshComponent>(
     "MeshComponent",
     {
         AssetIDProperty<MeshComponent>(
-            "mesh", PropertyType::Asset, &MeshComponent::GetMeshID, &MeshComponent::SetMeshID
+            "mesh", AssetType::Mesh, &MeshComponent::GetMeshID, &MeshComponent::SetMeshID
         ),
         AssetIDProperty<MeshComponent>(
-            "material", PropertyType::Asset, &MeshComponent::GetMaterialID, &MeshComponent::SetMaterialID
+            "material", AssetType::Material, &MeshComponent::GetMaterialID, &MeshComponent::SetMaterialID
         ),
     }
 );

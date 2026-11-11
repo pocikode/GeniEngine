@@ -18,9 +18,14 @@ class FileSystem
     // Overrides the assets folder. An empty path restores the default lookup.
     void SetAssetsFolder(const std::filesystem::path &path);
 
-    // Where an asset path points: the assets folder, or else `assets/` next to the
-    // executable, where build outputs such as compiled shaders are placed. Returns the
-    // assets-folder path when neither exists.
+    // Where build outputs (cooked assets, compiled shaders) are looked up when the assets
+    // folder does not have a file. Empty (the default) means `assets/` next to the
+    // executable. The editor points it at the project's cooked folder.
+    void SetCookedFolder(const std::filesystem::path &path);
+    std::filesystem::path GetCookedFolder() const;
+
+    // Where an asset path points: the assets folder, or else the cooked folder. Returns
+    // the assets-folder path when neither exists.
     std::filesystem::path ResolveAssetPath(const std::string &relativePath) const;
 
     std::vector<char> LoadFile(const std::filesystem::path &path);
@@ -29,6 +34,7 @@ class FileSystem
 
   private:
     std::filesystem::path m_assetsFolderOverride;
+    std::filesystem::path m_cookedFolderOverride;
 };
 
 } // namespace Geni

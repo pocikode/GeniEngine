@@ -1,6 +1,6 @@
 # GeniEngine Roadmap
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 ## Goal
 
@@ -118,6 +118,23 @@ Everything streaming and the editor depend on.
 **Done when:** the city block loads from a scene file, assets load asynchronously without frame hitches, and no glTF parsing happens at runtime.
 
 ### M4: Editor v1 (Aug 2028 – Jan 2029, about 200 h)
+
+**Status (2026-11-11):** implemented; design page `docs/design/0006-editor.md`.
+`geni_editor` (in `editor/`) has a docked viewport, hierarchy, inspector, asset browser and
+console; translate, rotate and scale gizmos with snapping; picking; undo and redo for every
+edit; play-in-editor; hot reload of shaders (recompiled with the pinned `slangc`) and
+assets (re-cooked by `geni_asset_cooker`); and prefabs with nesting, unpacking and
+live update of instances. The city block is now `samples/city/assets/scenes/city.gscene`:
+the M3 layout was imported into the editor once and saved, `tools/gen_assets.py` only
+generates the nine-mesh building kit, and `samples/city` loads the scene file with no
+scene setup in C++. It still matches the M2 reference screenshot and passes the benchmark.
+Tested on macOS (MoltenVK, validation layers on): unit tests for the engine additions and
+the editor core, a scripted editor session on the city block (`editor_smoke`) and a
+screenshot of the editor window (`screenshot_editor`). Limits of v1, all in the design
+page: picking is by bounding box, a prefab instance can only override its root's name and
+transform, and overlays are not depth-tested against the scene. Nobody other than the
+author has used the editor yet, and nothing has been laid out in it by hand beyond the
+scripted session. Open until CI has run green on macOS, Windows and Linux.
 
 The point where other people can start using the engine.
 

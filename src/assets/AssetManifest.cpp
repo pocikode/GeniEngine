@@ -87,6 +87,18 @@ bool AssetManifest::LoadFromFile(const std::filesystem::path &path, std::string 
     return true;
 }
 
+void AssetManifest::Register(const AssetManifestEntry &entry)
+{
+    auto it = m_byID.find(entry.id.value);
+    if (it != m_byID.end())
+    {
+        m_entries[it->second] = entry;
+        return;
+    }
+    m_byID[entry.id.value] = m_entries.size();
+    m_entries.push_back(entry);
+}
+
 void AssetManifest::Clear()
 {
     m_entries.clear();

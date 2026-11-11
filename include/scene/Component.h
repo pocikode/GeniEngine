@@ -13,6 +13,11 @@ class Component
     virtual ~Component() = default;
     virtual void Init();
     virtual void Update(float deltaTime) = 0;
+    // Called instead of Update while a scene is edited rather than played
+    // (SceneUpdateMode::Edit). Only components that draw do anything here.
+    virtual void EditUpdate()
+    {
+    }
     virtual size_t GetTypeID() const = 0;
     // Stable name used by the scene file and the type registry.
     virtual const char *GetTypeName() const = 0;

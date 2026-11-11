@@ -54,7 +54,7 @@ int main(int argc, char **argv)
         {
             std::printf(
                 "Usage: geni_asset_cooker --source-root DIR --output-root DIR [--all] [--input REL ...]\n"
-                "  --all          cook every .gltf/.glb/.png/.jpg under the source root\n"
+                "  --all          cook every .gltf/.glb/.png/.jpg/.gscene/.gprefab under the source root\n"
                 "  --input REL    cook one path relative to the source root (repeatable)\n"
                 "  --texture-quality fast|medium|thorough  ASTC search effort (default medium)\n"
                 "  --write-meta   create a .meta file with a new GUID for every input that has none\n"

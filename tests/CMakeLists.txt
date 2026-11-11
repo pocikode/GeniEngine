@@ -16,6 +16,8 @@ add_executable(geni_tests
   test_assets.cpp
   test_serialization.cpp
   test_ktx2.cpp
+  test_scene_editing.cpp
+  test_hot_reload.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
@@ -67,3 +69,20 @@ add_test(NAME asset_cooker
                  --output-root ${CMAKE_CURRENT_BINARY_DIR}/cooker_check
                  --all)
 set_tests_properties(asset_cooker PROPERTIES TIMEOUT 120 LABELS "tools")
+
+
+# Editor core (document, undo commands, gizmo maths, project layer): its own executable,
+# because it links geni_editor_core. No window or GPU needed.
+if(TARGET geni_editor_core)
+  add_executable(geni_editor_tests test_editor.cpp)
+  target_include_directories(geni_editor_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/doctest)
+  target_link_libraries(geni_editor_tests PRIVATE geni_editor_core)
+  target_compile_definitions(geni_editor_tests PRIVATE
+    GENI_TEST_CMAKE_COMMAND="${CMAKE_COMMAND}"
+    GENI_TEST_SLANGC="${GENI_SLANGC_EXECUTABLE}"
+    GENI_TEST_SHADER_MODULES="${GENI_SHADER_MODULE_DIR}"
+    GENI_TEST_SHADER_SOURCE="${PROJECT_SOURCE_DIR}/samples/sandbox/assets/shaders/lit.slang")
+  set_target_properties(geni_editor_tests PROPERTIES ENABLE_EXPORTS ON)
+  add_test(NAME editor COMMAND geni_editor_tests)
+  set_tests_properties(editor PROPERTIES LABELS "editor" TIMEOUT 120)
+endif()

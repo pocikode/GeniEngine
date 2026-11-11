@@ -2,6 +2,10 @@
 // a static city block of 10,000 objects and 100 lights, drawn with cascaded shadows,
 // clustered forward lighting, PBR materials, a sky and MSAA, then tonemapped.
 //
+// The block is assets/scenes/city.gscene, a scene built and edited in the editor (M4):
+//   cmake --build build/dev --target edit_city
+// This program only loads it; there is no scene setup in C++.
+//
 // It is also the performance check: with --budget-ms the program exits with code 4 when
 // the mean frame time is over budget, and with --load-budget-ms it exits with code 5 when
 // any frame while the block is loading took longer than that (a loading hitch).
@@ -25,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
 #include <string>
@@ -45,8 +50,6 @@ struct Options
     std::string screenshotPath;
 };
 
-constexpr int kBlocksPerSide = 100; // 100 x 100 = 10,000 buildings
-constexpr int kLightsPerSide = 10; // 100 point lights
 // Scene nodes instantiated per frame while loading. Two passes over 10,001 nodes take
 // about 20 frames, and each step stays far below a frame's budget.
 constexpr size_t kNodesPerLoadingFrame = 1000;
@@ -62,20 +65,30 @@ class CityApp : public Geni::Application
     {
         auto &engine = Geni::Engine::GetInstance();
 
+#if defined(GENI_SAMPLE_ASSETS_DIR)
+        // Prefer the source tree when it is there, so a scene saved in the editor is what
+        // the next run loads, without a rebuild. A packaged build falls back to the
+        // assets/ folder next to the executable.
+        std::error_code ec;
+        if (std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
+        {
+            engine.GetFileSystem().SetAssetsFolder(GENI_SAMPLE_ASSETS_DIR);
+        }
+#endif
+
         m_scene = new Geni::Scene();
         engine.SetScene(m_scene);
 
-        // M3: the block is a cooked scene, not 10,000 lines of C++. The cooker turns
-        // models/city.gltf into cooked/models/city.gscene plus .gmesh/.gmat assets and a
-        // manifest; the runtime never parses glTF. The scene file is read and parsed on a
-        // worker, instantiated a slice per frame, and its meshes and materials stream in
-        // on workers while frames keep rendering.
+        // The block is a scene file, scenes/city.gscene: laid out in the editor from the
+        // building kit (models/city_kit.gltf, cooked to .gmesh/.gmat assets). The file is
+        // read and parsed on a worker, instantiated a slice per frame, and its meshes and
+        // materials stream in on workers while frames keep rendering.
         auto &assets = engine.GetAssetManager();
-        const Geni::AssetID sceneID = assets.FindBySource(Geni::AssetType::Scene, "models/city.gltf");
+        const Geni::AssetID sceneID = assets.FindBySource(Geni::AssetType::Scene, "scenes/city.gscene");
         m_sceneAsset = assets.LoadScene(sceneID, true);
         if (!m_sceneAsset.IsValid() || m_sceneAsset.HasFailed())
         {
-            GENI_LOG_ERROR("Could not start loading the cooked city scene");
+            GENI_LOG_ERROR("Could not start loading scenes/city.gscene (is it in the cooked manifest?)");
             return false;
         }
         m_loading = true;
@@ -94,7 +107,7 @@ class CityApp : public Geni::Application
             {
                 if (m_sceneAsset.HasFailed())
                 {
-                    GENI_LOG_ERROR("Could not load the cooked city scene: %s", m_sceneAsset.GetError().c_str());
+                    GENI_LOG_ERROR("Could not load the city scene: %s", m_sceneAsset.GetError().c_str());
                     SetNeedsToBeClosed(true);
                 }
                 return false;
@@ -109,7 +122,7 @@ class CityApp : public Geni::Application
             const auto status = m_instantiation->Step(kNodesPerLoadingFrame);
             if (status == Geni::SceneInstantiation::Status::Failed)
             {
-                GENI_LOG_ERROR("Could not instantiate the cooked city scene: %s", m_instantiation->GetError().c_str());
+                GENI_LOG_ERROR("Could not instantiate the city scene: %s", m_instantiation->GetError().c_str());
                 SetNeedsToBeClosed(true);
                 return false;
             }
@@ -127,12 +140,17 @@ class CityApp : public Geni::Application
         }
 
         GENI_LOG_INFO(
-            "City block: %zu mesh components, %zu lights, %llu assets; loaded over %ld frames from cooked scene %s; "
+            "City block: %zu mesh components, %zu lights, %llu assets; loaded over %ld frames from scene %s; "
             "slowest loading frame %.2f ms",
             m_scene->CountComponents<Geni::MeshComponent>() + m_scene->CountComponents<Geni::SkinnedMeshComponent>(),
             m_scene->CollectLights().size(), static_cast<unsigned long long>(assets.GetStats().assetsLoaded),
             m_loadingFrames, m_sceneAsset->GetSourcePath().c_str(), m_slowestLoadingFrameMs
         );
+        // What the scene file holds; the editor can change it, so nothing here assumes
+        // the 10,000 buildings and 100 lights it was first laid out with.
+        m_objectCount =
+            m_scene->CountComponents<Geni::MeshComponent>() + m_scene->CountComponents<Geni::SkinnedMeshComponent>();
+        m_lightCount = m_scene->CollectLights().size();
         m_instantiation.reset();
         m_loading = false;
         return true;
@@ -193,6 +211,14 @@ class CityApp : public Geni::Application
     {
         return m_slowestLoadingFrameMs;
     }
+    size_t ObjectCount() const
+    {
+        return m_objectCount;
+    }
+    size_t LightCount() const
+    {
+        return m_lightCount;
+    }
 
   private:
     Options m_options;
@@ -202,6 +228,8 @@ class CityApp : public Geni::Application
     bool m_loading = false;
     long m_loadingFrames = 0;
     double m_slowestLoadingFrameMs = 0.0;
+    size_t m_objectCount = 0;
+    size_t m_lightCount = 0;
     long m_frame = 0;
     long m_measured = 0;
     double m_totalMs = 0.0;
@@ -290,6 +318,8 @@ int main(int argc, char **argv)
     engine.Run();
     const double meanMs = app->MeanFrameMs();
     const double slowestLoadingMs = app->SlowestLoadingFrameMs();
+    const size_t objectCount = app->ObjectCount();
+    const size_t lightCount = app->LightCount();
     engine.Destroy();
 
     if (const auto errors = Geni::rhi::GetValidationErrorCount())
@@ -302,9 +332,8 @@ int main(int argc, char **argv)
     {
         const double fps = meanMs > 0.0 ? 1000.0 / meanMs : 0.0;
         std::printf(
-            "city: %.2f ms/frame (%.1f fps) over %ld measured frames; %d objects, %d lights; budget %.2f ms\n", meanMs,
-            fps, std::max(0L, options.frames - options.warmup), kBlocksPerSide * kBlocksPerSide,
-            kLightsPerSide * kLightsPerSide, options.budgetMs
+            "city: %.2f ms/frame (%.1f fps) over %ld measured frames; %zu objects, %zu lights; budget %.2f ms\n", meanMs,
+            fps, std::max(0L, options.frames - options.warmup), objectCount, lightCount, options.budgetMs
         );
         if (options.budgetMs > 0.0 && meanMs > options.budgetMs)
         {

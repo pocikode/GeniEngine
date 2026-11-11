@@ -18,6 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(GENI_BUILD_TESTS "Build the engine test suite" ${PROJECT_IS_TOP_LEVEL})
 option(GENI_BUILD_SAMPLES "Build the programs in samples/" ${PROJECT_IS_TOP_LEVEL})
 option(GENI_BUILD_TOOLS "Build the asset cooker and other offline tools" ${PROJECT_IS_TOP_LEVEL})
+option(GENI_BUILD_EDITOR "Build the scene editor (geni_editor)" ${PROJECT_IS_TOP_LEVEL})
 option(GENI_ENABLE_IMGUI "Build Dear ImGui into the engine and enable the debug overlay" ON)
 option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
@@ -76,6 +77,7 @@ set(SRC_FILES
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
+  src/scene/Picking.cpp
   src/scene/SceneSerializer.cpp
   src/scene/Component.cpp
   src/scene/Reflection.cpp
@@ -89,6 +91,7 @@ set(SRC_FILES
   src/scene/components/PhysicsComponent.cpp
   src/scene/components/OrbitCameraComponent.cpp
   src/io/FileSystem.cpp
+  src/io/FileWatcher.cpp
   src/io/ImageWriter.cpp
   src/physics/PhysicsManager.cpp
   src/physics/Collider.cpp
@@ -231,6 +234,12 @@ endif()
 
 if(GENI_BUILD_TOOLS)
   add_subdirectory(tools)
+endif()
+
+# After tools/ (the editor runs the cooker) and before samples/ and tests/ (which add
+# editor targets and editor tests).
+if(GENI_BUILD_EDITOR)
+  add_subdirectory(editor)
 endif()
 
 if(GENI_BUILD_SAMPLES)

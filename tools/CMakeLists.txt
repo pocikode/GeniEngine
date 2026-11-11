@@ -76,7 +76,8 @@ function(geni_cook_assets target source_dir output_dir)
   file(GLOB_RECURSE cook_inputs CONFIGURE_DEPENDS
     "${source_dir}/*.gltf" "${source_dir}/*.glb"
     "${source_dir}/*.png" "${source_dir}/*.jpg" "${source_dir}/*.jpeg"
-    "${source_dir}/*.bin" "${source_dir}/*.meta")
+    "${source_dir}/*.bin" "${source_dir}/*.meta"
+    "${source_dir}/*.gscene" "${source_dir}/*.gprefab")
   set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}_assets.stamp")
   add_custom_command(OUTPUT "${stamp}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${source_dir}" "${output_dir}"

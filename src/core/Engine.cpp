@@ -12,6 +12,7 @@
 #include "scene/components/CameraComponent.h"
 #include "scene/BuiltinComponents.h"
 #include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cstdio>
 #include <vector>
@@ -169,7 +170,7 @@ bool Engine::Init(const EngineConfig &config)
 
     if (config.debugOverlay)
     {
-        if (m_debugOverlay.Init(m_window, m_device.get()))
+        if (m_debugOverlay.Init(m_window, m_device.get(), config.imguiDocking, config.imguiIniFile))
         {
             m_debugOverlay.SetVisible(config.debugOverlayVisible);
         }
@@ -288,7 +289,10 @@ void Engine::Simulate(double frameSeconds)
     for (int i = 0; i < steps; ++i)
     {
         GENI_PROFILE_SCOPE("FixedStep");
-        m_physicsManager.Step(fixedDelta);
+        if (!m_physicsPaused)
+        {
+            m_physicsManager.Step(fixedDelta);
+        }
         m_application->FixedUpdate(fixedDelta);
     }
 
@@ -324,32 +328,13 @@ void Engine::RenderFrame()
         // nullptr while minimized: the frame is still simulated, just not drawn.
         cmd = m_device->BeginFrame();
 
-        uint32_t width = 0;
-        uint32_t height = 0;
-        m_device->GetBackbufferSize(width, height);
-        const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
+        const SceneViewport sceneRect = m_renderer.GetSceneRect();
+        const float aspect = static_cast<float>(sceneRect.width) / static_cast<float>(sceneRect.height);
 
-        CameraData cameraData;
-        cameraData.viewMatrix = glm::mat4(1.0f);
-        cameraData.projectionMatrix = glm::mat4(1.0f);
-        cameraData.position = glm::vec3(0.0f);
+        const CameraData cameraData = GetRenderCamera(aspect);
         std::vector<LightData> lights;
-
         if (m_currentScene)
         {
-            if (auto cameraObj = m_currentScene->GetMainCamera())
-            {
-                auto cameraComponent = cameraObj->GetComponent<CameraComponent>();
-                if (cameraComponent)
-                {
-                    cameraData.viewMatrix = cameraComponent->GetViewMatrix();
-                    cameraData.projectionMatrix = cameraComponent->GetProjectionMatrix(aspect);
-                    cameraData.position = cameraObj->GetWorldPosition();
-                    cameraData.nearPlane = cameraComponent->GetNearPlane();
-                    cameraData.farPlane = cameraComponent->GetFarPlane();
-                }
-            }
-
             lights = m_currentScene->CollectLights();
         }
 
@@ -443,6 +428,8 @@ void Engine::Destroy()
     glfwTerminate();
     m_window = nullptr;
     m_initialized = false;
+    m_hasViewOverride = false;
+    m_physicsPaused = false;
 
     Log::Flush();
 }
@@ -530,6 +517,48 @@ void Engine::SetScene(Scene *scene)
 Scene *Engine::GetScene()
 {
     return m_currentScene.get();
+}
+
+void Engine::SetViewOverride(const ViewOverride &view)
+{
+    m_viewOverride = view;
+    m_hasViewOverride = true;
+}
+
+void Engine::ClearViewOverride()
+{
+    m_hasViewOverride = false;
+}
+
+CameraData Engine::GetRenderCamera(float aspect)
+{
+    CameraData cameraData;
+    if (m_hasViewOverride)
+    {
+        cameraData.viewMatrix = m_viewOverride.viewMatrix;
+        cameraData.projectionMatrix = glm::perspective(
+            glm::radians(m_viewOverride.fieldOfViewDegrees), aspect, m_viewOverride.nearPlane, m_viewOverride.farPlane
+        );
+        cameraData.position = m_viewOverride.position;
+        cameraData.nearPlane = m_viewOverride.nearPlane;
+        cameraData.farPlane = m_viewOverride.farPlane;
+        return cameraData;
+    }
+    if (m_currentScene)
+    {
+        if (auto cameraObj = m_currentScene->GetMainCamera())
+        {
+            if (auto cameraComponent = cameraObj->GetComponent<CameraComponent>())
+            {
+                cameraData.viewMatrix = cameraComponent->GetViewMatrix();
+                cameraData.projectionMatrix = cameraComponent->GetProjectionMatrix(aspect);
+                cameraData.position = cameraObj->GetWorldPosition();
+                cameraData.nearPlane = cameraComponent->GetNearPlane();
+                cameraData.farPlane = cameraComponent->GetFarPlane();
+            }
+        }
+    }
+    return cameraData;
 }
 
 void Engine::SetWindowTitle(const std::string &title)

@@ -15,13 +15,33 @@ namespace Geni
 
 class GameObject;
 
+// Play runs every component. Edit is what an editor shows: objects are drawn
+// (Component::EditUpdate) but nothing simulates, animates or reads input.
+enum class SceneUpdateMode
+{
+    Play,
+    Edit
+};
+
 class Scene
 {
   public:
     ~Scene();
-    void Update(float deltaTime);
+    void Update(float deltaTime, SceneUpdateMode mode = SceneUpdateMode::Play);
     void Clear();
     bool SetParent(GameObject *obj, GameObject *parent);
+    // SetParent, then moves the object to `index` among its new siblings (clamped; a
+    // negative index means last). False when the move would create a cycle.
+    bool MoveObject(GameObject *obj, GameObject *parent, int index);
+    // Destroys the object and its subtree now. Unlike MarkForDestroy this must not be
+    // called from inside Update (from a component); tools call it between frames.
+    void DestroyObject(GameObject *obj);
+
+    // nullptr when no live object has the ID.
+    GameObject *FindObjectByID(uint64_t id) const;
+    // Gives an object a specific ID: used when undo restores a deleted object. False
+    // when another object already has it.
+    bool SetObjectID(GameObject *obj, uint64_t id);
 
     GameObject *CreateObject(const std::string &name, GameObject *parent = nullptr);
     // Finds an object by name anywhere in the scene (roots and their subtrees).
@@ -36,7 +56,7 @@ class Scene
     {
         auto obj = new T();
         obj->SetName(name);
-        obj->m_scene = this;
+        AdoptObject(obj);
         SetParent(obj, parent);
 
         return obj;
@@ -76,10 +96,15 @@ class Scene
     // Called by GameObject when a component is added or the object is destroyed.
     void RegisterComponent(Component *component);
     void UnregisterComponent(Component *component);
+    // Points a new object at this scene and gives it an ID.
+    void AdoptObject(GameObject *obj);
+    void UnregisterObject(GameObject *obj);
 
   private:
     std::vector<std::unique_ptr<GameObject>> m_objects;
     std::unordered_map<size_t, std::unique_ptr<ComponentPool>> m_componentPools;
+    std::unordered_map<uint64_t, GameObject *> m_objectsByID;
+    uint64_t m_nextObjectID = 1;
     GameObject *m_mainCamera = nullptr;
 
     friend class GameObject;

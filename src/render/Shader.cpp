@@ -4,7 +4,10 @@
 #include "render/ShaderInterface.h"
 #include "rhi/Device.h"
 
+#include <algorithm>
 #include <atomic>
+#include <filesystem>
+#include <system_error>
 #include <cstring>
 
 namespace Geni
@@ -13,6 +16,27 @@ namespace Geni
 namespace
 {
 std::atomic<uint64_t> g_nextShaderId{1};
+
+// Shaders made by Shader::Load, for ReloadChanged. Main thread only.
+std::vector<Shader *> g_loadedShaders;
+
+// The later modification time of the two SPIR-V files; 0 when one is missing.
+int64_t ShaderFileTime(const std::string &vertexPath, const std::string &fragmentPath)
+{
+    auto &fs = Engine::GetInstance().GetFileSystem();
+    int64_t latest = 0;
+    for (const std::string &file : {vertexPath + ".vert.spv", fragmentPath + ".frag.spv"})
+    {
+        std::error_code ec;
+        const auto time = std::filesystem::last_write_time(fs.ResolveAssetPath(file), ec);
+        if (ec)
+        {
+            return 0;
+        }
+        latest = std::max(latest, static_cast<int64_t>(time.time_since_epoch().count()));
+    }
+    return latest;
+}
 
 std::vector<uint32_t> ToWords(const std::vector<char> &bytes)
 {
@@ -118,14 +142,67 @@ std::shared_ptr<Shader> Shader::Load(const std::string &vertexPath, const std::s
 
     const auto vertexWords = ToWords(vertexBytes);
     const auto fragmentWords = ToWords(fragmentBytes);
-    return Create(
+    auto shader = Create(
         vertexWords.data(), vertexWords.size() * 4, fragmentWords.data(), fragmentWords.size() * 4,
         vertexPath + "+" + fragmentPath
     );
+    if (shader)
+    {
+        shader->m_vertexPath = vertexPath;
+        shader->m_fragmentPath = fragmentPath;
+        shader->m_fileTime = ShaderFileTime(vertexPath, fragmentPath);
+        g_loadedShaders.push_back(shader.get());
+    }
+    return shader;
+}
+
+bool Shader::Reload()
+{
+    if (m_vertexPath.empty())
+    {
+        return false;
+    }
+    // Remember the files as seen now, also when they do not load: a broken shader is
+    // reported once, not on every poll.
+    m_fileTime = ShaderFileTime(m_vertexPath, m_fragmentPath);
+    const std::shared_ptr<Shader> fresh = Load(m_vertexPath, m_fragmentPath);
+    if (!fresh)
+    {
+        GENI_LOG_ERROR("Shader '%s' did not reload; keeping the loaded version", m_name.c_str());
+        return false;
+    }
+    // Take the new modules and ID; `fresh` leaves with the old ones and its destructor
+    // releases them and the pipelines built from them.
+    std::swap(m_id, fresh->m_id);
+    std::swap(m_vertexModule, fresh->m_vertexModule);
+    std::swap(m_fragmentModule, fresh->m_fragmentModule);
+    std::swap(m_materialLayout, fresh->m_materialLayout);
+    std::swap(m_materialBlockSize, fresh->m_materialBlockSize);
+    std::swap(m_materialBlockBinding, fresh->m_materialBlockBinding);
+    std::swap(m_uniforms, fresh->m_uniforms);
+    std::swap(m_textures, fresh->m_textures);
+    std::swap(m_inputLocations, fresh->m_inputLocations);
+    return true;
+}
+
+int Shader::ReloadChanged()
+{
+    // Reload registers and unregisters a temporary shader, so walk a copy.
+    const std::vector<Shader *> loaded = g_loadedShaders;
+    int reloaded = 0;
+    for (Shader *shader : loaded)
+    {
+        if (ShaderFileTime(shader->m_vertexPath, shader->m_fragmentPath) != shader->m_fileTime && shader->Reload())
+        {
+            ++reloaded;
+        }
+    }
+    return reloaded;
 }
 
 Shader::~Shader()
 {
+    g_loadedShaders.erase(std::remove(g_loadedShaders.begin(), g_loadedShaders.end(), this), g_loadedShaders.end());
     auto &renderer = Engine::GetInstance().GetRenderer();
     renderer.ReleasePipelines(m_id);
     if (rhi::Device *device = renderer.GetDevice())

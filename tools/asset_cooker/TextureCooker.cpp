@@ -1,5 +1,6 @@
 #include "TextureCooker.h"
 #include "Ktx2Writer.h"
+#include "assets/CookedFormats.h"
 
 #include "astcenc.h"
 #include "bc7enc.h"
@@ -326,19 +327,13 @@ bool WriteRelative(
 )
 {
     const std::filesystem::path path = outputRoot / relative;
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file)
+    // Leaves an identical file (and its modification time) alone; see cooked::WriteFile.
+    if (!cooked::WriteFile(path, bytes))
     {
         SetError(error, "cannot write " + path.string());
         return false;
     }
-    if (!bytes.empty())
-    {
-        file.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    }
-    return file.good();
+    return true;
 }
 
 } // namespace

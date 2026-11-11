@@ -23,6 +23,11 @@ class SkinnedMeshComponent : public Component
     );
 
     void Update(float deltaTime) override;
+    // An edited scene is still drawn.
+    void EditUpdate() override
+    {
+        Update(0.0f);
+    }
     void ResolveAssets(SerializationContext &context) override;
 
     const std::shared_ptr<Skeleton> &GetSkeleton() const;
@@ -38,18 +43,13 @@ class SkinnedMeshComponent : public Component
     {
         return m_meshID;
     }
-    void SetMeshID(AssetID id)
-    {
-        m_meshID = id;
-    }
+    // Changing an ID drops the loaded asset; ResolveAssets loads the new one.
+    void SetMeshID(AssetID id);
     AssetID GetMaterialID() const
     {
         return m_materialID;
     }
-    void SetMaterialID(AssetID id)
-    {
-        m_materialID = id;
-    }
+    void SetMaterialID(AssetID id);
 
     // Builds the skeleton from the cooked mesh's joint names and the scene graph. Called
     // lazily once the mesh asset is ready.
@@ -61,6 +61,8 @@ class SkinnedMeshComponent : public Component
     std::shared_ptr<Material> m_material;
     std::shared_ptr<Mesh> m_mesh;
     std::shared_ptr<Skeleton> m_skeleton;
+    // The mesh m_skeleton was built from; a reloaded mesh gets a new skeleton.
+    const Mesh *m_skeletonMesh = nullptr;
     AssetID m_meshID;
     AssetID m_materialID;
 };

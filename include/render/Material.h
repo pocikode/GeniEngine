@@ -51,6 +51,10 @@ class Material : public Asset
         return it == m_textures.end() ? nullptr : it->second;
     }
 
+    // Rebinds every slot that holds `previous` to `replacement` (texture hot reload).
+    // Returns how many slots changed.
+    int ReplaceTexture(const Texture *previous, const std::shared_ptr<Texture> &replacement);
+
     // Uploads changed parameters and returns the bind group for set 1. Used by Renderer.
     rhi::BindGroupHandle PrepareBindGroup(Renderer &renderer);
 

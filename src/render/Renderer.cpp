@@ -1149,14 +1149,50 @@ void Renderer::RenderTonemap(rhi::CommandList &cmd, bool sceneDrawn)
     cmd.BeginRenderPass(pass);
     if (sceneDrawn && m_tonemapPipeline.IsValid() && frame.frameGroup.IsValid() && frame.tonemapGroup.IsValid())
     {
+        const SceneViewport rect = GetSceneRect();
+        cmd.SetViewport(
+            static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.width),
+            static_cast<float>(rect.height)
+        );
         cmd.SetPipeline(m_tonemapPipeline);
         cmd.SetBindGroup(0, frame.frameGroup);
         cmd.SetBindGroup(1, frame.tonemapGroup);
         cmd.Draw(3);
         ++m_stats.fullscreenDraws;
+
+        // Whatever draws next (Application::Render, Dear ImGui) gets the whole backbuffer.
+        uint32_t width = 0;
+        uint32_t height = 0;
+        m_device->GetBackbufferSize(width, height);
+        cmd.SetViewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
     }
     // Left open, even when the scene could not be drawn: Application::Render and Dear
     // ImGui draw into this pass.
+}
+
+SceneViewport Renderer::GetSceneRect() const
+{
+    uint32_t width = 0;
+    uint32_t height = 0;
+    if (m_device)
+    {
+        m_device->GetBackbufferSize(width, height);
+    }
+    width = std::max(1u, width);
+    height = std::max(1u, height);
+
+    SceneViewport rect;
+    rect.width = width;
+    rect.height = height;
+    if (m_sceneViewport.width > 0 && m_sceneViewport.height > 0 && m_sceneViewport.x < width &&
+        m_sceneViewport.y < height)
+    {
+        rect.x = m_sceneViewport.x;
+        rect.y = m_sceneViewport.y;
+        rect.width = std::min(m_sceneViewport.width, width - rect.x);
+        rect.height = std::min(m_sceneViewport.height, height - rect.y);
+    }
+    return rect;
 }
 
 void Renderer::RenderFrame(
@@ -1174,11 +1210,9 @@ bool Renderer::RenderScene(
     const std::vector<LightData> &lights
 )
 {
-    uint32_t width = 0;
-    uint32_t height = 0;
-    m_device->GetBackbufferSize(width, height);
-    width = std::max(1u, width);
-    height = std::max(1u, height);
+    const SceneViewport rect = GetSceneRect();
+    const uint32_t width = rect.width;
+    const uint32_t height = rect.height;
 
     FrameResources &frame = m_frames[m_device->GetFrameSlot()];
     m_stats = RenderStats();

@@ -13,6 +13,8 @@
 #include "scene/Scene.h"
 #include <chrono>
 #include <glm/ext/vector_int2.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include <memory>
 #include <string>
 
@@ -42,6 +44,11 @@ struct EngineConfig
     // application runs its own ImGui context.
     bool debugOverlay = true;
     bool debugOverlayVisible = true;
+    // Dear ImGui docking (windows can be docked into each other and into a dock space).
+    // Tools turn it on; it has to be set before the first ImGui frame.
+    bool imguiDocking = false;
+    // Where Dear ImGui keeps window positions and the dock layout. Empty: nothing is saved.
+    std::string imguiIniFile;
     // Simulation rate. Physics and Application::FixedUpdate run in steps of this size.
     double fixedTimestep = 1.0 / 60.0;
     // Worker threads for asset decoding and animation. 0 uses hardware_concurrency - 1.
@@ -58,6 +65,17 @@ struct EngineConfig
     std::string logFile;
     // Renderer v1 quality and art direction (MSAA, cascades, clusters, sky).
     RendererConfig renderer;
+};
+
+// A camera that replaces the scene's main camera for rendering: the editor's own view
+// while a scene is being edited. The projection uses the scene viewport's aspect ratio.
+struct ViewOverride
+{
+    glm::mat4 viewMatrix{1.0f};
+    glm::vec3 position{0.0f};
+    float fieldOfViewDegrees = 60.0f;
+    float nearPlane = 0.1f;
+    float farPlane = 1000.0f;
 };
 
 class Engine
@@ -115,6 +133,28 @@ class Engine
     void SetScene(Scene *scene);
     Scene *GetScene();
 
+    // Renders with this camera instead of the scene's main camera until cleared.
+    void SetViewOverride(const ViewOverride &view);
+    void ClearViewOverride();
+    bool HasViewOverride() const
+    {
+        return m_hasViewOverride;
+    }
+    // The camera the next frame renders with (the override, else the scene's main
+    // camera, else identity), for the given aspect ratio.
+    CameraData GetRenderCamera(float aspect);
+
+    // While paused the fixed-step loop still calls Application::FixedUpdate but does not
+    // step physics: an editor shows the scene without simulating it.
+    void SetPhysicsPaused(bool paused)
+    {
+        m_physicsPaused = paused;
+    }
+    bool IsPhysicsPaused() const
+    {
+        return m_physicsPaused;
+    }
+
     GLFWwindow *GetWindow();
     glm::ivec2 GetFramebufferSize();
 
@@ -141,6 +181,9 @@ class Engine
     bool m_firstTick = true;
     double m_deterministicFrameTime = 0.0;
     std::string m_pendingScreenshotPath;
+    ViewOverride m_viewOverride;
+    bool m_hasViewOverride = false;
+    bool m_physicsPaused = false;
 };
 
 } // namespace Geni

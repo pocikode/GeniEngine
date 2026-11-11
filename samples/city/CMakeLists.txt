@@ -39,3 +39,44 @@ if(GENI_BUILD_TESTS)
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_city PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
+
+# The editor on this sample (ROADMAP M4): `cmake --build <dir> --target edit_city`.
+if(COMMAND geni_add_editor_target)
+  geni_add_editor_target(city)
+endif()
+
+# The editor itself, driven through a scripted session on the city block: open the scene,
+# select, move, undo, duplicate, make and unpack a prefab, play and stop, save a copy.
+# Every step is checked by an `expect`; a failed one exits with code 5. It runs on a copy
+# of the assets (tests/run_editor_smoke.cmake), which the editor cooks itself.
+if(TARGET geni_editor)
+  set(editor_args
+    --assets "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    --cooked "$<TARGET_FILE_DIR:city>/assets"
+    --hidden --no-hot-reload --width 1280 --height 720
+    --scene scenes/city.gscene)
+
+  add_test(NAME editor_smoke
+           COMMAND ${CMAKE_COMMAND}
+             -DEDITOR=$<TARGET_FILE:geni_editor>
+             -DASSETS=${CMAKE_CURRENT_SOURCE_DIR}/assets
+             -DWORK_DIR=${CMAKE_BINARY_DIR}/editor_smoke
+             -DSCENE=scenes/city.gscene
+             -DSCRIPT=${PROJECT_SOURCE_DIR}/tests/editor_smoke.txt
+             -P ${PROJECT_SOURCE_DIR}/tests/run_editor_smoke.cmake)
+  set_tests_properties(editor_smoke PROPERTIES LABELS "gpu" TIMEOUT 300)
+
+  if(GENI_BUILD_TESTS)
+    add_test(NAME screenshot_editor
+             COMMAND ${CMAKE_COMMAND}
+               -DSAMPLE=$<TARGET_FILE:geni_editor>
+               "-DSAMPLE_ARGS=${editor_args}"
+               -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/editor_city.png
+               -DCOMPARE=$<TARGET_FILE:image_compare>
+               -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+               -DTOLERANCE=12
+               -DMAX_FRACTION=0.02
+               -P ${PROJECT_SOURCE_DIR}/tests/run_editor_screenshot.cmake)
+    set_tests_properties(screenshot_editor PROPERTIES LABELS "gpu" TIMEOUT 300)
+  endif()
+endif()

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 struct GLFWwindow;
 
@@ -51,7 +52,9 @@ class DebugOverlay
 {
   public:
     // The device draws ImGui's output; the overlay itself never touches the GPU API.
-    bool Init(GLFWwindow *window, rhi::Device *device);
+    // `docking` enables Dear ImGui docking; `iniFile` is where ImGui saves its layout
+    // (empty: nowhere).
+    bool Init(GLFWwindow *window, rhi::Device *device, bool docking = false, const std::string &iniFile = std::string());
     void Shutdown();
     bool IsInitialized() const;
 
@@ -75,6 +78,7 @@ class DebugOverlay
     bool m_initialized = false;
     bool m_visible = true;
     bool m_frameStarted = false;
+    std::string m_iniFile;
     std::array<float, 120> m_frameTimes = {};
     size_t m_frameTimeCursor = 0;
 };

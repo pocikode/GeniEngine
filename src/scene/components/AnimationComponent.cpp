@@ -331,7 +331,7 @@ const bool s_registered = RegisterComponentType<AnimationComponent>(
     "AnimationComponent",
     {
         AssetIDProperty<AnimationComponent>(
-            "animation", PropertyType::Asset, &AnimationComponent::GetAnimationID, &AnimationComponent::SetAnimationID
+            "animation", AssetType::Animation, &AnimationComponent::GetAnimationID, &AnimationComponent::SetAnimationID
         ),
         StringProperty<AnimationComponent>("clip", &AnimationComponent::GetClipName, &AnimationComponent::SetClipName),
         FloatProperty<AnimationComponent>("time", &AnimationComponent::GetTime, &AnimationComponent::SetTime),

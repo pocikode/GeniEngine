@@ -684,6 +684,14 @@ bool ReadFile(const std::filesystem::path &path, std::vector<uint8_t> &out)
 
 bool WriteFile(const std::filesystem::path &path, const std::vector<uint8_t> &bytes)
 {
+    // A file that already has these bytes is left alone, so its modification time only
+    // moves when the content does: hot reload (AssetManager::ReloadChanged) then reloads
+    // what a re-cook actually changed, not everything it wrote.
+    std::vector<uint8_t> existing;
+    if (ReadFile(path, existing) && existing == bytes)
+    {
+        return true;
+    }
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     std::ofstream file(path, std::ios::binary | std::ios::trunc);

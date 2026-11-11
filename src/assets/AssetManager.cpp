@@ -9,6 +9,8 @@
 #include "render/Shader.h"
 #include "rhi/Device.h"
 
+#include <algorithm>
+#include <type_traits>
 #include <utility>
 
 namespace Geni
@@ -34,6 +36,13 @@ bool DecodeScene(const std::vector<uint8_t> &bytes, nlohmann::json &out, std::st
     }
 }
 
+int64_t FileTime(const std::filesystem::path &path)
+{
+    std::error_code ec;
+    const auto time = std::filesystem::last_write_time(path, ec);
+    return ec ? 0 : static_cast<int64_t>(time.time_since_epoch().count());
+}
+
 } // namespace
 
 void AssetManager::Init(FileSystem *fileSystem, JobSystem *jobs, Renderer *renderer)
@@ -44,6 +53,7 @@ void AssetManager::Init(FileSystem *fileSystem, JobSystem *jobs, Renderer *rende
     m_slots.clear();
     m_pendingMaterials.clear();
     m_manifest.Clear();
+    m_registered.clear();
     m_manifestTried = false;
     m_assetsLoaded.store(0, std::memory_order_release);
     m_bytesLoaded.store(0, std::memory_order_release);
@@ -61,6 +71,7 @@ void AssetManager::Shutdown()
     m_pendingMaterials.clear();
     m_slots.clear();
     m_manifest.Clear();
+    m_registered.clear();
     m_manifestTried = false;
     m_fileSystem = nullptr;
     m_jobs = nullptr;
@@ -86,7 +97,12 @@ bool AssetManager::LoadManifest(std::string *error)
     }
     const auto path = m_fileSystem->ResolveAssetPath("cooked_manifest.json");
     std::string message;
-    if (!m_manifest.LoadFromFile(path, &message))
+    const bool loaded = m_manifest.LoadFromFile(path, &message);
+    for (const auto &entry : m_registered)
+    {
+        m_manifest.Register(entry);
+    }
+    if (!loaded)
     {
         if (error)
         {
@@ -284,6 +300,59 @@ AssetHandle<T> AssetManager::StartLoad(
     slot->state.store(AssetLoadState::Pending, std::memory_order_release);
     m_pending.fetch_add(1, std::memory_order_acq_rel);
     const auto fullPath = Resolve(path);
+    slot->path = path;
+    slot->source = source;
+    slot->fileTime = FileTime(fullPath);
+    // Hot reload: decode the file again and let the same finisher replace slot->asset.
+    // The old object stays in the slot until the new one is ready, and for good when
+    // the file does not decode.
+    slot->reload = [this, weak = std::weak_ptr<Detail::AssetSlot<T>>(slot), decode, finish]() -> bool {
+        auto self = weak.lock();
+        if (!self)
+        {
+            return false;
+        }
+        // A load that failed (a broken file since fixed) is retried the same way.
+        const AssetLoadState before = self->state.load(std::memory_order_acquire);
+        if (before != AssetLoadState::Ready && before != AssetLoadState::Failed)
+        {
+            return false;
+        }
+        const auto file = Resolve(self->path);
+        std::vector<uint8_t> bytes;
+        Data data;
+        std::string error;
+        if (!cooked::ReadFile(file, bytes))
+        {
+            GENI_LOG_ERROR("asset reload: cannot read %s", file.string().c_str());
+            return false;
+        }
+        self->fileTime = FileTime(file);
+        if (!decode(bytes, data, &error))
+        {
+            GENI_LOG_ERROR("asset reload: %s: %s (keeping the loaded version)", self->source.c_str(), error.c_str());
+            return false;
+        }
+        const std::shared_ptr<T> previous = self->asset;
+        m_pending.fetch_add(1, std::memory_order_acq_rel);
+        (this->*finish)(self, data, self->source);
+        if (self->state.load(std::memory_order_acquire) == AssetLoadState::Failed)
+        {
+            // The finisher could not build the new object; an old one is still good.
+            if (previous)
+            {
+                self->asset = previous;
+                self->state.store(AssetLoadState::Ready, std::memory_order_release);
+            }
+            return false;
+        }
+        self->error.clear();
+        if constexpr (std::is_same_v<T, Texture>)
+        {
+            RebindTexture(previous.get(), self->asset);
+        }
+        return true;
+    };
 
     // Runs on a worker for async loads and returns the main-thread completion.
     auto work = [this, slot, fullPath, source, decode, finish]() -> std::function<void()> {
@@ -386,6 +455,126 @@ AssetHandle<SceneAsset> AssetManager::LoadScene(AssetID id, bool async)
         id, AssetType::Scene, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
         &DecodeScene, &AssetManager::FinishScene
     );
+}
+
+AssetHandle<SceneAsset> AssetManager::LoadPrefab(AssetID id, bool async)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    const bool valid = entry && entry->type == AssetType::Prefab;
+    return StartLoad<SceneAsset, nlohmann::json>(
+        id, AssetType::Prefab, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
+        &DecodeScene, &AssetManager::FinishScene
+    );
+}
+
+AssetID AssetManager::RegisterSourceAsset(AssetType type, const std::string &sourcePath)
+{
+    FindEntry(AssetID{}); // the manifest first, so the registration lands on top of it
+    std::string normalized = sourcePath;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+    // The cooker's rule (tools/asset_cooker/Cooker.h): a .meta sidecar's GUID names the
+    // file, its path otherwise.
+    std::string rootName = normalized;
+    std::vector<uint8_t> meta;
+    if (cooked::ReadFile(Resolve(normalized + ".meta"), meta))
+    {
+        const auto document = nlohmann::json::parse(meta.begin(), meta.end(), nullptr, false);
+        if (document.is_object() && AssetID::FromHex(document.value("guid", std::string())).IsValid())
+        {
+            rootName = "guid:" + AssetID::FromHex(document.value("guid", std::string())).ToHex();
+        }
+    }
+
+    AssetManifestEntry entry;
+    entry.id = AssetID::FromName(std::string(AssetTypeName(type)) + ":" + rootName);
+    entry.type = type;
+    entry.source = normalized;
+    entry.path = normalized;
+    for (auto &registered : m_registered)
+    {
+        if (registered.id == entry.id)
+        {
+            registered = entry;
+            m_manifest.Register(entry);
+            return entry.id;
+        }
+    }
+    m_registered.push_back(entry);
+    m_manifest.Register(entry);
+    return entry.id;
+}
+
+bool AssetManager::Reload(AssetID id)
+{
+    auto it = m_slots.find(id.value);
+    if (it == m_slots.end() || !it->second->reload)
+    {
+        return false;
+    }
+    // Hold the slot: the reload runs finishers that may touch the cache.
+    const std::shared_ptr<Detail::AssetSlotBase> slot = it->second;
+    if (const AssetManifestEntry *entry = m_manifest.Find(id))
+    {
+        slot->path = entry->type == AssetType::Texture ? ChooseTexturePath(*entry) : entry->path;
+        slot->source = entry->source;
+    }
+    return slot->reload();
+}
+
+std::vector<AssetID> AssetManager::ReloadChanged()
+{
+    ReloadManifest();
+    FindEntry(AssetID{});
+
+    std::vector<AssetID> changed;
+    for (const auto &[value, slot] : m_slots)
+    {
+        const AssetLoadState state = slot->state.load(std::memory_order_acquire);
+        if ((state != AssetLoadState::Ready && state != AssetLoadState::Failed) || !slot->reload)
+        {
+            continue;
+        }
+        std::string path = slot->path;
+        if (const AssetManifestEntry *entry = m_manifest.Find(slot->id))
+        {
+            path = entry->type == AssetType::Texture ? ChooseTexturePath(*entry) : entry->path;
+        }
+        if (path != slot->path || FileTime(Resolve(path)) != slot->fileTime)
+        {
+            changed.push_back(slot->id);
+        }
+    }
+    std::vector<AssetID> reloaded;
+    for (AssetID id : changed)
+    {
+        if (Reload(id))
+        {
+            reloaded.push_back(id);
+        }
+    }
+    // A reloaded material waits for its textures like a first load does.
+    WaitForAll();
+    return reloaded;
+}
+
+void AssetManager::RebindTexture(const Texture *previous, const std::shared_ptr<Texture> &replacement)
+{
+    if (!previous || previous == replacement.get())
+    {
+        return;
+    }
+    for (const auto &[value, slot] : m_slots)
+    {
+        if (slot->type != AssetType::Material)
+        {
+            continue;
+        }
+        if (auto material = std::static_pointer_cast<Detail::AssetSlot<Material>>(slot)->asset)
+        {
+            material->ReplaceTexture(previous, replacement);
+        }
+    }
 }
 
 void AssetManager::FinishMesh(

@@ -11,6 +11,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0003 | [Slang shaders](0003-slang-shaders.md) | before M3 | Done |
 | 0004 | [Jobs, assets and the cooker](0004-jobs-and-assets.md) | M3 | Done |
 | 0005 | [Scene storage and serialization](0005-scene-storage-and-serialization.md) | M3 | Done |
+| 0006 | [Editor v1](0006-editor.md) | M4 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

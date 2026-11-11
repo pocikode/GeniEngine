@@ -44,7 +44,7 @@ void SkinnedMeshComponent::SetMesh(const std::shared_ptr<Mesh> &mesh)
 void SkinnedMeshComponent::SetMesh(const AssetHandle<Mesh> &mesh)
 {
     m_meshHandle = mesh;
-    m_mesh = mesh.Shared();
+    m_mesh.reset();
     m_meshID = mesh.GetID();
 }
 
@@ -61,18 +61,40 @@ void SkinnedMeshComponent::SetMaterial(const std::shared_ptr<Material> &material
 void SkinnedMeshComponent::SetMaterial(const AssetHandle<Material> &material)
 {
     m_materialHandle = material;
-    m_material = material.Shared();
+    m_material.reset();
     m_materialID = material.GetID();
+}
+
+void SkinnedMeshComponent::SetMeshID(AssetID id)
+{
+    if (id != m_meshID)
+    {
+        m_meshHandle.Reset();
+        m_mesh.reset();
+        m_skeleton.reset();
+    }
+    m_meshID = id;
+}
+
+void SkinnedMeshComponent::SetMaterialID(AssetID id)
+{
+    if (id != m_materialID)
+    {
+        m_materialHandle.Reset();
+        m_material.reset();
+    }
+    m_materialID = id;
 }
 
 Mesh *SkinnedMeshComponent::GetMesh() const
 {
-    return m_mesh ? m_mesh.get() : m_meshHandle.Get();
+    // The handle first: after a hot reload its slot holds the new object.
+    return m_meshHandle.IsValid() ? m_meshHandle.Get() : m_mesh.get();
 }
 
 Material *SkinnedMeshComponent::GetMaterial() const
 {
-    return m_material ? m_material.get() : m_materialHandle.Get();
+    return m_materialHandle.IsValid() ? m_materialHandle.Get() : m_material.get();
 }
 
 void SkinnedMeshComponent::Update(float /*deltaTime*/)
@@ -84,7 +106,7 @@ void SkinnedMeshComponent::Update(float /*deltaTime*/)
         return;
     }
 
-    if (!m_skeleton && mesh->IsSkinned())
+    if (mesh->IsSkinned() && (!m_skeleton || (m_skeletonMesh && m_skeletonMesh != mesh)))
     {
         BuildSkeletonFromMesh();
     }
@@ -156,6 +178,7 @@ bool SkinnedMeshComponent::BuildSkeletonFromMesh()
         skeleton->AddJoint(joint, i < inverseBindMatrices.size() ? inverseBindMatrices[i] : glm::mat4(1.0f));
     }
     m_skeleton = std::move(skeleton);
+    m_skeletonMesh = mesh;
     return true;
 }
 
@@ -165,10 +188,10 @@ const bool s_registered = RegisterComponentType<SkinnedMeshComponent>(
     "SkinnedMeshComponent",
     {
         AssetIDProperty<SkinnedMeshComponent>(
-            "mesh", PropertyType::Asset, &SkinnedMeshComponent::GetMeshID, &SkinnedMeshComponent::SetMeshID
+            "mesh", AssetType::Mesh, &SkinnedMeshComponent::GetMeshID, &SkinnedMeshComponent::SetMeshID
         ),
         AssetIDProperty<SkinnedMeshComponent>(
-            "material", PropertyType::Asset, &SkinnedMeshComponent::GetMaterialID, &SkinnedMeshComponent::SetMaterialID
+            "material", AssetType::Material, &SkinnedMeshComponent::GetMaterialID, &SkinnedMeshComponent::SetMaterialID
         ),
     }
 );

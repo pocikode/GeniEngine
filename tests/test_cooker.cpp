@@ -9,6 +9,7 @@
 #include "assets/CookedFormats.h"
 #include "assets/Ktx2.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -258,6 +259,88 @@ TEST_SUITE("cooker")
         REQUIRE_MESSAGE(Geni::cook::Cooker().Run(partial, &error), error);
         CHECK(std::filesystem::exists(output / "cooked" / "models" / "hierarchy.gscene"));
     }
+    TEST_CASE("scenes and prefabs saved by the editor are listed in the manifest as they are")
+    {
+        // A source tree of its own: one scene, one prefab, and a file that is neither.
+        const auto source = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "scene_source";
+        const auto output = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "scene_output";
+        std::filesystem::remove_all(source);
+        std::filesystem::remove_all(output);
+        std::filesystem::create_directories(source / "scenes");
+        std::filesystem::create_directories(source / "prefabs");
+        const std::string node = R"({"name":"Root","parent":-1,"components":[]})";
+        std::ofstream(source / "scenes" / "level.gscene")
+            << R"({"format":"geni.scene","version":1,"mainCamera":-1,"nodes":[)" << node << "]}";
+        std::ofstream(source / "prefabs" / "lamp.gprefab")
+            << R"({"format":"geni.prefab","version":1,"nodes":[)" << node << "]}";
+
+        Geni::cook::CookOptions options;
+        options.sourceRoot = source;
+        options.outputRoot = output;
+        options.cookAll = true;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+
+        // Copied unchanged to the same relative path, which is also the manifest path.
+        CHECK(std::filesystem::exists(output / "scenes" / "level.gscene"));
+        CHECK(std::filesystem::exists(output / "prefabs" / "lamp.gprefab"));
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        const auto manifest = nlohmann::json::parse(manifestFile);
+        std::map<std::string, nlohmann::json> bySource;
+        for (const auto &asset : manifest["assets"])
+        {
+            bySource[asset["source"].get<std::string>()] = asset;
+        }
+        REQUIRE(bySource.count("scenes/level.gscene") == 1);
+        REQUIRE(bySource.count("prefabs/lamp.gprefab") == 1);
+        CHECK(bySource["scenes/level.gscene"]["type"] == "scene");
+        CHECK(bySource["scenes/level.gscene"]["path"] == "scenes/level.gscene");
+        CHECK(bySource["scenes/level.gscene"]["id"] == Geni::AssetID::FromName("scene:scenes/level.gscene").ToHex());
+        CHECK(bySource["prefabs/lamp.gprefab"]["type"] == "prefab");
+        CHECK(bySource["prefabs/lamp.gprefab"]["id"] == Geni::AssetID::FromName("prefab:prefabs/lamp.gprefab").ToHex());
+
+        // A file that is not a scene fails the cook with its name, instead of being listed.
+        std::ofstream(source / "scenes" / "broken.gscene") << R"({"format":"something else"})";
+        CHECK_FALSE(Geni::cook::Cooker().Run(options, &error));
+        CHECK(error.find("broken.gscene") != std::string::npos);
+    }
+
+    TEST_CASE("cooking again leaves unchanged outputs untouched")
+    {
+        // Hot reload compares modification times, so a re-cook must only touch the files
+        // whose content changed.
+        const auto output = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "stable";
+        std::filesystem::remove_all(output);
+        Geni::cook::CookOptions options;
+        options.sourceRoot = GENI_COOKER_TEST_SOURCE;
+        options.outputRoot = output;
+        options.cookAll = true;
+        options.textureQuality = Geni::cook::TextureQuality::Fast;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+
+        std::map<std::string, std::filesystem::file_time_type> times;
+        for (const auto &entry : std::filesystem::recursive_directory_iterator(output / "cooked"))
+        {
+            if (entry.is_regular_file())
+            {
+                times[entry.path().string()] = entry.last_write_time();
+            }
+        }
+        REQUIRE(times.size() > 5);
+        // Make every stored time old, so a rewrite would be visible whatever the clock's resolution.
+        for (auto &entry : times)
+        {
+            entry.second -= std::chrono::hours(1);
+            std::filesystem::last_write_time(entry.first, entry.second);
+        }
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+        for (const auto &entry : times)
+        {
+            CHECK_MESSAGE(std::filesystem::last_write_time(entry.first) == entry.second, entry.first);
+        }
+    }
+
     TEST_CASE("each glTF's materials keep their own textures when many are cooked together")
     {
         // Regression: images were cached by their cgltf_image address across files. Once a

@@ -40,6 +40,14 @@ class Shader
     // paths are the Slang sources' asset paths; both may name the same file.
     static std::shared_ptr<Shader> Load(const std::string &vertexPath, const std::string &fragmentPath);
 
+    // Hot reload (docs/design/0006), for shaders made by Load. Reload reads the SPIR-V
+    // files again and replaces this shader's modules in place: the object (and every
+    // material pointing at it) stays, its ID changes, and its pipelines are rebuilt on
+    // the next draw. A shader that no longer loads or validates keeps what it had.
+    bool Reload();
+    // Reloads every loaded shader whose SPIR-V files changed on disk. Returns how many.
+    static int ReloadChanged();
+
     Shader(const Shader &) = delete;
     Shader &operator=(const Shader &) = delete;
     ~Shader();
@@ -99,6 +107,10 @@ class Shader
     std::vector<Uniform> m_uniforms;
     std::vector<TextureSlot> m_textures;
     std::vector<uint32_t> m_inputLocations;
+    // Set by Load: the asset paths and the SPIR-V files' modification times.
+    std::string m_vertexPath;
+    std::string m_fragmentPath;
+    int64_t m_fileTime = 0;
 };
 
 } // namespace Geni

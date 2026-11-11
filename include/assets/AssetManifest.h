@@ -29,6 +29,9 @@ class AssetManifest
   public:
     bool LoadFromFile(const std::filesystem::path &path, std::string *error = nullptr);
     void Clear();
+    // Adds an entry, or replaces the one with the same ID. Used for assets created
+    // after the last cook (the editor saving a new scene or prefab).
+    void Register(const AssetManifestEntry &entry);
 
     const AssetManifestEntry *Find(AssetID id) const;
     // Looks an asset up by the source the cooker recorded (for example

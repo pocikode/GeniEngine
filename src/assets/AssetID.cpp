@@ -20,6 +20,8 @@ const char *AssetTypeName(AssetType type)
         return "animation";
     case AssetType::Scene:
         return "scene";
+    case AssetType::Prefab:
+        return "prefab";
     case AssetType::Unknown:
         break;
     }
@@ -38,6 +40,8 @@ AssetType AssetTypeFromName(std::string_view name)
         return AssetType::Animation;
     if (name == "scene")
         return AssetType::Scene;
+    if (name == "prefab")
+        return AssetType::Prefab;
     return AssetType::Unknown;
 }
 

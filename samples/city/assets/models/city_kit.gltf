@@ -1,0 +1,57 @@
+{
+ "scene": 0,
+ "scenes": [
+  {"nodes":[0,1,2,3,4,5,6,7,8]}
+ ],
+ "nodes": [
+  {"name":"Building0","translation":[-10.5,0.5,0.0],"mesh":0},
+  {"name":"Building1","translation":[-7.5,0.5,0.0],"mesh":1},
+  {"name":"Building2","translation":[-4.5,0.5,0.0],"mesh":2},
+  {"name":"Building3","translation":[-1.5,0.5,0.0],"mesh":3},
+  {"name":"Building4","translation":[1.5,0.5,0.0],"mesh":4},
+  {"name":"Building5","translation":[4.5,0.5,0.0],"mesh":5},
+  {"name":"Building6","translation":[7.5,0.5,0.0],"mesh":6},
+  {"name":"Building7","translation":[10.5,0.5,0.0],"mesh":7},
+  {"name":"Ground","translation":[0.0,-0.5,0.0],"scale":[30.0,1.0,30.0],"mesh":8}
+ ],
+ "meshes": [
+  {"name":"Cube0","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":0}]},
+  {"name":"Cube1","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":1}]},
+  {"name":"Cube2","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":2}]},
+  {"name":"Cube3","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":3}]},
+  {"name":"Cube4","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":4}]},
+  {"name":"Cube5","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":5}]},
+  {"name":"Cube6","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":6}]},
+  {"name":"Cube7","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":7}]},
+  {"name":"Cube8","primitives":[{"attributes":{"POSITION":0,"COLOR_0":1,"TEXCOORD_0":2,"NORMAL":3},"indices":4,"material":8}]}
+ ],
+ "materials": [
+  {"name":"Palette0","pbrMetallicRoughness":{"baseColorFactor":[0.56,0.56,0.58,1.0],"metallicFactor":0.02,"roughnessFactor":0.62}},
+  {"name":"Palette1","pbrMetallicRoughness":{"baseColorFactor":[0.42,0.4,0.38,1.0],"metallicFactor":0.02,"roughnessFactor":0.72}},
+  {"name":"Palette2","pbrMetallicRoughness":{"baseColorFactor":[0.65,0.61,0.55,1.0],"metallicFactor":0.02,"roughnessFactor":0.8200000000000001}},
+  {"name":"Palette3","pbrMetallicRoughness":{"baseColorFactor":[0.34,0.32,0.31,1.0],"metallicFactor":0.02,"roughnessFactor":0.62}},
+  {"name":"Palette4","pbrMetallicRoughness":{"baseColorFactor":[0.52,0.36,0.3,1.0],"metallicFactor":0.02,"roughnessFactor":0.72}},
+  {"name":"Palette5","pbrMetallicRoughness":{"baseColorFactor":[0.3,0.37,0.44,1.0],"metallicFactor":0.55,"roughnessFactor":0.18}},
+  {"name":"Palette6","pbrMetallicRoughness":{"baseColorFactor":[0.68,0.66,0.62,1.0],"metallicFactor":0.02,"roughnessFactor":0.62}},
+  {"name":"Palette7","pbrMetallicRoughness":{"baseColorFactor":[0.45,0.29,0.25,1.0],"metallicFactor":0.02,"roughnessFactor":0.72}},
+  {"name":"Ground","pbrMetallicRoughness":{"baseColorFactor":[0.2,0.22,0.24,1.0],"metallicFactor":0.0,"roughnessFactor":0.92}}
+ ],
+ "asset": {"version":"2.0","generator":"GeniEngine tools/gen_assets.py"},
+ "buffers": [
+  {"byteLength":1128,"uri":"data:application/octet-stream;base64,AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAAAAAACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA"}
+ ],
+ "bufferViews": [
+  {"buffer":0,"byteOffset":0,"byteLength":288,"target":34962},
+  {"buffer":0,"byteOffset":288,"byteLength":288,"target":34962},
+  {"buffer":0,"byteOffset":576,"byteLength":192,"target":34962},
+  {"buffer":0,"byteOffset":768,"byteLength":288,"target":34962},
+  {"buffer":0,"byteOffset":1056,"byteLength":72,"target":34963}
+ ],
+ "accessors": [
+  {"bufferView":0,"componentType":5126,"count":24,"type":"VEC3","min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},
+  {"bufferView":1,"componentType":5126,"count":24,"type":"VEC3"},
+  {"bufferView":2,"componentType":5126,"count":24,"type":"VEC2"},
+  {"bufferView":3,"componentType":5126,"count":24,"type":"VEC3"},
+  {"bufferView":4,"componentType":5123,"count":36,"type":"SCALAR"}
+ ]
+}

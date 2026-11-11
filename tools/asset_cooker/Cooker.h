@@ -13,7 +13,8 @@ struct CookOptions
 {
     std::filesystem::path sourceRoot;
     std::filesystem::path outputRoot;
-    // Relative paths to cook. Empty with cookAll set discovers .gltf/.glb/.png/.jpg.
+    // Relative paths to cook. Empty with cookAll set discovers .gltf/.glb/.png/.jpg and
+    // the editor's .gscene/.gprefab files.
     std::vector<std::string> inputs;
     // A full cook (cookAll, or no inputs) also deletes files under <output>/cooked that
     // it did not write, so formats or assets that went away do not linger.

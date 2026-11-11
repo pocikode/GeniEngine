@@ -42,6 +42,16 @@ void FileSystem::SetAssetsFolder(const std::filesystem::path &path)
     m_assetsFolderOverride = path;
 }
 
+void FileSystem::SetCookedFolder(const std::filesystem::path &path)
+{
+    m_cookedFolderOverride = path;
+}
+
+std::filesystem::path FileSystem::GetCookedFolder() const
+{
+    return m_cookedFolderOverride.empty() ? GetExecutableFolder() / "assets" : m_cookedFolderOverride;
+}
+
 std::filesystem::path FileSystem::GetAssetsFolder() const
 {
     if (!m_assetsFolderOverride.empty())
@@ -102,7 +112,7 @@ std::filesystem::path FileSystem::ResolveAssetPath(const std::string &relativePa
     {
         return primary;
     }
-    const auto besideExecutable = GetExecutableFolder() / "assets" / relativePath;
+    const auto besideExecutable = GetCookedFolder() / relativePath;
     if (std::filesystem::exists(besideExecutable, ec))
     {
         return besideExecutable;

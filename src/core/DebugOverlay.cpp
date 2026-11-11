@@ -12,7 +12,7 @@
 namespace Geni
 {
 
-bool DebugOverlay::Init(GLFWwindow *window, rhi::Device *device)
+bool DebugOverlay::Init(GLFWwindow *window, rhi::Device *device, bool docking, const std::string &iniFile)
 {
     if (m_initialized)
     {
@@ -24,7 +24,12 @@ bool DebugOverlay::Init(GLFWwindow *window, rhi::Device *device)
 
     ImGuiIO &io = ImGui::GetIO();
     // No imgui.ini by default; an application that wants saved layouts sets its own path.
-    io.IniFilename = nullptr;
+    m_iniFile = iniFile;
+    io.IniFilename = m_iniFile.empty() ? nullptr : m_iniFile.c_str();
+    if (docking)
+    {
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    }
     ImGui::StyleColorsDark();
 
     // install_callbacks = true chains to the callbacks Engine::Init registered earlier.
@@ -75,6 +80,19 @@ void DebugOverlay::BeginFrame()
 
     m_device->NewImGuiFrame();
     ImGui_ImplGlfw_NewFrame();
+    // ImGui draws into the backbuffer, so its pixel scale is backbuffer size over window
+    // size. GLFW's framebuffer size is not always that: a hidden window on a Retina
+    // display is created with a 1:1 backbuffer (Engine::Init) but can still report a
+    // 2x framebuffer, which drew the whole UI at double size and clipped it.
+    ImGuiIO &io = ImGui::GetIO();
+    uint32_t width = 0;
+    uint32_t height = 0;
+    m_device->GetBackbufferSize(width, height);
+    if (width > 0 && height > 0 && io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f)
+    {
+        io.DisplayFramebufferScale =
+            ImVec2(static_cast<float>(width) / io.DisplaySize.x, static_cast<float>(height) / io.DisplaySize.y);
+    }
     ImGui::NewFrame();
     m_frameStarted = true;
 
@@ -223,7 +241,7 @@ bool DebugOverlay::WantsKeyboard() const
 namespace Geni
 {
 
-bool DebugOverlay::Init(GLFWwindow *, rhi::Device *)
+bool DebugOverlay::Init(GLFWwindow *, rhi::Device *, bool, const std::string &)
 {
     return false;
 }

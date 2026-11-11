@@ -100,6 +100,21 @@ class AssetManager
     AssetHandle<Material> LoadMaterial(AssetID id, bool async = false);
     AssetHandle<AnimationAsset> LoadAnimation(AssetID id, bool async = false);
     AssetHandle<SceneAsset> LoadScene(AssetID id, bool async = false);
+    // A .gprefab document (the scene format with one root).
+    AssetHandle<SceneAsset> LoadPrefab(AssetID id, bool async = false);
+
+    // Makes a scene or prefab file usable before the next cook lists it: `sourcePath` is
+    // relative to the assets folder. Returns the ID the cooker will give the file. The
+    // registration survives ReloadManifest.
+    AssetID RegisterSourceAsset(AssetType type, const std::string &sourcePath);
+
+    // Hot reload (docs/design/0006). Reloads one loaded asset from its file and swaps the
+    // new object into the same slot, so every handle sees it; a file that fails to decode
+    // keeps the old object. Main thread, synchronous.
+    bool Reload(AssetID id);
+    // Reloads every loaded asset whose file's modification time changed since it was
+    // read (re-reading the manifest first). Returns the IDs that were reloaded.
+    std::vector<AssetID> ReloadChanged();
 
     // Direct-path loaders for tests and tools. The ID is derived from the path.
     AssetHandle<Mesh> LoadMeshPath(const std::string &path, bool async = false);
@@ -162,6 +177,8 @@ class AssetManager
     };
     bool TryCompleteMaterial(PendingMaterial &pending);
     void UpdatePendingMaterials();
+    // Points every loaded material that used `previous` at the reloaded texture.
+    void RebindTexture(const Texture *previous, const std::shared_ptr<Texture> &replacement);
 
     std::string ChooseTexturePath(const AssetManifestEntry &entry) const;
     const AssetManifestEntry *FindEntry(AssetID id);
@@ -172,6 +189,7 @@ class AssetManager
     Renderer *m_renderer = nullptr;
     AssetManifest m_manifest;
     bool m_manifestTried = false;
+    std::vector<AssetManifestEntry> m_registered;
 
     std::unordered_map<uint64_t, std::shared_ptr<Detail::AssetSlotBase>> m_slots;
     std::vector<PendingMaterial> m_pendingMaterials;

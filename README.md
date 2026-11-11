@@ -2,7 +2,7 @@
 
 A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
 
-Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, skinning, animation and rigid-body physics.
+Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, prefabs, skinning, animation and rigid-body physics. It comes with a scene editor (`geni_editor`): viewport, hierarchy, inspector and asset browser, gizmos with undo and redo, play-in-editor, and hot reload for shaders and assets.
 
 ## Build and test
 
@@ -47,7 +47,32 @@ build/dev/samples/city/city         # the reference game's first city block
 
 `samples/sandbox` uses every engine feature in one scene: PBR textured meshes, a sun and a ring of point lights, an orbit camera, physics, and a skinned animated model. Left drag orbits, right drag pans, scroll zooms, Space spawns a crate, Esc quits.
 
-`samples/city` is the reference game (and the M2 performance benchmark): 10,000 instanced buildings, 100 point lights and cascaded shadows. Run it with `--hidden --frames N --budget-ms M` to measure: it exits with code 4 when the mean frame time is over budget. CTest runs it as `benchmark_city`.
+`samples/city` is the reference game (and the M2 performance benchmark): 10,000 instanced buildings, 100 point lights and cascaded shadows. The block is a scene file, `samples/city/assets/scenes/city.gscene`, built and edited in the editor; the program only loads it. Run it with `--hidden --frames N --budget-ms M` to measure: it exits with code 4 when the mean frame time is over budget. CTest runs it as `benchmark_city`.
+
+## Edit a scene
+
+```sh
+cmake --build build/dev --target edit_city      # the editor on samples/city
+build/dev/editor/geni_editor --project my_game  # or on any folder with an assets/ folder
+```
+
+The editor opens the project's first scene. Panels dock around the scene viewport: the hierarchy on the left, the inspector on the right, assets and the console below.
+
+| To | Do |
+|---|---|
+| Look around | Right-drag to look, with W A S D Q E to fly (Shift is faster); Alt + left-drag orbits, middle-drag pans, the wheel zooms, F frames the selection |
+| Select | Click an object in the viewport or the hierarchy; Ctrl or Shift adds to the selection |
+| Move, rotate, scale | W, E and R pick the gizmo; drag a handle. Hold Ctrl to snap, Esc cancels a drag |
+| Change values | Edit fields in the inspector; every change is one undo step (Ctrl+Z, Ctrl+Shift+Z) |
+| Add things | The GameObject menu, or drag a model, mesh or prefab from Assets into the scene |
+| Lay out a block | Edit > Duplicate as Grid |
+| Reuse a group | Right-click an object > Create Prefab; drag the prefab in again; editing the prefab file changes every instance |
+| Try it | Ctrl+P plays the scene in place, Ctrl+P or Esc stops and puts everything back |
+| Save | Ctrl+S writes a `.gscene` text file, one object per line |
+
+While the editor runs, a changed `.slang` file is recompiled and a changed model or image is re-cooked, and the scene updates without a restart. On macOS, Ctrl is Cmd.
+
+A scripted session runs editor commands without a window, for CI or a batch edit: `geni_editor --assets DIR --hidden --run "open scenes/city.gscene" --run "select Sun" --run "move 0 5 0" --run save` (the commands are in `EditorApp::RunScriptCommand`).
 
 **F1** toggles the debug overlay: frame time, fixed steps per frame, draw calls, submitted/visible/culled objects, instances, clustered lights and the recent log.
 

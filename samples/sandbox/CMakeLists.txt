@@ -19,3 +19,8 @@ if(GENI_BUILD_TESTS)
     set_tests_properties(screenshot_sandbox_f${frames} PROPERTIES LABELS "gpu" TIMEOUT 120)
   endforeach()
 endif()
+
+
+if(COMMAND geni_add_editor_target)
+  geni_add_editor_target(sandbox)
+endif()

@@ -77,15 +77,26 @@ void Scene::UpdateAnimation(float deltaTime)
     }
 }
 
-void Scene::Update(float deltaTime)
+void Scene::Update(float deltaTime, SceneUpdateMode mode)
 {
-    UpdateAnimation(deltaTime);
+    const bool edit = mode == SceneUpdateMode::Edit;
+    if (!edit)
+    {
+        UpdateAnimation(deltaTime);
+    }
 
     for (auto it = m_objects.begin(); it != m_objects.end();)
     {
         if ((*it)->IsAlive())
         {
-            (*it)->Update(deltaTime);
+            if (edit)
+            {
+                (*it)->UpdateEditMode();
+            }
+            else
+            {
+                (*it)->Update(deltaTime);
+            }
             ++it;
         }
         else
@@ -103,7 +114,97 @@ void Scene::Clear()
         pool->Clear();
     }
     m_componentPools.clear();
+    m_objectsByID.clear();
     m_mainCamera = nullptr;
+}
+
+void Scene::AdoptObject(GameObject *obj)
+{
+    obj->m_scene = this;
+    obj->m_id = m_nextObjectID++;
+    m_objectsByID[obj->m_id] = obj;
+}
+
+void Scene::UnregisterObject(GameObject *obj)
+{
+    auto it = m_objectsByID.find(obj->m_id);
+    if (it != m_objectsByID.end() && it->second == obj)
+    {
+        m_objectsByID.erase(it);
+    }
+    if (m_mainCamera == obj)
+    {
+        m_mainCamera = nullptr;
+    }
+}
+
+GameObject *Scene::FindObjectByID(uint64_t id) const
+{
+    auto it = m_objectsByID.find(id);
+    return it == m_objectsByID.end() ? nullptr : it->second;
+}
+
+bool Scene::SetObjectID(GameObject *obj, uint64_t id)
+{
+    if (!obj || obj->m_scene != this || id == 0)
+    {
+        return false;
+    }
+    if (obj->m_id == id)
+    {
+        return true;
+    }
+    if (m_objectsByID.find(id) != m_objectsByID.end())
+    {
+        return false;
+    }
+    m_objectsByID.erase(obj->m_id);
+    obj->m_id = id;
+    m_objectsByID[id] = obj;
+    m_nextObjectID = std::max(m_nextObjectID, id + 1);
+    return true;
+}
+
+void Scene::DestroyObject(GameObject *obj)
+{
+    if (!obj || obj->m_scene != this)
+    {
+        return;
+    }
+    auto &siblings = obj->m_parent ? obj->m_parent->m_children : m_objects;
+    auto it = std::find_if(siblings.begin(), siblings.end(), [obj](const std::unique_ptr<GameObject> &el) {
+        return el.get() == obj;
+    });
+    if (it != siblings.end())
+    {
+        siblings.erase(it);
+    }
+}
+
+bool Scene::MoveObject(GameObject *obj, GameObject *parent, int index)
+{
+    if (!obj || obj->m_scene != this || (parent && parent->m_scene != this))
+    {
+        return false;
+    }
+    if (obj->m_parent != parent && !SetParent(obj, parent))
+    {
+        return false;
+    }
+    auto &siblings = parent ? parent->m_children : m_objects;
+    auto it = std::find_if(siblings.begin(), siblings.end(), [obj](const std::unique_ptr<GameObject> &el) {
+        return el.get() == obj;
+    });
+    if (it == siblings.end())
+    {
+        return false;
+    }
+    std::unique_ptr<GameObject> holder = std::move(*it);
+    siblings.erase(it);
+    const size_t target =
+        index < 0 ? siblings.size() : std::min(static_cast<size_t>(index), siblings.size());
+    siblings.insert(siblings.begin() + static_cast<std::ptrdiff_t>(target), std::move(holder));
+    return true;
 }
 
 void Scene::RegisterComponent(Component *component)
@@ -137,7 +238,7 @@ GameObject *Scene::CreateObject(const std::string &name, GameObject *parent)
 {
     auto obj = new GameObject();
     obj->SetName(name);
-    obj->m_scene = this;
+    AdoptObject(obj);
     SetParent(obj, parent);
 
     return obj;

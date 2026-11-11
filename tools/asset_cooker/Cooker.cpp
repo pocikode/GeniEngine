@@ -1220,15 +1220,12 @@ struct Cooker::Impl
         document["mainCamera"] = mainCamera;
 
         const std::string scenePath = OutputPath(OutputStem(relative), ".gscene");
-        std::error_code ec;
-        std::filesystem::create_directories((options.outputRoot / scenePath).parent_path(), ec);
-        std::ofstream sceneFile(options.outputRoot / scenePath);
-        if (!sceneFile)
+        const std::string sceneText = cooked::FormatSceneText(document);
+        if (!cooked::WriteFile(options.outputRoot / scenePath, std::vector<uint8_t>(sceneText.begin(), sceneText.end())))
         {
             cgltf_free(data);
             return Fail("cannot write " + scenePath);
         }
-        sceneFile << cooked::FormatSceneText(document);
 
         ManifestEntry entry;
         entry.id = AssetID::FromName("scene:" + RootName(relative));
@@ -1238,6 +1235,57 @@ struct Cooker::Impl
         const bool ok = AddManifest(std::move(entry));
         cgltf_free(data);
         return ok;
+    }
+
+    // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
+    // under its own path and, when the output is another folder, copied there as it is.
+    // Text scenes are the runtime format, so there is nothing to convert.
+    bool CookSceneFile(const std::string &relative, AssetType type, const char *format)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            if (document.value("format", std::string()) != format || document.value("version", 0) != 1 ||
+                !document.contains("nodes") || !document["nodes"].is_array())
+            {
+                return Fail(relative + ": not a version 1 " + format + " file");
+            }
+            if (type == AssetType::Prefab && document["nodes"].empty())
+            {
+                return Fail(relative + ": a prefab needs a root node");
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+
+        const std::string normalized = Normalize(relative);
+        const auto source = options.sourceRoot / normalized;
+        const auto output = options.outputRoot / normalized;
+        std::error_code ec;
+        if (!std::filesystem::equivalent(source, output, ec))
+        {
+            ec.clear();
+            std::filesystem::create_directories(output.parent_path(), ec);
+            std::filesystem::copy_file(source, output, std::filesystem::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                return Fail("cannot copy " + relative + " to " + output.string() + ": " + ec.message());
+            }
+        }
+
+        ManifestEntry entry;
+        entry.id = AssetID::FromName(std::string(AssetTypeName(type)) + ":" + RootName(relative));
+        entry.type = type;
+        entry.source = normalized;
+        entry.path = normalized;
+        return AddManifest(std::move(entry));
     }
 
     // Deletes files under <output>/cooked that this cook did not write (the manifest lists
@@ -1332,7 +1380,7 @@ struct Cooker::Impl
                 return static_cast<char>(std::tolower(c));
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
-                extension == ".jpeg")
+                extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1386,6 +1434,20 @@ struct Cooker::Impl
                 {
                     return false;
                 }
+            }
+        }
+
+        // Scenes and prefabs saved by the editor are already in the runtime's format.
+        for (const auto &input : inputs)
+        {
+            const std::string extension = std::filesystem::path(input).extension().string();
+            if (extension == ".gscene" && !CookSceneFile(input, AssetType::Scene, "geni.scene"))
+            {
+                return false;
+            }
+            if (extension == ".gprefab" && !CookSceneFile(input, AssetType::Prefab, "geni.prefab"))
+            {
+                return false;
             }
         }
 
