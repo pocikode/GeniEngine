@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "move_x":    { "type": "axis", "group": "gameplay", "bindings": [{ "control": "key:D" }, { "control": "key:A", "scale": -1 }, "pad:LeftX"] },
+    "move_y":    { "type": "axis", "group": "gameplay", "bindings": [{ "control": "key:W" }, { "control": "key:S", "scale": -1 }, { "control": "pad:LeftY", "scale": -1 }] },
+    "look_x":    { "type": "axis", "group": "gameplay", "clamp": false, "bindings": [{ "control": "mouse:DeltaX", "scale": 0.12 }, { "control": "pad:RightX", "scale": 2.5 }] },
+    "look_y":    { "type": "axis", "group": "gameplay", "clamp": false, "bindings": [{ "control": "mouse:DeltaY", "scale": 0.12 }, { "control": "pad:RightY", "scale": 2.0 }] },
+    "zoom":      { "type": "axis", "group": "gameplay", "clamp": false, "bindings": ["mouse:Wheel"] },
+    "jump":      { "type": "button", "group": "gameplay", "bindings": ["key:Space", "pad:A"] },
+    "sprint":    { "type": "button", "group": "gameplay", "bindings": ["key:LeftShift", "pad:LS", "pad:B"] },
+    "interact":  { "type": "button", "group": "gameplay", "bindings": ["key:E", "key:F", "pad:Y"] },
+    "throttle":  { "type": "axis", "group": "gameplay", "bindings": ["key:W", "key:Up", "pad:RT"] },
+    "brake":     { "type": "axis", "group": "gameplay", "bindings": ["key:S", "key:Down", "pad:LT"] },
+    "steer":     { "type": "axis", "group": "gameplay", "bindings": [{ "control": "key:D" }, { "control": "key:Right" }, { "control": "key:A", "scale": -1 }, { "control": "key:Left", "scale": -1 }, "pad:LeftX"] },
+    "handbrake": { "type": "button", "group": "gameplay", "bindings": ["key:Space", "pad:X"] },
+    "horn":      { "type": "button", "group": "gameplay", "bindings": ["key:H", "pad:RS"] },
+    "pause":     { "type": "button", "bindings": ["key:Escape", "key:P", "pad:Start"] },
+    "ui_up":     { "type": "button", "group": "ui", "bindings": ["key:Up", "key:W", "pad:DpadUp", { "control": "pad:LeftY", "scale": -1 }] },
+    "ui_down":   { "type": "button", "group": "ui", "bindings": ["key:Down", "key:S", "pad:DpadDown", "pad:LeftY"] },
+    "ui_left":   { "type": "button", "group": "ui", "bindings": ["key:Left", "key:A", "pad:DpadLeft", { "control": "pad:LeftX", "scale": -1 }] },
+    "ui_right":  { "type": "button", "group": "ui", "bindings": ["key:Right", "key:D", "pad:DpadRight", "pad:LeftX"] },
+    "ui_accept": { "type": "button", "group": "ui", "bindings": ["key:Enter", "key:Space", "pad:A"] },
+    "ui_back":   { "type": "button", "group": "ui", "bindings": ["key:Escape", "key:Backspace", "pad:B"] }
+  }
+}

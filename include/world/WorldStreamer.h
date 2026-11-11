@@ -5,6 +5,7 @@
 #include "world/WorldFormat.h"
 
 #include <cstdint>
+#include <functional>
 #include <glm/ext/vector_double3.hpp>
 #include <memory>
 #include <string>
@@ -150,6 +151,16 @@ class WorldStreamer
     bool IsHlodShown(int x, int z) const;
     // The root object of a loaded (or loading) cell, nullptr otherwise.
     GameObject *GetCellRoot(int x, int z) const;
+    // Called when a cell finishes loading (`loaded` true, its objects are all shown) and
+    // when a loaded cell starts unloading (false, before its objects go). Navigation
+    // builds and drops its tiles from these (docs/design/0014). Returns an ID for
+    // RemoveCellListener.
+    using CellListener = std::function<void(int x, int z, GameObject *root, bool loaded)>;
+    int AddCellListener(CellListener listener);
+    void RemoveCellListener(int id);
+    // Calls `listener` for every cell that is loaded now.
+    void ForEachLoadedCell(const CellListener &listener) const;
+
     // The cell a world position lies in (may be outside the grid).
     void CellAt(const glm::dvec3 &worldPosition, int &x, int &z) const;
 
@@ -180,6 +191,8 @@ class WorldStreamer
     std::unordered_map<int, std::unique_ptr<Cell>> m_cells;
     // Cell roots being destroyed a slice per frame.
     std::vector<uint64_t> m_dying;
+    std::vector<std::pair<int, CellListener>> m_cellListeners;
+    int m_nextListenerId = 1;
     uint32_t m_framesSinceGarbage = 0;
     bool m_unloadedSinceGarbage = false;
 };

@@ -1,8 +1,10 @@
 # GeniEngine
 
-A C++17 game engine, built as a static library. It is heading towards streamed open-world 3D; see [ROADMAP.md](ROADMAP.md) for the plan and [docs/design/](docs/design/) for the design page of each major system.
+A C++17 game engine, built as a static library, for streamed open-world 3D. Version 0.1 ships with **Geni City**, a playable reference game: walk around a streamed 4 km city, get into a car and drive it, among pedestrians and traffic. See [ROADMAP.md](ROADMAP.md) for the plan, [docs/design/](docs/design/) for the design page of each major system, the [getting-started guide](docs/getting-started.md) to make a game, the [Lua API reference](docs/scripting.md), [CHANGELOG.md](CHANGELOG.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Today it renders with Vulkan (MoltenVK on macOS) behind a thin rendering interface: physically based materials, cascaded shadow maps, clustered forward lighting for many point and spot lights, a sky, fog, HDR with tonemapping and 4x MSAA, plus frustum culling and instancing. It has a scene graph with dense component indexes, a job system, a cooked asset pipeline (glTF and images converted offline), KTX2 textures with BC and ASTC variants, stable asset IDs with reference-counted handles, reflected components, text scene files, prefabs, skinning, animation and rigid-body physics (Jolt). Large worlds stream in grid cells around the camera, with mesh LODs and simplified distant cells (HLOD) made by the cooker, camera-relative rendering, origin rebasing, collision streamed per cell and per-platform memory budgets. It comes with a scene editor (`geni_editor`): viewport, hierarchy, inspector and asset browser, gizmos with undo and redo, play-in-editor, and hot reload for shaders and assets.
+
+For gameplay (v0.1) it has input actions bound to keyboard, mouse and gamepads; a capsule character controller and wheeled vehicles on Jolt; a third-person camera; animation graphs with blend spaces, cross-fades and events; 3D sound and streamed music on miniaudio; Lua 5.4 scripting with hot reload; navigation meshes built per streamed cell with Recast and crowds of agents with Detour; and a game UI for menus and HUDs that works with a gamepad.
 
 ## Build and test
 
@@ -41,10 +43,13 @@ The `screenshot_sandbox_*` tests render the sample off-screen and compare it wit
 ## Run the samples
 
 ```sh
-build/dev/samples/sandbox/sandbox   # everything the engine can do, in one scene
-build/dev/samples/city/city         # the reference game's first city block
-build/dev/samples/city/city --world # its streamed 4 km x 4 km world
+build/release/samples/city/city --play  # Geni City, the reference game (v0.1)
+build/dev/samples/sandbox/sandbox       # everything the engine can do, in one scene
+build/dev/samples/city/city             # the reference game's first city block (the M2 benchmark)
+build/dev/samples/city/city --world     # its streamed 4 km x 4 km world, flown with a free camera
 ```
+
+`city --play` is the game. Walk with W A S D and the mouse (Shift runs, Space jumps), press E next to the red car to drive it (W/S accelerate and brake, A/D steer, Space is the handbrake, H the horn) and E again to get out; Esc opens the menu with volume settings. A gamepad works too (left stick, triggers, A/B/X/Y, Start). Its rules, menus and HUD are Lua in `samples/city/assets/scripts/`; edit them while it runs. `city --play --autopilot` plays itself (walk to the car, drive, get out) and exits non-zero if a step fails; CTest runs it as `play_city`.
 
 `samples/sandbox` uses every engine feature in one scene: PBR textured meshes, a sun and a ring of point lights, an orbit camera, physics, and a skinned animated model. Left drag orbits, right drag pans, scroll zooms, Space spawns a crate, Esc quits.
 
@@ -173,7 +178,7 @@ CMake options when embedding:
 
 Installed on the system: GLFW, the Vulkan loader and headers, the Vulkan validation layers (and MoltenVK on macOS). Downloaded at configure time: the [Slang](https://github.com/shader-slang/slang) compiler, at a pinned version.
 
-Git submodules in `thirdparty/`: [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.5.0, [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect), [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) and [astc-encoder](https://github.com/ARM-software/astc-encoder) and [meshoptimizer](https://github.com/zeux/meshoptimizer) 1.2 (cooker only). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
+Git submodules in `thirdparty/`: [Lua](https://github.com/lua/lua) 5.4.9, [miniaudio](https://github.com/mackron/miniaudio) 0.11.23, [Recast & Detour](https://github.com/recastnavigation/recastnavigation) 1.6.0, [GLM](https://github.com/g-truc/glm), [nlohmann/json](https://github.com/nlohmann/json) 3.12.0, [cgltf](https://github.com/jkuhlmann/cgltf) 1.15, [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.5.0, [Dear ImGui](https://github.com/ocornut/imgui) 1.93.0 (docking), [Tracy](https://github.com/wolfpld/tracy) 0.15.0, [doctest](https://github.com/doctest/doctest) 2.5.3, [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect), [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) and [astc-encoder](https://github.com/ARM-software/astc-encoder) and [meshoptimizer](https://github.com/zeux/meshoptimizer) 1.2 (cooker only). Checked in directly: [stb_image and stb_image_write](https://github.com/nothings/stb).
 
 ## Licence
 

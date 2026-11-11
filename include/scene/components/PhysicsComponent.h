@@ -19,6 +19,11 @@ class PhysicsComponent : public Component
     void Init() override;
     void Update(float deltaTime) override;
 
+    const std::shared_ptr<RigidBody> &GetRigidBody() const
+    {
+        return m_rigidBody;
+    }
+
     void SetBodyType(BodyType type)
     {
         m_bodyType = type;

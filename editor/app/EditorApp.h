@@ -207,6 +207,7 @@ class EditorApp : public Application
     bool m_showConsole = true;
     bool m_showWorld = true;
     int m_focusHierarchy = 0; // frames left to bring the Hierarchy tab to the front
+    int m_selectAssetsTab = 0; // frames left to bring the Assets tab to the front
     // Play: paused, and one frame to step while paused.
     bool m_paused = false;
     bool m_stepFrame = false;

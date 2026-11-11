@@ -184,6 +184,35 @@ The engine's specialty.
 
 ### M6: Gameplay systems and v0.1 (Oct 2029 – Sep 2030, about 400 h)
 
+**Status (2026-11-11):** implemented; design pages `docs/design/0009-input-actions.md`
+to `docs/design/0015-game-ui.md`. `samples/city --play` is **Geni City**: the streamed
+metro world with a player mannequin (idle, walk, run and jump blended by an animation
+graph, footstep events), a drivable car (Jolt `VehicleConstraint`, automatic gearbox,
+engine sound pitched by RPM), a third-person camera that follows the player or the car
+and is pulled in by walls, 24 pedestrians wandering a navigation mesh built per streamed
+cell with Recast on the job system, 10 traffic cars driving the street grid as
+kinematic bodies, music and ambience, and a title menu, pause menu with volume settings
+and HUD drawn by the game UI. Input goes through named actions bound to keyboard, mouse
+and gamepad (`samples/city/assets/input/actions.json`). The game's rules are Lua 5.4
+(`samples/city/assets/scripts/`), which reloads while the game runs. `city --play
+--autopilot` plays it through the same input actions (walk to the car, get in, drive,
+brake, get out, walk on) and checks every step and that pedestrians and traffic moved;
+CTest runs it as `play_city`, and `screenshot_play` compares the title screen. On Linux
+(Arch, GCC 16, NVIDIA RTX 4060 Laptop GPU, release, 1280×720) the scripted run passes at
+5.4 ms mean, 9.1 ms p99 and 18 ms worst frame, with navigation tiles built on workers in
+at most 0.3 s; the debug build passes with validation layers on, and all 21 CTest tests pass on Linux
+(three that failed on Linux before M6, shader hot reload, the editor's shader compile and
+the editor screenshot, were fixed on the way). Unit tests cover input
+actions, the animation graph, characters, vehicles, casts and kinematic bodies,
+navigation and crowds, audio without a device, Lua bindings and hot reload, and menu
+navigation. Getting-started guide (`docs/getting-started.md`), Lua API reference
+(`docs/scripting.md`), `CONTRIBUTING.md` and `CHANGELOG.md` are written. Not done yet:
+CI on macOS, Windows and Linux; playing it on macOS, Windows and the Steam Deck; anyone
+other than the author playing it; and the outward steps, tagging **v0.1** and announcing
+it, which are the author's to take. Known limits, all in `CHANGELOG.md`: pedestrians are
+not physical, traffic is scripted for the metro world's grid, navigation tiles are built
+at load rather than cooked, audio is not compressed per platform.
+
 Enough to build the reference game.
 
 - Character controller and third-person camera
@@ -237,11 +266,11 @@ Each has a default so work is never blocked. Change them before the milestone th
 
 | Decision | Default | Needed by |
 |---|---|---|
-| Scripting language | Lua | M6 |
+| Scripting language | Decided in M6: Lua 5.4, compiled as C++, hand-written bindings (`docs/design/0013-lua-scripting.md`) | M6 |
 | Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
 | Shader language: GLSL or Slang | Decided before M3: Slang, compiled offline to SPIR-V by a pinned `slangc`; the same sources compile to WGSL for M8 (`docs/design/0003-slang-shaders.md`) | M3 |
 | Anti-aliasing: MSAA or TAA | Decided in M2: 4x MSAA, configurable (`docs/design/0002-renderer-v1.md`); TAA revisited with M5 camera-relative rendering | M2 |
-| Licence and contribution terms | Keep the current licence | M6 |
+| Licence and contribution terms | Decided in M6: keep the MIT licence; contributions are under the same terms (`CONTRIBUTING.md`) | M6 |
 
 ## Review points
 

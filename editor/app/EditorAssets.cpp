@@ -621,6 +621,12 @@ void EditorApp::DrawAssets()
     {
         return;
     }
+    if (m_selectAssetsTab > 0)
+    {
+        // Over a few frames: on the first one the dock node has not placed its tabs yet.
+        --m_selectAssetsTab;
+        ImGui::SetNextWindowFocus();
+    }
     if (!ImGui::Begin("Assets", &m_showAssets))
     {
         ImGui::End();

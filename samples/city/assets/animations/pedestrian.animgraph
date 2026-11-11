@@ -1,0 +1,7 @@
+{
+  "parameters": { "speed": 0.0 },
+  "initial": "move",
+  "states": {
+    "move": { "blend": { "parameter": "speed", "clips": [["Idle", 0.0], ["Walk", 1.5]] } }
+  }
+}

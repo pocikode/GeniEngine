@@ -5,6 +5,7 @@
 #include "rhi/Device.h"
 
 #include <algorithm>
+#include <limits>
 #include <atomic>
 #include <filesystem>
 #include <system_error>
@@ -20,18 +21,19 @@ std::atomic<uint64_t> g_nextShaderId{1};
 // Shaders made by Shader::Load, for ReloadChanged. Main thread only.
 std::vector<Shader *> g_loadedShaders;
 
-// The later modification time of the two SPIR-V files; 0 when one is missing.
+// The later modification time of the two SPIR-V files; INT64_MIN when one is missing.
+// File-clock times can be negative (libstdc++'s epoch is in 2174), so 0 is not "none".
 int64_t ShaderFileTime(const std::string &vertexPath, const std::string &fragmentPath)
 {
     auto &fs = Engine::GetInstance().GetFileSystem();
-    int64_t latest = 0;
+    int64_t latest = std::numeric_limits<int64_t>::min();
     for (const std::string &file : {vertexPath + ".vert.spv", fragmentPath + ".frag.spv"})
     {
         std::error_code ec;
         const auto time = std::filesystem::last_write_time(fs.ResolveAssetPath(file), ec);
         if (ec)
         {
-            return 0;
+            return std::numeric_limits<int64_t>::min();
         }
         latest = std::max(latest, static_cast<int64_t>(time.time_since_epoch().count()));
     }

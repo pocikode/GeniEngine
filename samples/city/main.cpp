@@ -24,7 +24,12 @@
 //             [--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--frames N]
 //             [--hidden] [--width W] [--height H] [--screenshot FILE]
 //   streams worlds/metro/metro.gworld (or FILE) around a flying camera; see WorldMode.cpp.
+//
+// The game (ROADMAP M6): city --play [--autopilot] [--no-crowd] [--no-traffic]
+//             [--title-shot] [--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]
+//   walk, drive and explore the streamed city; see PlayMode.cpp and assets/scripts/.
 
+#include "PlayMode.h"
 #include "WorldMode.h"
 
 #include <geni.h>
@@ -320,8 +325,76 @@ int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
 }
 } // namespace
 
+// Arguments of `city --play`. Returns -1 when they parse, otherwise an exit code.
+int ParsePlayOptions(int argc, char **argv, PlayOptions &options)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        const char *arg = argv[i];
+        const bool hasValue = i + 1 < argc;
+        if (std::strcmp(arg, "--play") == 0 || std::strcmp(arg, "--no-overlay") == 0)
+        {
+        }
+        else if (std::strcmp(arg, "--autopilot") == 0)
+        {
+            options.autopilot = true;
+        }
+        else if (std::strcmp(arg, "--no-crowd") == 0)
+        {
+            options.crowd = false;
+        }
+        else if (std::strcmp(arg, "--no-traffic") == 0)
+        {
+            options.traffic = false;
+        }
+        else if (std::strcmp(arg, "--title-shot") == 0)
+        {
+            options.titleOnly = true;
+        }
+        else if (std::strcmp(arg, "--hidden") == 0)
+        {
+            options.hidden = true;
+        }
+        else if (std::strcmp(arg, "--frames") == 0 && hasValue)
+        {
+            options.frames = std::strtol(argv[++i], nullptr, 10);
+        }
+        else if (std::strcmp(arg, "--width") == 0 && hasValue)
+        {
+            options.width = static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+        }
+        else if (std::strcmp(arg, "--height") == 0 && hasValue)
+        {
+            options.height = static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+        }
+        else if (std::strcmp(arg, "--screenshot") == 0 && hasValue)
+        {
+            options.screenshotPath = argv[++i];
+        }
+        else
+        {
+            GENI_LOG_ERROR(
+                "Unknown argument '%s'. Usage: city --play [--autopilot] [--no-crowd] [--no-traffic] [--title-shot] "
+                "[--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]",
+                arg
+            );
+            return 2;
+        }
+    }
+    return -1;
+}
+
 int main(int argc, char **argv)
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--play") == 0)
+        {
+            PlayOptions playOptions;
+            const int code = ParsePlayOptions(argc, argv, playOptions);
+            return code >= 0 ? code : RunPlay(playOptions);
+        }
+    }
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--world") == 0)

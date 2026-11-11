@@ -1,0 +1,18 @@
+{
+  "parameters": { "speed": 0.0, "grounded": true, "jump": "trigger" },
+  "initial": "move",
+  "states": {
+    "move": { "blend": { "parameter": "speed", "clips": [["Idle", 0.0], ["Walk", 1.6], ["Run", 5.0]] } },
+    "jump": { "clip": "Jump", "loop": false }
+  },
+  "transitions": [
+    { "from": "move", "to": "jump", "when": [["jump"]], "duration": 0.08 },
+    { "from": "jump", "to": "move", "when": [["grounded", "==", true]], "exitTime": 0.35, "duration": 0.2 }
+  ],
+  "events": [
+    { "clip": "Walk", "time": 0.26, "name": "footstep" },
+    { "clip": "Walk", "time": 0.79, "name": "footstep" },
+    { "clip": "Run", "time": 0.175, "name": "footstep" },
+    { "clip": "Run", "time": 0.525, "name": "footstep" }
+  ]
+}

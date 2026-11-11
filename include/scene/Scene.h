@@ -30,6 +30,10 @@ class Scene
   public:
     ~Scene();
     void Update(float deltaTime, SceneUpdateMode mode = SceneUpdateMode::Play);
+    // One fixed simulation step for components that opt in (Component::HasFixedUpdate):
+    // characters, vehicles, kinematic bodies, scripts. Engine::Simulate calls it before
+    // each physics step unless physics is paused (docs/design/0010).
+    void FixedUpdate(float fixedDeltaTime);
     void Clear();
     bool SetParent(GameObject *obj, GameObject *parent);
     // SetParent, then moves the object to `index` among its new siblings (clamped; a

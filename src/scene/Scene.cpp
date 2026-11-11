@@ -4,6 +4,7 @@
 #include "core/Engine.h"
 #include "core/JobSystem.h"
 #include "scene/components/AnimationComponent.h"
+#include "scene/components/AnimatorComponent.h"
 #include "scene/components/LightComponent.h"
 #include <algorithm>
 #include <cstddef>
@@ -39,41 +40,72 @@ bool IsUpdatedThisFrame(GameObject *object)
 
 void Scene::UpdateAnimation(float deltaTime)
 {
-    auto pool = m_componentPools.find(Component::StaticTypeID<AnimationComponent>());
-    if (pool == m_componentPools.end() || pool->second->Count() == 0)
+    // AnimationComponent (one clip) and AnimatorComponent (a graph, docs/design/0011) run
+    // the same three steps: advance clocks on the main thread, sample every pose in
+    // parallel on the job system, then apply the poses on the main thread.
+    std::vector<AnimationComponent *> clips;
+    std::vector<AnimatorComponent *> animators;
+    auto clipPool = m_componentPools.find(Component::StaticTypeID<AnimationComponent>());
+    if (clipPool != m_componentPools.end())
+    {
+        clipPool->second->ForEach<AnimationComponent>([&](AnimationComponent &animation) {
+            if (IsUpdatedThisFrame(animation.GetOwner()) && animation.AdvanceClock(deltaTime))
+            {
+                clips.push_back(&animation);
+            }
+        });
+    }
+    auto animatorPool = m_componentPools.find(Component::StaticTypeID<AnimatorComponent>());
+    if (animatorPool != m_componentPools.end())
+    {
+        animatorPool->second->ForEach<AnimatorComponent>([&](AnimatorComponent &animator) {
+            if (IsUpdatedThisFrame(animator.GetOwner()) && animator.Advance(deltaTime))
+            {
+                animators.push_back(&animator);
+            }
+        });
+    }
+    const size_t total = clips.size() + animators.size();
+    if (total == 0)
     {
         return;
     }
 
-    std::vector<AnimationComponent *> sampling;
-    pool->second->ForEach<AnimationComponent>([&](AnimationComponent &animation) {
-        if (IsUpdatedThisFrame(animation.GetOwner()) && animation.AdvanceClock(deltaTime))
+    auto sample = [&](size_t i) {
+        if (i < clips.size())
         {
-            sampling.push_back(&animation);
+            clips[i]->SamplePose();
         }
-    });
-
+        else
+        {
+            animators[i - clips.size()]->SamplePose();
+        }
+    };
     JobSystem *jobs = Engine::GetInstance().GetJobSystem();
-    if (jobs && sampling.size() > 1)
+    if (jobs && total > 1)
     {
-        jobs->ParallelFor(sampling.size(), 1, [&sampling](size_t begin, size_t end) {
+        jobs->ParallelFor(total, 1, [&sample](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
             {
-                sampling[i]->SamplePose();
+                sample(i);
             }
         });
     }
     else
     {
-        for (AnimationComponent *animation : sampling)
+        for (size_t i = 0; i < total; ++i)
         {
-            animation->SamplePose();
+            sample(i);
         }
     }
 
-    for (AnimationComponent *animation : sampling)
+    for (AnimationComponent *animation : clips)
     {
         animation->ApplyPose();
+    }
+    for (AnimatorComponent *animator : animators)
+    {
+        animator->ApplyPose();
     }
 }
 
@@ -103,6 +135,63 @@ void Scene::Update(float deltaTime, SceneUpdateMode mode)
         {
             it = m_objects.erase(it);
         }
+    }
+
+    if (!edit)
+    {
+        std::vector<Component *> late;
+        for (auto &[typeID, pool] : m_componentPools)
+        {
+            (void)typeID;
+            const auto &list = pool->GetComponents();
+            if (list.empty() || !list.front()->HasLateUpdate())
+            {
+                continue;
+            }
+            for (Component *component : list)
+            {
+                if (IsUpdatedThisFrame(component->GetOwner()))
+                {
+                    late.push_back(component);
+                }
+            }
+        }
+        for (Component *component : late)
+        {
+            component->LateUpdate(deltaTime);
+        }
+    }
+}
+
+void Scene::FixedUpdate(float fixedDeltaTime)
+{
+    // Collect first: a script may add or destroy objects while this runs.
+    std::vector<Component *> components;
+    for (auto &[typeID, pool] : m_componentPools)
+    {
+        (void)typeID;
+        const auto &list = pool->GetComponents();
+        if (list.empty() || !list.front()->HasFixedUpdate())
+        {
+            continue;
+        }
+        for (Component *component : list)
+        {
+            if (IsUpdatedThisFrame(component->GetOwner()))
+            {
+                components.push_back(component);
+            }
+        }
+    }
+    // Pools are in a hash map; keep the order stable from step to step and run to run.
+    std::sort(components.begin(), components.end(), [](Component *a, Component *b) {
+        const uint64_t ida = a->GetOwner()->GetID();
+        const uint64_t idb = b->GetOwner()->GetID();
+        return ida != idb ? ida < idb : a->GetTypeID() < b->GetTypeID();
+    });
+    for (Component *component : components)
+    {
+        component->FixedUpdate(fixedDeltaTime);
     }
 }
 

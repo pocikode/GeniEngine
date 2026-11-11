@@ -13,6 +13,7 @@
 #include "scene/components/SkinnedMeshComponent.h"
 #include <cmath>
 #include <doctest/doctest.h>
+#include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 
 using GeniTest::Near;
@@ -140,6 +141,30 @@ TEST_SUITE("gpu cooked assets")
         CHECK(Near(unnamed->GetScale(), glm::vec3(2.0f)));
 
         Geni::Engine::GetInstance().GetRenderQueue().Clear();
+        GeniTest::ResetScene();
+    }
+
+    TEST_CASE("two copies of a skinned model each bind their own joints")
+    {
+        auto *scene = GeniTest::ResetScene();
+        REQUIRE(LoadCookedInto(scene, "models/skinned_bar.gltf"));
+        REQUIRE(LoadCookedInto(scene, "models/skinned_bar.gltf"));
+        std::vector<Geni::GameObject *> results;
+        for (const auto &object : scene->GetObjects())
+        {
+            if (object->GetName() == "Result")
+            {
+                results.push_back(object.get());
+            }
+        }
+        REQUIRE(results.size() == 2);
+        for (Geni::GameObject *result : results)
+        {
+            auto *skinned = result->FindChildByName("Bar")->GetComponent<Geni::SkinnedMeshComponent>();
+            REQUIRE(skinned->BuildSkeletonFromMesh());
+            // Each copy's mesh follows its own joints, not the first copy's.
+            CHECK(skinned->GetSkeleton()->GetJointNode(1) == result->FindChildByName("Joint1"));
+        }
         GeniTest::ResetScene();
     }
 

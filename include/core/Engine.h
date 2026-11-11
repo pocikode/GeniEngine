@@ -1,16 +1,21 @@
 #pragma once
 #include "assets/AssetManager.h"
+#include "audio/AudioSystem.h"
 #include "core/DebugOverlay.h"
 #include "core/FixedTimestep.h"
 #include "core/JobSystem.h"
 #include "graphics/Texture.h"
+#include "input/InputActions.h"
 #include "input/InputManager.h"
 #include "io/FileSystem.h"
+#include "nav/NavigationSystem.h"
 #include "physics/PhysicsManager.h"
 #include "render/RenderQueue.h"
 #include "render/Renderer.h"
 #include "rhi/Device.h"
 #include "scene/Scene.h"
+#include "script/ScriptSystem.h"
+#include "ui/GameUI.h"
 #include "world/WorldStreamer.h"
 #include <chrono>
 #include <glm/ext/vector_int2.hpp>
@@ -66,6 +71,13 @@ struct EngineConfig
     std::string logFile;
     // Renderer v1 quality and art direction (MSAA, cascades, clusters, sky).
     RendererConfig renderer;
+    // Sound (docs/design/0012). Hidden windows never open an output device.
+    AudioConfig audio;
+    // Lua (docs/design/0013).
+    ScriptConfig scripting;
+    // TrueType font of the game UI (docs/design/0015). Empty: fonts/Roboto-Medium.ttf next
+    // to the executable, else the copy in the engine's source tree.
+    std::string uiFont;
     // World streaming radii and memory budgets (docs/design/0007), per platform.
     StreamingBudget streaming = StreamingBudget::ForPlatform(StreamingBudget::CurrentPlatform());
 };
@@ -120,6 +132,17 @@ class Engine
     void SetWindowTitle(const std::string &title);
     Application *GetApplication();
     InputManager &GetInputManager();
+    // Named actions (docs/design/0009), updated once per frame after input is polled.
+    InputActions &GetInputActions()
+    {
+        return m_inputActions;
+    }
+    // Hides the cursor and gives unlimited mouse motion (mouse look), or releases it.
+    void SetCursorCaptured(bool captured);
+    bool IsCursorCaptured() const
+    {
+        return m_cursorCaptured;
+    }
     Renderer &GetRenderer();
     // nullptr before Init and after Destroy.
     rhi::Device *GetRenderDevice();
@@ -129,6 +152,22 @@ class Engine
     AssetManager &GetAssetManager();
     JobSystem *GetJobSystem();
     PhysicsManager &GetPhysicsManager();
+    AudioSystem &GetAudio()
+    {
+        return m_audio;
+    }
+    NavigationSystem &GetNavigation()
+    {
+        return m_navigation;
+    }
+    ScriptSystem &GetScripts()
+    {
+        return m_scripts;
+    }
+    GameUI &GetGameUI()
+    {
+        return m_gameUI;
+    }
     DebugOverlay &GetDebugOverlay();
     FixedTimestep &GetFixedTimestep();
     const FrameStats &GetFrameStats() const;
@@ -185,6 +224,9 @@ class Engine
     std::chrono::steady_clock::time_point m_lastTimePoint;
     GLFWwindow *m_window = nullptr;
     InputManager m_inputManager;
+    InputActions m_inputActions;
+    bool m_cursorCaptured = false;
+    bool m_windowVisible = true;
     std::unique_ptr<rhi::Device> m_device;
     Renderer m_renderer;
     RenderQueue m_renderQueue;
@@ -196,6 +238,10 @@ class Engine
     uint32_t m_framesSinceAssetCollection = 0;
     std::unique_ptr<JobSystem> m_jobSystem;
     PhysicsManager m_physicsManager;
+    AudioSystem m_audio;
+    NavigationSystem m_navigation;
+    ScriptSystem m_scripts;
+    GameUI m_gameUI;
     DebugOverlay m_debugOverlay;
     FixedTimestep m_fixedTimestep;
     FrameStats m_frameStats;

@@ -15,6 +15,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
 namespace Geni
@@ -49,15 +50,16 @@ void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
 void mouseCursorCallback(GLFWwindow *window, double xpos, double ypos)
 {
     auto &inputManager = Geni::Engine::GetInstance().GetInputManager();
-    inputManager.SetMousePositionOld(inputManager.GetMousePositionCurrent());
-
+    // The previous position is the one at the end of the last frame (InputManager::
+    // EndFrame), so the delta adds up every motion event of this frame.
     glm::vec2 currentPos(static_cast<float>(xpos), static_cast<float>(ypos));
     inputManager.SetMousePositionCurrent(currentPos);
 }
 
 void scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    Geni::Engine::GetInstance().GetInputManager().SetScrollDelta(static_cast<float>(yoffset));
+    auto &inputManager = Geni::Engine::GetInstance().GetInputManager();
+    inputManager.SetScrollDelta(inputManager.GetScrollDelta() + static_cast<float>(yoffset));
 }
 
 static void glfwErrorCallback(int code, const char *description)
@@ -160,9 +162,22 @@ bool Engine::Init(const EngineConfig &config)
 
     m_physicsManager.Init();
     m_streamingBudget = config.streaming;
+    // A hidden window is a test or a capture: a controller on the desk must not steer it.
+    m_inputManager.SetGamepadPolling(config.visible);
+    m_windowVisible = config.visible;
 
     m_jobSystem = std::make_unique<JobSystem>(config.jobThreadCount);
     m_assetManager.Init(&m_fileSystem, m_jobSystem.get(), &m_renderer);
+    m_navigation.SetJobSystem(m_jobSystem.get());
+
+    AudioConfig audioConfig = config.audio;
+    if (!config.visible)
+    {
+        // A hidden window is a test or a capture: mix, but play nothing out loud.
+        audioConfig.device = false;
+    }
+    m_audio.Init(audioConfig, &m_fileSystem);
+    m_scripts.Init(config.scripting, &m_fileSystem);
 
     m_fixedTimestep = FixedTimestep(config.fixedTimestep, config.maxFixedStepsPerFrame);
     m_frameStats = FrameStats();
@@ -179,6 +194,18 @@ bool Engine::Init(const EngineConfig &config)
         {
             GENI_LOG_WARN("Debug overlay unavailable (engine built without GENI_ENABLE_IMGUI?)");
         }
+    }
+
+    if (m_debugOverlay.IsInitialized())
+    {
+        std::string font = config.uiFont;
+        std::error_code ec;
+        if (font.empty())
+        {
+            const auto local = m_fileSystem.GetExecutableFolder() / "fonts" / "Roboto-Medium.ttf";
+            font = std::filesystem::exists(local, ec) ? local.string() : std::string(GENI_DEFAULT_UI_FONT);
+        }
+        m_gameUI.Init(font);
     }
 
     m_initialized = true;
@@ -244,6 +271,10 @@ bool Engine::Tick()
     {
         GENI_PROFILE_SCOPE("PollEvents");
         glfwPollEvents();
+        m_inputManager.PollGamepads();
+        // A tool's text field or window under the mouse keeps keys and mouse from the game.
+        const bool overlayHasInput = m_debugOverlay.WantsKeyboard();
+        m_inputActions.Update(m_inputManager, !overlayHasInput, true);
     }
 
     m_frameStats.frameMs = frameSeconds * 1000.0;
@@ -256,8 +287,7 @@ bool Engine::Tick()
     Simulate(frameSeconds);
     RenderFrame();
 
-    m_inputManager.SetMousePositionOld(m_inputManager.GetMousePositionCurrent());
-    m_inputManager.ResetScrollDelta();
+    m_inputManager.EndFrame();
 
     ++m_frameStats.frameIndex;
     GENI_PROFILE_FRAME();
@@ -274,6 +304,14 @@ void Engine::Simulate(double frameSeconds)
 
     GENI_PROFILE_SCOPE("Simulate");
     const auto start = std::chrono::steady_clock::now();
+
+    // The game UI reads this frame's menu input; Lua checks for edited scripts.
+    // The pointer counts only in a visible, focused window (not the desktop cursor
+    // passing over a hidden test window).
+    m_gameUI.BeginFrame(
+        m_inputActions, m_windowVisible && glfwGetWindowAttrib(m_window, GLFW_FOCUSED) == GLFW_TRUE
+    );
+    m_scripts.Update(static_cast<float>(frameSeconds));
 
     // Finish asset decodes and GPU uploads before the application sees the frame.
     m_assetManager.Update();
@@ -295,14 +333,37 @@ void Engine::Simulate(double frameSeconds)
         GENI_PROFILE_SCOPE("FixedStep");
         if (!m_physicsPaused)
         {
+            // Characters, vehicles and scripts set this step's motion, then physics runs
+            // it (docs/design/0010).
+            if (m_currentScene)
+            {
+                m_currentScene->FixedUpdate(fixedDelta);
+            }
             m_physicsManager.Step(fixedDelta);
         }
         m_application->FixedUpdate(fixedDelta);
     }
 
+    // Finished navigation tiles join the mesh; the crowd moves (docs/design/0014).
+    if (!m_physicsPaused)
+    {
+        m_navigation.Update(static_cast<float>(frameSeconds));
+    }
+
     {
         GENI_PROFILE_SCOPE("Application::Update");
         m_application->Update(static_cast<float>(frameSeconds));
+    }
+
+    // The listener is the camera the frame renders with.
+    if (m_audio.IsInitialized())
+    {
+        const CameraData camera = GetRenderCamera(1.0f);
+        const glm::mat4 inverseView = glm::inverse(camera.viewMatrix);
+        m_audio.SetListener(
+            glm::vec3(inverseView[3]), -glm::vec3(inverseView[2]), glm::vec3(inverseView[1])
+        );
+        m_audio.Update(static_cast<float>(frameSeconds));
     }
 
     const AssetLoadStats assetStats = m_assetManager.GetStats();
@@ -457,8 +518,13 @@ void Engine::Destroy()
     // Order matters: everything that owns GPU objects or rigid bodies goes before the
     // renderer, the device and the physics world.
     m_worldStreamer.Close();
+    m_navigation.Shutdown();
     m_assetManager.Shutdown();
+    // Scripts' destroy hooks run while the scene goes, so Lua outlives it.
     m_currentScene.reset();
+    m_scripts.Shutdown();
+    m_audio.Shutdown();
+    m_gameUI.Shutdown();
     m_renderQueue.Clear();
     m_textureManager.Clear();
     m_debugOverlay.Shutdown();
@@ -656,6 +722,25 @@ CameraData Engine::GetRenderCamera(float aspect)
         }
     }
     return cameraData;
+}
+
+void Engine::SetCursorCaptured(bool captured)
+{
+    m_cursorCaptured = captured;
+    if (m_window)
+    {
+        glfwSetInputMode(m_window, GLFW_CURSOR, captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        if (glfwRawMouseMotionSupported())
+        {
+            glfwSetInputMode(m_window, GLFW_RAW_MOUSE_MOTION, captured ? GLFW_TRUE : GLFW_FALSE);
+        }
+        // The jump in cursor position is not motion.
+        double x = 0.0;
+        double y = 0.0;
+        glfwGetCursorPos(m_window, &x, &y);
+        m_inputManager.SetMousePositionCurrent(glm::vec2(static_cast<float>(x), static_cast<float>(y)));
+        m_inputManager.SetMousePositionOld(m_inputManager.GetMousePositionCurrent());
+    }
 }
 
 void Engine::SetWindowTitle(const std::string &title)

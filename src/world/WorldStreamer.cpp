@@ -201,6 +201,15 @@ void WorldStreamer::Close()
     {
         for (auto &[index, cell] : m_cells)
         {
+            if (cell->state == CellState::Loaded)
+            {
+                GameObject *root = FindObject(cell->root);
+                for (auto &[id, listener] : m_cellListeners)
+                {
+                    (void)id;
+                    listener(cell->info->x, cell->info->z, root, false);
+                }
+            }
             if (GameObject *root = FindObject(cell->root))
             {
                 m_scene->DestroyObject(root);
@@ -224,6 +233,35 @@ void WorldStreamer::Close()
     m_scene = nullptr;
     m_assets = nullptr;
     m_hasFocus = false;
+}
+
+int WorldStreamer::AddCellListener(CellListener listener)
+{
+    const int id = m_nextListenerId++;
+    m_cellListeners.emplace_back(id, std::move(listener));
+    return id;
+}
+
+void WorldStreamer::RemoveCellListener(int id)
+{
+    m_cellListeners.erase(
+        std::remove_if(
+            m_cellListeners.begin(), m_cellListeners.end(), [id](const auto &entry) { return entry.first == id; }
+        ),
+        m_cellListeners.end()
+    );
+}
+
+void WorldStreamer::ForEachLoadedCell(const CellListener &listener) const
+{
+    for (const auto &[index, cell] : m_cells)
+    {
+        (void)index;
+        if (cell->state == CellState::Loaded)
+        {
+            listener(cell->info->x, cell->info->z, FindObject(cell->root), true);
+        }
+    }
 }
 
 const WorldDescription *WorldStreamer::GetDescription() const
@@ -353,6 +391,15 @@ void WorldStreamer::Rebase(const glm::dvec3 &focus)
 
 void WorldStreamer::StartUnload(Cell &cell)
 {
+    if (cell.state == CellState::Loaded)
+    {
+        GameObject *root = FindObject(cell.root);
+        for (auto &[id, listener] : m_cellListeners)
+        {
+            (void)id;
+            listener(cell.info->x, cell.info->z, root, false);
+        }
+    }
     cell.instantiation.reset();
     cell.scene.Reset();
     cell.prefabs.clear();
@@ -511,6 +558,11 @@ bool WorldStreamer::StepLoading(Cell &cell, uint32_t &budget)
             root->SetActive(true);
         }
         cell.state = CellState::Loaded;
+        for (auto &[id, listener] : m_cellListeners)
+        {
+            (void)id;
+            listener(cell.info->x, cell.info->z, root, true);
+        }
     }
     return false;
 }

@@ -5,7 +5,7 @@
 #include "physics/RigidBody.h"
 
 // Jolt is private to src/physics/ (docs/design/0008). Jolt/Jolt.h must come first.
-#include <Jolt/Jolt.h>
+#include "JoltInternal.h"
 
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
@@ -14,6 +14,11 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -31,57 +36,7 @@ namespace Geni
 namespace
 {
 
-// Object layers: static bodies never test against each other.
-namespace Layers
-{
-constexpr JPH::ObjectLayer Static = 0;
-constexpr JPH::ObjectLayer Moving = 1;
-constexpr uint32_t Count = 2;
-} // namespace Layers
-
-namespace BroadPhaseLayers
-{
-const JPH::BroadPhaseLayer Static(0);
-const JPH::BroadPhaseLayer Moving(1);
-constexpr uint32_t Count = 2;
-} // namespace BroadPhaseLayers
-
-class BroadPhaseLayerMap final : public JPH::BroadPhaseLayerInterface
-{
-  public:
-    JPH::uint GetNumBroadPhaseLayers() const override
-    {
-        return BroadPhaseLayers::Count;
-    }
-    JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer layer) const override
-    {
-        return layer == Layers::Static ? BroadPhaseLayers::Static : BroadPhaseLayers::Moving;
-    }
-#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
-    const char *GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override
-    {
-        return layer == BroadPhaseLayers::Static ? "static" : "moving";
-    }
-#endif
-};
-
-class ObjectVsBroadPhaseFilter final : public JPH::ObjectVsBroadPhaseLayerFilter
-{
-  public:
-    bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer broadPhase) const override
-    {
-        return layer == Layers::Moving || broadPhase == BroadPhaseLayers::Moving;
-    }
-};
-
-class ObjectPairFilter final : public JPH::ObjectLayerPairFilter
-{
-  public:
-    bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override
-    {
-        return a == Layers::Moving || b == Layers::Moving;
-    }
-};
+namespace Layers = JoltLayers;
 
 void JoltTrace(const char *format, ...)
 {
@@ -131,16 +86,6 @@ void ReleaseJolt()
     }
 }
 
-JPH::RVec3 ToJolt(const glm::dvec3 &v)
-{
-    return JPH::RVec3(v.x, v.y, v.z);
-}
-
-JPH::Quat ToJolt(const glm::quat &q)
-{
-    return JPH::Quat(q.x, q.y, q.z, q.w).Normalized();
-}
-
 JPH::ShapeRefC MakeShape(const Collider &collider, const glm::vec3 &scale)
 {
     const glm::vec3 s = glm::abs(scale);
@@ -165,22 +110,6 @@ JPH::ShapeRefC MakeShape(const Collider &collider, const glm::vec3 &scale)
 
 } // namespace
 
-struct PhysicsManager::Impl
-{
-    BroadPhaseLayerMap broadPhaseLayers;
-    ObjectVsBroadPhaseFilter objectVsBroadPhase;
-    ObjectPairFilter objectPairs;
-    std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
-    std::unique_ptr<JPH::JobSystemThreadPool> jobs;
-    JPH::PhysicsSystem system;
-    std::vector<JPH::BodyID> pendingAdds;
-    std::vector<JPH::BodyID> pendingRemoves;
-
-    JPH::BodyInterface &Bodies()
-    {
-        return system.GetBodyInterfaceNoLock();
-    }
-};
 
 PhysicsManager::PhysicsManager() = default;
 
@@ -271,6 +200,29 @@ void PhysicsManager::Step(float fixedDeltaTime)
     }
     GENI_PROFILE_SCOPE("PhysicsManager::Step");
     FlushPendingBodies();
+    // Kinematic bodies moved last step but given no new target have arrived: stop them,
+    // or they would keep last step's velocity and overshoot.
+    for (const JPH::BodyID &id : m_impl->kinematicMoved)
+    {
+        const bool retargeted = std::any_of(
+            m_impl->kinematicTargets.begin(), m_impl->kinematicTargets.end(),
+            [&](const Impl::KinematicTarget &target) { return target.body == id; }
+        );
+        if (!retargeted && m_impl->Bodies().IsAdded(id))
+        {
+            m_impl->Bodies().SetLinearAndAngularVelocity(id, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+        }
+    }
+    m_impl->kinematicMoved.clear();
+    for (const Impl::KinematicTarget &target : m_impl->kinematicTargets)
+    {
+        if (m_impl->Bodies().IsAdded(target.body))
+        {
+            m_impl->Bodies().MoveKinematic(target.body, target.position, target.rotation, fixedDeltaTime);
+            m_impl->kinematicMoved.push_back(target.body);
+        }
+    }
+    m_impl->kinematicTargets.clear();
     m_impl->system.Update(fixedDeltaTime, 1, m_impl->tempAllocator.get(), m_impl->jobs.get());
 }
 
@@ -303,6 +255,7 @@ void PhysicsManager::AddRigidBody(RigidBody *body)
         moving ? Layers::Moving : Layers::Static
     );
     settings.mFriction = body->GetFriction();
+    settings.mUserData = body->GetUserData();
     if (body->GetType() == BodyType::Dynamic && body->GetMass() > 0.0f)
     {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
@@ -380,6 +333,206 @@ glm::quat PhysicsManager::GetBodyRotation(uint32_t bodyId) const
     }
     const JPH::Quat q = m_impl->Bodies().GetRotation(JPH::BodyID(bodyId));
     return glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+}
+
+namespace
+{
+
+// Layer mask -> broad-phase and object-layer filters for queries.
+class MaskBroadPhaseFilter final : public JPH::BroadPhaseLayerFilter
+{
+  public:
+    explicit MaskBroadPhaseFilter(uint32_t mask) : m_mask(mask)
+    {
+    }
+    bool ShouldCollide(JPH::BroadPhaseLayer layer) const override
+    {
+        return layer == JoltBroadPhaseLayers::Static ? (m_mask & PhysicsLayerStatic) != 0
+                                                     : (m_mask & PhysicsLayerMoving) != 0;
+    }
+
+  private:
+    uint32_t m_mask;
+};
+
+class MaskObjectLayerFilter final : public JPH::ObjectLayerFilter
+{
+  public:
+    explicit MaskObjectLayerFilter(uint32_t mask) : m_mask(mask)
+    {
+    }
+    bool ShouldCollide(JPH::ObjectLayer layer) const override
+    {
+        return layer == JoltLayers::Static ? (m_mask & PhysicsLayerStatic) != 0 : (m_mask & PhysicsLayerMoving) != 0;
+    }
+
+  private:
+    uint32_t m_mask;
+};
+
+class IgnoreBodyFilter final : public JPH::BodyFilter
+{
+  public:
+    explicit IgnoreBodyFilter(uint32_t ignored) : m_ignored(ignored)
+    {
+    }
+    bool ShouldCollide(const JPH::BodyID &id) const override
+    {
+        return id.GetIndexAndSequenceNumber() != m_ignored;
+    }
+
+  private:
+    uint32_t m_ignored;
+};
+
+void FillHit(JPH::PhysicsSystem &system, const JPH::BodyID &body, const JPH::SubShapeID &subShape,
+             const JPH::RVec3 &point, const glm::vec3 &fallbackNormal, PhysicsHit &hit)
+{
+    hit.position = FromJolt(point);
+    hit.bodyId = body.GetIndexAndSequenceNumber();
+    hit.normal = fallbackNormal;
+    JPH::BodyLockRead lock(system.GetBodyLockInterfaceNoLock(), body);
+    if (lock.Succeeded())
+    {
+        const JPH::Body &locked = lock.GetBody();
+        hit.userData = locked.GetUserData();
+        const JPH::Vec3 n = locked.GetWorldSpaceSurfaceNormal(subShape, point);
+        hit.normal = glm::vec3(n.GetX(), n.GetY(), n.GetZ());
+    }
+}
+
+} // namespace
+
+void PhysicsManager::MoveKinematic(uint32_t bodyId, const glm::dvec3 &position, const glm::quat &rotation, float deltaTime)
+{
+    if (m_impl && deltaTime > 0.0f)
+    {
+        m_impl->Bodies().MoveKinematic(JPH::BodyID(bodyId), ToJolt(position), ToJolt(rotation), deltaTime);
+    }
+}
+
+void PhysicsManager::SetKinematicTarget(uint32_t bodyId, const glm::dvec3 &position, const glm::quat &rotation)
+{
+    if (!m_impl)
+    {
+        return;
+    }
+    const JPH::BodyID id(bodyId);
+    for (Impl::KinematicTarget &target : m_impl->kinematicTargets)
+    {
+        if (target.body == id)
+        {
+            target.position = ToJolt(position);
+            target.rotation = ToJolt(rotation);
+            return;
+        }
+    }
+    m_impl->kinematicTargets.push_back({id, ToJolt(position), ToJolt(rotation)});
+}
+
+glm::vec3 PhysicsManager::GetBodyLinearVelocity(uint32_t bodyId) const
+{
+    if (!m_impl)
+    {
+        return glm::vec3(0.0f);
+    }
+    const JPH::Vec3 v = m_impl->Bodies().GetLinearVelocity(JPH::BodyID(bodyId));
+    return glm::vec3(v.GetX(), v.GetY(), v.GetZ());
+}
+
+void PhysicsManager::SetBodyLinearVelocity(uint32_t bodyId, const glm::vec3 &velocity)
+{
+    if (m_impl)
+    {
+        m_impl->Bodies().SetLinearVelocity(JPH::BodyID(bodyId), ToJolt(velocity));
+    }
+}
+
+void PhysicsManager::AddBodyImpulse(uint32_t bodyId, const glm::vec3 &impulse)
+{
+    if (m_impl)
+    {
+        m_impl->Bodies().AddImpulse(JPH::BodyID(bodyId), ToJolt(impulse));
+    }
+}
+
+glm::vec3 PhysicsManager::GetGravity() const
+{
+    if (!m_impl)
+    {
+        return glm::vec3(0.0f, -9.81f, 0.0f);
+    }
+    const JPH::Vec3 g = m_impl->system.GetGravity();
+    return glm::vec3(g.GetX(), g.GetY(), g.GetZ());
+}
+
+bool PhysicsManager::CastRay(
+    const glm::dvec3 &origin, const glm::vec3 &direction, float maxDistance, PhysicsHit &hit, uint32_t layers,
+    uint32_t ignoreBody
+) const
+{
+    const float length = glm::length(direction);
+    if (!m_impl || length <= 0.0f || maxDistance <= 0.0f)
+    {
+        return false;
+    }
+    const glm::vec3 dir = direction / length;
+    JPH::RRayCast ray(ToJolt(origin), ToJolt(dir * maxDistance));
+    JPH::RayCastResult result;
+    MaskBroadPhaseFilter broadPhase(layers);
+    MaskObjectLayerFilter objectLayers(layers);
+    IgnoreBodyFilter bodies(ignoreBody);
+    if (!m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, result, broadPhase, objectLayers, bodies))
+    {
+        return false;
+    }
+    FillHit(m_impl->system, result.mBodyID, result.mSubShapeID2, ray.GetPointOnRay(result.mFraction), -dir, hit);
+    hit.distance = result.mFraction * maxDistance;
+    return true;
+}
+
+bool PhysicsManager::CastSphere(
+    const glm::dvec3 &origin, float radius, const glm::vec3 &direction, float maxDistance, PhysicsHit &hit,
+    uint32_t layers, uint32_t ignoreBody
+) const
+{
+    const float length = glm::length(direction);
+    if (!m_impl || length <= 0.0f || maxDistance <= 0.0f || radius <= 0.0f)
+    {
+        return false;
+    }
+    const glm::vec3 dir = direction / length;
+    JPH::SphereShape sphere(radius);
+    sphere.SetEmbedded();
+    const JPH::RShapeCast cast(
+        &sphere, JPH::Vec3::sOne(), JPH::RMat44::sTranslation(ToJolt(origin)), ToJolt(dir * maxDistance)
+    );
+    JPH::ShapeCastSettings settings;
+    settings.mBackFaceModeTriangles = JPH::EBackFaceMode::IgnoreBackFaces;
+    settings.mBackFaceModeConvex = JPH::EBackFaceMode::IgnoreBackFaces;
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+    MaskBroadPhaseFilter broadPhase(layers);
+    MaskObjectLayerFilter objectLayers(layers);
+    IgnoreBodyFilter bodies(ignoreBody);
+    m_impl->system.GetNarrowPhaseQueryNoLock().CastShape(
+        cast, settings, ToJolt(origin), collector, broadPhase, objectLayers, bodies
+    );
+    if (!collector.HadHit())
+    {
+        return false;
+    }
+    const JPH::ShapeCastResult &result = collector.mHit;
+    const JPH::RVec3 contact = ToJolt(origin) + result.mContactPointOn2;
+    FillHit(m_impl->system, result.mBodyID2, result.mSubShapeID2, contact, -dir, hit);
+    // The penetration axis points from the sphere into the body: its reverse is the normal.
+    const JPH::Vec3 axis = result.mPenetrationAxis;
+    if (axis.LengthSq() > 0.0f)
+    {
+        const JPH::Vec3 n = -axis.Normalized();
+        hit.normal = glm::vec3(n.GetX(), n.GetY(), n.GetZ());
+    }
+    hit.distance = result.mFraction * maxDistance;
+    return true;
 }
 
 } // namespace Geni

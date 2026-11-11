@@ -3,7 +3,7 @@
 # `city` runs the reference game's first block: a cooked scene with 10,000 buildings
 # (nine meshes, one per material), 100 point lights and a sun. Interactive when run
 # normally; --budget-ms turns it into the CI performance check.
-geni_add_sample(city main.cpp WorldMode.cpp)
+geni_add_sample(city main.cpp WorldMode.cpp PlayMode.cpp)
 
 # Frame-time budget (ROADMAP M2, rule 4). The default is loose because CI may run on
 # software Vulkan (lavapipe) and on shared runners; the target on real hardware is
@@ -33,6 +33,14 @@ add_test(NAME benchmark_world
          COMMAND city --world --route --speed 60 --distance 480 --hidden --width 640 --height 360
                  --hitch-ms ${GENI_WORLD_HITCH_MS})
 set_tests_properties(benchmark_world PROPERTIES LABELS "gpu;perf" TIMEOUT 600)
+
+# The reference game (ROADMAP M6): `city --play --autopilot` plays itself through the
+# input actions (walk to the car, get in, drive, brake, get out, walk on) among
+# pedestrians and traffic, and fails with exit code 9 when a step does not happen or 10 on
+# a Lua error. Every frame is a 1/60 s step, so it does not depend on the machine's speed.
+add_test(NAME play_city
+         COMMAND city --play --autopilot --hidden --width 480 --height 270)
+set_tests_properties(play_city PROPERTIES LABELS "gpu;game" TIMEOUT 900)
 
 # Screenshot comparison: the instanced, cascaded, tonemapped path must look the same
 # every run (see tests/run_screenshot.cmake).
@@ -66,6 +74,23 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.02
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_world PROPERTIES LABELS "gpu" TIMEOUT 300)
+endif()
+
+if(GENI_BUILD_TESTS)
+  # The game's title screen: the streamed street, the player, the car and the game UI
+  # (docs/design/0015), without pedestrians or traffic so the frame is the same each run.
+  add_test(NAME screenshot_play
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--play;--title-shot;--no-crowd;--no-traffic"
+             -DFRAMES=40
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/play_title.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.02
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_play PROPERTIES LABELS "gpu;game" TIMEOUT 300)
 endif()
 
 # The editor on this sample (ROADMAP M4): `cmake --build <dir> --target edit_city`.

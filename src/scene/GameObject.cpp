@@ -15,6 +15,10 @@ GameObject::~GameObject()
     {
         for (auto &component : m_components)
         {
+            component->OnDestroy();
+        }
+        for (auto &component : m_components)
+        {
             m_scene->UnregisterComponent(component.get());
         }
         m_scene->UnregisterObject(this);
@@ -55,6 +59,7 @@ bool GameObject::RemoveComponent(Component *component)
         {
             if (m_scene)
             {
+                component->OnDestroy();
                 m_scene->UnregisterComponent(component);
             }
             m_components.erase(it);

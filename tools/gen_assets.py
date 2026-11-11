@@ -814,6 +814,9 @@ def main():
     write_json(ROOT / "tests/assets/models/lod_sphere.gltf", lod_sphere_gltf(), compact=True)
     tiny_world()
     metro_world()
+    # M6: the reference game's characters, cars and sounds.
+    import gen_game_assets
+    gen_game_assets.main()
 
 
 if __name__ == "__main__":

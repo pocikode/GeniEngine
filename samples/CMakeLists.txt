@@ -12,6 +12,13 @@ function(geni_add_sample name)
   # Function names in crash-report stack traces on Linux.
   set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
 
+  # The game UI's font (docs/design/0015), next to the executable.
+  add_custom_command(TARGET ${name} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${name}>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/thirdparty/imgui/misc/fonts/Roboto-Medium.ttf"
+            "$<TARGET_FILE_DIR:${name}>/fonts/Roboto-Medium.ttf")
+
   set(assets "${CMAKE_CURRENT_SOURCE_DIR}/assets")
   if(EXISTS "${assets}")
     target_compile_definitions(${name} PRIVATE GENI_SAMPLE_ASSETS_DIR="${assets}")

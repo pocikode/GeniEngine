@@ -91,6 +91,8 @@ void PhysicsComponent::Init()
     );
     m_rigidBody->SetWorldPosition(scene ? scene->ToWorld(position) : glm::dvec3(position));
     m_rigidBody->SetRotation(m_owner->GetWorldRotation());
+    // Ray and sphere casts report which object they hit.
+    m_rigidBody->SetUserData(m_owner->GetID());
 
     Engine::GetInstance().GetPhysicsManager().AddRigidBody(m_rigidBody.get());
 }
@@ -100,6 +102,20 @@ void PhysicsComponent::Update(float deltaTime)
     (void)deltaTime;
     if (!m_rigidBody)
     {
+        return;
+    }
+
+    if (m_rigidBody->GetType() == BodyType::Kinematic && m_rigidBody->IsAddedToWorld())
+    {
+        // Something (a script, an animation) moves the object: the body follows over the
+        // next physics step, with the velocity that gets it there, so it pushes what it
+        // meets (docs/design/0010).
+        const glm::mat4 world = m_owner->GetWorldTransform();
+        const Scene *scene = m_owner->GetScene();
+        const glm::vec3 position(world[3]);
+        Engine::GetInstance().GetPhysicsManager().SetKinematicTarget(
+            m_rigidBody->GetBodyId(), scene ? scene->ToWorld(position) : glm::dvec3(position), m_owner->GetWorldRotation()
+        );
         return;
     }
 

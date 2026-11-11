@@ -34,3 +34,12 @@
 [submodule "thirdparty/JoltPhysics"]
 	path = thirdparty/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics.git
+[submodule "thirdparty/lua"]
+	path = thirdparty/lua
+	url = https://github.com/lua/lua.git
+[submodule "thirdparty/miniaudio"]
+	path = thirdparty/miniaudio
+	url = https://github.com/mackron/miniaudio.git
+[submodule "thirdparty/recastnavigation"]
+	path = thirdparty/recastnavigation
+	url = https://github.com/recastnavigation/recastnavigation.git

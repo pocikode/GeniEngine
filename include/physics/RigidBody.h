@@ -72,6 +72,17 @@ class RigidBody
     void SetRotation(const glm::quat &rotation);
     glm::quat GetRotation() const;
 
+    // Returned with ray and sphere hits (PhysicsHit::userData). Set before the body is
+    // added to the world.
+    void SetUserData(uint64_t userData)
+    {
+        m_userData = userData;
+    }
+    uint64_t GetUserData() const
+    {
+        return m_userData;
+    }
+
     // The physics world's body (InvalidBodyId until PhysicsManager::AddRigidBody).
     uint32_t GetBodyId() const
     {
@@ -94,6 +105,7 @@ class RigidBody
     glm::dvec3 m_position{0.0};
     glm::quat m_rotation{1.0f, 0.0f, 0.0f, 0.0f};
     uint32_t m_bodyId = InvalidBodyId;
+    uint64_t m_userData = 0;
 };
 
 } // namespace Geni

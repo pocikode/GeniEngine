@@ -6,6 +6,7 @@
 #include "render/Shader.h"
 
 #include <algorithm>
+#include <limits>
 #include <atomic>
 #include <cctype>
 #include <cstdio>
@@ -57,11 +58,15 @@ std::string Lower(std::string text)
     return text;
 }
 
+// INT64_MIN for a missing file: file-clock times can be negative (libstdc++'s epoch is in
+// 2174), so 0 would sort after every real time and a missing output would look fresh.
+constexpr int64_t kMissingFile = std::numeric_limits<int64_t>::min();
+
 int64_t FileTime(const std::filesystem::path &path)
 {
     std::error_code ec;
     const auto time = std::filesystem::last_write_time(path, ec);
-    return ec ? 0 : static_cast<int64_t>(time.time_since_epoch().count());
+    return ec ? kMissingFile : static_cast<int64_t>(time.time_since_epoch().count());
 }
 
 // Entry points by the engine's naming rule (cmake/GeniShaders.cmake).
@@ -363,7 +368,7 @@ bool Project::PrepareFiles(std::string &log, bool forceCook)
 {
     bool ok = true;
     const int64_t manifestTime = FileTime(m_config.cooked / "cooked_manifest.json");
-    bool stale = forceCook || manifestTime == 0;
+    bool stale = forceCook || manifestTime == kMissingFile;
     for (const std::string &extension : WatchedExtensions())
     {
         if (extension == ".slang")

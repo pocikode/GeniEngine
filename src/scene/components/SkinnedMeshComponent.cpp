@@ -168,9 +168,22 @@ bool SkinnedMeshComponent::BuildSkeletonFromMesh()
     auto skeleton = std::make_shared<Skeleton>();
     const auto &names = mesh->GetJointNames();
     const auto &inverseBindMatrices = mesh->GetInverseBindMatrices();
+    // Joints are looked up in the model this mesh belongs to: the nearest ancestor whose
+    // subtree has the joint. A scene-wide search by name bound every copy of a character
+    // to the first copy's skeleton (M6: many pedestrians of one model).
+    auto findJoint = [&](const std::string &name) -> GameObject * {
+        for (GameObject *ancestor = GetOwner()->GetParent(); ancestor; ancestor = ancestor->GetParent())
+        {
+            if (GameObject *joint = ancestor->FindChildByName(name))
+            {
+                return joint;
+            }
+        }
+        return scene->FindObject(name);
+    };
     for (size_t i = 0; i < names.size(); ++i)
     {
-        GameObject *joint = scene->FindObject(names[i]);
+        GameObject *joint = findJoint(names[i]);
         if (!joint)
         {
             GENI_LOG_WARN("skinned mesh: joint '%s' is not in the scene", names[i].c_str());

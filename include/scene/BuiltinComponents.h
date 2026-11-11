@@ -17,6 +17,13 @@ void LinkPhysicsComponent();
 void LinkOrbitCameraComponent();
 void LinkPlayerControllerComponent();
 void LinkFlyCameraComponent();
+void LinkCharacterControllerComponent();
+void LinkVehicleComponent();
+void LinkThirdPersonCameraComponent();
+void LinkAnimatorComponent();
+void LinkAudioSourceComponent();
+void LinkNavAgentComponent();
+void LinkScriptComponent();
 
 inline void RegisterBuiltinComponents()
 {
@@ -29,6 +36,13 @@ inline void RegisterBuiltinComponents()
     LinkOrbitCameraComponent();
     LinkPlayerControllerComponent();
     LinkFlyCameraComponent();
+    LinkCharacterControllerComponent();
+    LinkVehicleComponent();
+    LinkThirdPersonCameraComponent();
+    LinkAnimatorComponent();
+    LinkAudioSourceComponent();
+    LinkNavAgentComponent();
+    LinkScriptComponent();
 }
 
 } // namespace Geni

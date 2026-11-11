@@ -14,6 +14,31 @@ class Component
     virtual ~Component() = default;
     virtual void Init();
     virtual void Update(float deltaTime) = 0;
+    // Called in every fixed simulation step, before physics steps (Scene::FixedUpdate,
+    // docs/design/0010), for types whose HasFixedUpdate returns true.
+    virtual void FixedUpdate(float fixedDeltaTime)
+    {
+        (void)fixedDeltaTime;
+    }
+    virtual bool HasFixedUpdate() const
+    {
+        return false;
+    }
+    // Called after every object's Update in Scene::Update (play mode), for types whose
+    // HasLateUpdate returns true: cameras that follow what moved this frame.
+    virtual void LateUpdate(float deltaTime)
+    {
+        (void)deltaTime;
+    }
+    virtual bool HasLateUpdate() const
+    {
+        return false;
+    }
+    // Called before the component is destroyed while its object is still in the scene
+    // (GameObject destructor, RemoveComponent).
+    virtual void OnDestroy()
+    {
+    }
     // Called instead of Update while a scene is edited rather than played
     // (SceneUpdateMode::Edit). Only components that draw do anything here.
     virtual void EditUpdate()

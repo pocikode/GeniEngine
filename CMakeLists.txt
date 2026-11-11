@@ -24,7 +24,8 @@ option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
 
 include(cmake/GeniSubmodules.cmake)
-geni_require_submodules(glm nlohmann_json cgltf JoltPhysics VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder)
+geni_require_submodules(glm nlohmann_json cgltf JoltPhysics VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder
+                        lua miniaudio recastnavigation)
 
 # Vulkan: the loader and headers (Vulkan SDK, Homebrew vulkan-headers + vulkan-loader, or
 # apt libvulkan-dev). Shaders are compiled offline by a pinned slangc (cmake/GeniShaders.cmake).
@@ -65,6 +66,14 @@ set(SRC_FILES
   src/assets/CookedFormats.cpp
   src/assets/Ktx2.cpp
   src/input/InputManager.cpp
+  src/input/InputActions.cpp
+  src/animation/AnimationGraph.cpp
+  src/audio/AudioSystem.cpp
+  src/audio/MiniaudioImplementation.c
+  src/nav/NavigationSystem.cpp
+  src/script/ScriptSystem.cpp
+  src/script/ScriptBindings.cpp
+  src/ui/GameUI.cpp
   src/graphics/Texture.cpp
   src/render/Material.cpp
   src/render/Mesh.cpp
@@ -91,6 +100,13 @@ set(SRC_FILES
   src/scene/components/PhysicsComponent.cpp
   src/scene/components/OrbitCameraComponent.cpp
   src/scene/components/FlyCameraComponent.cpp
+  src/scene/components/CharacterControllerComponent.cpp
+  src/scene/components/VehicleComponent.cpp
+  src/scene/components/ThirdPersonCameraComponent.cpp
+  src/scene/components/AnimatorComponent.cpp
+  src/scene/components/AudioSourceComponent.cpp
+  src/scene/components/NavAgentComponent.cpp
+  src/scene/components/ScriptComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp
@@ -98,6 +114,8 @@ set(SRC_FILES
   src/io/ImageWriter.cpp
   src/physics/PhysicsManager.cpp
   src/physics/RigidBody.cpp
+  src/physics/CharacterController.cpp
+  src/physics/Vehicle.cpp
   src/rhi/vulkan/VulkanDevice.cpp
   src/rhi/vulkan/VmaImplementation.cpp
   thirdparty/SPIRV-Reflect/spirv_reflect.c
@@ -153,6 +171,38 @@ set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 set(JPH_ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/JoltPhysics/Build ${CMAKE_BINARY_DIR}/JoltPhysics EXCLUDE_FROM_ALL)
 
+# Lua 5.4 (docs/design/0013), compiled as C++ so errors unwind with exceptions. Only
+# src/script/ and the script component include it.
+set(GENI_LUA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/lua)
+set(GENI_LUA_SOURCES)
+foreach(name lapi lauxlib lbaselib lcode lcorolib lctype ldblib ldebug ldo ldump lfunc lgc linit liolib llex
+             lmathlib lmem loadlib lobject lopcodes loslib lparser lstate lstring lstrlib ltable ltablib ltm
+             lundump lutf8lib lvm lzio)
+  list(APPEND GENI_LUA_SOURCES ${GENI_LUA_DIR}/${name}.c)
+endforeach()
+set_source_files_properties(${GENI_LUA_SOURCES} PROPERTIES LANGUAGE CXX)
+add_library(geni_lua STATIC ${GENI_LUA_SOURCES})
+target_include_directories(geni_lua PUBLIC ${GENI_LUA_DIR})
+if(UNIX)
+  target_compile_definitions(geni_lua PRIVATE LUA_USE_POSIX)
+endif()
+target_compile_options(geni_lua PRIVATE $<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-w>)
+
+# Recast, Detour and DetourCrowd (docs/design/0014). Only src/nav/ includes them.
+set(GENI_RECAST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/recastnavigation)
+file(GLOB GENI_RECAST_SOURCES
+  ${GENI_RECAST_DIR}/Recast/Source/*.cpp
+  ${GENI_RECAST_DIR}/Detour/Source/*.cpp
+  ${GENI_RECAST_DIR}/DetourCrowd/Source/*.cpp)
+add_library(geni_recast STATIC ${GENI_RECAST_SOURCES})
+target_include_directories(geni_recast PUBLIC
+  ${GENI_RECAST_DIR}/Recast/Include
+  ${GENI_RECAST_DIR}/Detour/Include
+  ${GENI_RECAST_DIR}/DetourCrowd/Include)
+target_compile_options(geni_recast PRIVATE $<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-w>)
+
+find_package(Threads REQUIRED)
+
 target_link_libraries(
   ${PROJECT_NAME}
   PUBLIC
@@ -162,14 +212,31 @@ target_link_libraries(
   PRIVATE
     Jolt
     Vulkan::Vulkan
+    geni_lua
+    geni_recast
+    Threads::Threads
 )
+
+# miniaudio (docs/design/0012): one translation unit, only src/audio/ includes it.
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/miniaudio)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(${PROJECT_NAME} PRIVATE m)
+endif()
+if(APPLE)
+  target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
+endif()
+
+# The game UI's default font (docs/design/0015); samples also copy it next to themselves.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+  GENI_DEFAULT_UI_FONT="${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/misc/fonts/Roboto-Medium.ttf")
 
 # Only src/rhi/vulkan/ includes these (docs/design/0001).
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/VulkanMemoryAllocator/include
 )
 # Third-party code compiled into the engine: keep its warnings out of the build log.
-set_source_files_properties(src/rhi/vulkan/VmaImplementation.cpp thirdparty/SPIRV-Reflect/spirv_reflect.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(src/rhi/vulkan/VmaImplementation.cpp thirdparty/SPIRV-Reflect/spirv_reflect.c
+  src/audio/MiniaudioImplementation.c PROPERTIES COMPILE_OPTIONS
   "$<$<OR:$<CXX_COMPILER_ID:Clang,AppleClang,GNU>,$<C_COMPILER_ID:Clang,AppleClang,GNU>>:-w>")
 
 if(WIN32)

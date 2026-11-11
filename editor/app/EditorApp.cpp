@@ -278,6 +278,9 @@ void EditorApp::DrawDockSpace()
             ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("Console", bottom);
             ImGui::DockBuilderFinish(dockSpace);
+            // Which of two docked tabs starts in front is otherwise up to submission and
+            // focus order, which differs between platforms: choose Assets explicitly.
+            m_selectAssetsTab = 3;
         }
     }
 

@@ -19,6 +19,7 @@ add_executable(geni_tests
   test_scene_editing.cpp
   test_hot_reload.cpp
   test_world.cpp
+  test_gameplay.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders

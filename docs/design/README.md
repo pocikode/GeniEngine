@@ -14,6 +14,13 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0006 | [Editor v1](0006-editor.md) | M4 | Done |
 | 0007 | [World streaming](0007-world-streaming.md) | M5 | Done |
 | 0008 | [Physics on Jolt](0008-physics-on-jolt.md) | M5 | Done |
+| 0009 | [Input actions and gamepads](0009-input-actions.md) | M6 | Done |
+| 0010 | [Characters, vehicles and the third-person camera](0010-characters-vehicles-cameras.md) | M6 | Done |
+| 0011 | [Animation blending and state machines](0011-animation-graph.md) | M6 | Done |
+| 0012 | [Audio](0012-audio.md) | M6 | Done |
+| 0013 | [Lua scripting](0013-lua-scripting.md) | M6 | Done |
+| 0014 | [Navigation meshes and AI agents](0014-navigation.md) | M6 | Done |
+| 0015 | [Game UI](0015-game-ui.md) | M6 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 
