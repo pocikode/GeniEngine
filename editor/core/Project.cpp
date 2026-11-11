@@ -82,12 +82,16 @@ const std::vector<std::string> &WatchedExtensions()
 
 } // namespace
 
-int RunProcess(const std::filesystem::path &program, const std::vector<std::string> &arguments, std::string *output)
+int RunProcess(
+    const std::filesystem::path &program, const std::vector<std::string> &arguments, std::string *output,
+    const std::filesystem::path &logPath
+)
 {
     static std::atomic<int> counter{0};
     std::error_code ec;
     const std::filesystem::path log =
-        std::filesystem::temp_directory_path(ec) / ("geni_editor_process_" + std::to_string(counter++) + ".log");
+        !logPath.empty() ? logPath
+                         : std::filesystem::temp_directory_path(ec) / ("geni_editor_process_" + std::to_string(counter++) + ".log");
 
     std::string command = Quote(program.string());
     for (const auto &argument : arguments)
@@ -105,7 +109,10 @@ int RunProcess(const std::filesystem::path &program, const std::vector<std::stri
     {
         *output = ReadText(log);
     }
-    std::filesystem::remove(log, ec);
+    if (logPath.empty())
+    {
+        std::filesystem::remove(log, ec);
+    }
     if (status == -1)
     {
         return -1;
@@ -118,8 +125,28 @@ int RunProcess(const std::filesystem::path &program, const std::vector<std::stri
 #endif
 }
 
+Project::~Project()
+{
+    if (m_pending && m_pending->thread.joinable())
+    {
+        m_pending->thread.join();
+    }
+    if (m_prepare && m_prepare->thread.joinable())
+    {
+        m_prepare->thread.join();
+    }
+}
+
 void Project::Init(const ProjectConfig &config, FileSystem &fileSystem, AssetManager *assets, JobSystem *jobs)
 {
+    if (m_pending && m_pending->thread.joinable())
+    {
+        m_pending->thread.join();
+    }
+    if (m_prepare && m_prepare->thread.joinable())
+    {
+        m_prepare->thread.join();
+    }
     m_config = config;
     m_fileSystem = &fileSystem;
     m_assets = assets;
@@ -191,13 +218,26 @@ bool Project::Cook(std::string *output)
         return false;
     }
     std::string text;
+    m_cooking->store(true);
     const int code = RunProcess(
         m_config.cooker,
-        {"--source-root", m_config.assets.string(), "--output-root", m_config.cooked.string(), "--all"}, &text
+        {"--source-root", m_config.assets.string(), "--output-root", m_config.cooked.string(), "--all", "--progress"},
+        &text, ProgressLogPath()
     );
+    m_cooking->store(false);
+    // Progress lines are for whoever watched the cook, not for the log.
+    std::string kept;
+    std::istringstream lines(text);
+    for (std::string line; std::getline(lines, line);)
+    {
+        if (line.rfind("progress ", 0) != 0)
+        {
+            kept += line + "\n";
+        }
+    }
     if (output)
     {
-        *output = text;
+        *output = kept;
     }
     return code == 0;
 }
@@ -277,13 +317,53 @@ bool Project::CompileShader(const std::string &assetPath, std::string *output)
     return ok;
 }
 
-bool Project::Prepare(std::string *output)
+std::filesystem::path Project::ProgressLogPath() const
+{
+    return m_config.cooked / "cook_progress.log";
+}
+
+CookProgress Project::GetCookProgress() const
+{
+    CookProgress progress;
+    if (!m_cooking->load())
+    {
+        return progress;
+    }
+    progress.active = true;
+    // The last complete progress line of the log the cooker is writing.
+    std::ifstream file(ProgressLogPath(), std::ios::binary);
+    if (!file)
+    {
+        return progress;
+    }
+    file.seekg(0, std::ios::end);
+    const std::streamoff size = file.tellg();
+    const std::streamoff start = std::max<std::streamoff>(0, size - 4096);
+    file.seekg(start);
+    std::string tail(static_cast<size_t>(size - start), '\0');
+    file.read(tail.data(), static_cast<std::streamsize>(tail.size()));
+    const size_t last = tail.rfind("progress ");
+    if (last == std::string::npos)
+    {
+        return progress;
+    }
+    const size_t end = tail.find('\n', last);
+    if (end == std::string::npos)
+    {
+        return progress;
+    }
+    std::istringstream line(tail.substr(last + 9, end - last - 9));
+    char slash = 0;
+    line >> progress.done >> slash >> progress.total;
+    std::getline(line >> std::ws, progress.current);
+    return progress;
+}
+
+bool Project::PrepareFiles(std::string &log, bool forceCook)
 {
     bool ok = true;
-    std::string log;
-
     const int64_t manifestTime = FileTime(m_config.cooked / "cooked_manifest.json");
-    bool stale = manifestTime == 0;
+    bool stale = forceCook || manifestTime == 0;
     for (const std::string &extension : WatchedExtensions())
     {
         if (extension == ".slang")
@@ -302,10 +382,6 @@ bool Project::Prepare(std::string *output)
         {
             ok = false;
             log += text;
-        }
-        if (m_assets)
-        {
-            m_assets->ReloadManifest();
         }
     }
 
@@ -327,6 +403,17 @@ bool Project::Prepare(std::string *output)
             }
         }
     }
+    return ok;
+}
+
+bool Project::Prepare(std::string *output)
+{
+    std::string log;
+    const bool ok = PrepareFiles(log);
+    if (m_assets)
+    {
+        m_assets->ReloadManifest();
+    }
     // Whatever was just written is the baseline; only later edits are hot reloads.
     m_watcher.Watch(m_config.assets, WatchedExtensions());
     if (output)
@@ -334,6 +421,49 @@ bool Project::Prepare(std::string *output)
         *output = log;
     }
     return ok;
+}
+
+void Project::StartPrepare(bool forceCook)
+{
+    auto work = std::make_shared<PrepareWork>();
+    m_prepare = work;
+    PrepareWork *raw = work.get();
+    work->thread = std::thread([this, raw, forceCook] {
+        std::string log;
+        const bool ok = PrepareFiles(log, forceCook);
+        std::lock_guard<std::mutex> lock(raw->mutex);
+        raw->log = std::move(log);
+        raw->ok = ok;
+        raw->done = true;
+    });
+}
+
+bool Project::FinishPrepare(bool &ok, std::string *output)
+{
+    if (!m_prepare)
+    {
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_prepare->mutex);
+        if (!m_prepare->done)
+        {
+            return false;
+        }
+        ok = m_prepare->ok;
+        if (output)
+        {
+            *output = m_prepare->log;
+        }
+    }
+    m_prepare->thread.join();
+    m_prepare.reset();
+    if (m_assets)
+    {
+        m_assets->ReloadManifest();
+    }
+    m_watcher.Watch(m_config.assets, WatchedExtensions());
+    return true;
 }
 
 bool Project::Start(const std::vector<FileWatcher::Change> &changes)
@@ -388,13 +518,18 @@ bool Project::Start(const std::vector<FileWatcher::Change> &changes)
     }
 
     m_pending = work;
-    if (m_jobs && (work->cook || !work->shaders.empty()))
+    if (work->cook || !work->shaders.empty())
     {
-        work->job = m_jobs->Schedule([this, work] { Run(*work); }, "hot reload");
+        PendingWork *raw = work.get();
+        work->thread = std::thread([this, raw] {
+            Run(*raw);
+            raw->done = true;
+        });
     }
     else
     {
         Run(*work);
+        work->done = true;
     }
     return true;
 }
@@ -436,6 +571,10 @@ void Project::Run(PendingWork &work)
 
 void Project::Finish(ReloadReport &report)
 {
+    if (m_pending->thread.joinable())
+    {
+        m_pending->thread.join();
+    }
     {
         std::lock_guard<std::mutex> lock(m_pending->mutex);
         report.messages = m_pending->messages;
@@ -477,9 +616,13 @@ void Project::Finish(ReloadReport &report)
 bool Project::Update(double now, ReloadReport &report)
 {
     report = ReloadReport();
+    if (m_prepare)
+    {
+        return false;
+    }
     if (m_pending)
     {
-        if (!m_pending->job.IsComplete())
+        if (!m_pending->done)
         {
             return false;
         }
@@ -510,10 +653,6 @@ bool Project::UpdateNow(ReloadReport &report)
             return false;
         }
         Start(changes);
-    }
-    if (m_jobs)
-    {
-        m_jobs->Wait(m_pending->job);
     }
     Finish(report);
     return true;

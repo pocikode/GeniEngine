@@ -21,9 +21,13 @@ namespace Geni::Editor
 
 struct EditorOptions
 {
+    // Empty assets folder: start on the project manager.
     ProjectConfig project;
-    // Asset path of the scene (or prefab) to open at startup. Empty: the first .gscene
-    // in the project, or a new scene.
+    // Roboto-Medium.ttf and friends (ImGui's misc/fonts).
+    std::filesystem::path fontFolder;
+    // Asset path of the scene (or prefab) to open at startup. Empty: what was open when
+    // the project was last closed, else the project's world, else its first scene that is
+    // not a world cell, else a new scene.
     std::string scene;
     // A scripted session: one command per frame (see RunScriptCommand). The editor
     // quits after the last one. Used by CI and to do an edit from the command line.
@@ -56,8 +60,53 @@ class EditorApp : public Application
         NewScene,
         OpenScene,
         OpenWorld,
+        OpenProject,
         Quit
     };
+
+    // Startup: pick a project, cook it in the background, then open its content.
+    enum class Stage
+    {
+        ProjectManager,
+        Preparing,
+        Ready
+    };
+
+    struct RecentProject
+    {
+        std::string path;
+        double lastOpened = 0.0; // seconds since the epoch
+    };
+
+    // One folder of the assets browser, built from the files on disk.
+    struct AssetFile
+    {
+        std::string path; // asset path, "imported/village/Wall.gltf"
+        std::string name;
+        AssetID primary;  // the file's own asset (model scene, texture, prefab...), if cooked
+        std::vector<AssetID> parts; // sub-assets: meshes, materials, animations
+    };
+    struct AssetFolder
+    {
+        std::string path; // "" for the root
+        std::string name;
+        std::vector<std::unique_ptr<AssetFolder>> folders;
+        std::vector<AssetFile> files;
+    };
+
+    // --- Project ---
+    void OpenProject(const std::filesystem::path &folder);
+    void StartProject();
+    void FinishStartup();
+    bool OpenDefaultContent();
+    bool PickDefaultRegion(int region[4]) const;
+    void LoadRecentProjects();
+    void SaveRecentProjects() const;
+    void SaveProjectState() const;
+    nlohmann::json LoadProjectState() const;
+    void DrawProjectManager();
+    void DrawPrepareProgress();
+    void DrawFolderBrowser();
 
     // --- Frame ---
     void DrawDockSpace();
@@ -82,11 +131,24 @@ class EditorApp : public Application
     // A world's cell grid: pick a region and load it (docs/design/0007).
     void DrawWorldPanel();
     void ActivateAsset(AssetID id, const glm::vec3 *position = nullptr);
+    void DrawPropertyLabel(const char *label);
+    bool DrawVec3Row(const char *label, glm::vec3 &value, float speed, float resetValue, bool &released);
+
+    // --- Assets browser (EditorAssets.cpp) ---
+    void ScanAssets();
+    void DrawAssetFolderTree(AssetFolder &folder);
+    void DrawAssetTile(const AssetFile &file, float tile);
+    void DrawAssetPartTile(AssetID id, float tile);
+    AssetFolder *FindAssetFolder(const std::string &path);
+    void OpenAssetFile(const AssetFile &file);
 
     // --- Viewport (EditorViewport.cpp) ---
     void UpdateViewport(float deltaTime);
     void DrawOverlays();
     void DrawGizmo(ImDrawList &draw, const CameraData &camera);
+    void DrawViewportToolbar();
+    void DrawOrientationGizmo(ImDrawList &draw);
+    void FrameScene();
     bool GetGizmoFrame(GizmoFrame &frame);
     void FocusSelection();
     Ray MouseRay(const CameraData &camera) const;
@@ -111,6 +173,13 @@ class EditorApp : public Application
     bool RunScriptCommand(const std::string &line, std::string &error);
 
     EditorOptions m_options;
+    Stage m_stage = Stage::ProjectManager;
+    double m_prepareStarted = 0.0;
+    bool m_reimporting = false; // a Reimport All: the open scene stays open
+    std::vector<RecentProject> m_recentProjects;
+    char m_projectPath[512] = "";
+    bool m_openProjectDialog = false;
+    std::string m_browsePath;
     Scene *m_scene = nullptr; // owned by the engine
     std::unique_ptr<EditorDocument> m_document;
     Project m_project;
@@ -124,16 +193,33 @@ class EditorApp : public Application
     glm::vec2 m_viewportPos{0.0f};
     glm::vec2 m_viewportSize{1.0f};
     bool m_viewportHovered = false;
+    bool m_orientationHovered = false; // last frame: the mouse was over the axis gizmo
     bool m_cameraDragging = false;
     bool m_showGrid = true;
     bool m_showMarkers = true;
+    bool m_previewSun = true;
     bool m_layoutBuilt = false;
+    bool m_resetLayout = false;
+    // Panels (Window menu).
+    bool m_showHierarchy = true;
+    bool m_showInspector = true;
+    bool m_showAssets = true;
+    bool m_showConsole = true;
+    bool m_showWorld = true;
+    int m_focusHierarchy = 0; // frames left to bring the Hierarchy tab to the front
+    // Play: paused, and one frame to step while paused.
+    bool m_paused = false;
+    bool m_stepFrame = false;
 
     // Hierarchy.
     std::unordered_set<uint64_t> m_expanded;
     char m_hierarchyFilter[128] = "";
     bool m_scrollToSelection = false;
     uint64_t m_lastPrimary = 0;
+    // Renaming a row in place (F2 or double-click on a selected row).
+    uint64_t m_renameID = 0;
+    bool m_renameFocus = false;
+    char m_renameBuffer[256] = "";
 
     // Inspector: an edit in progress becomes one command when the widget is released.
     bool m_nodeEditActive = false;
@@ -150,7 +236,23 @@ class EditorApp : public Application
 
     // Assets panel.
     char m_assetFilter[128] = "";
-    int m_assetTypeFilter = 0;
+    std::unique_ptr<AssetFolder> m_assetRoot;
+    std::string m_assetFolder;   // the folder shown on the right
+    std::string m_assetSelected; // a file's asset path
+    std::unordered_set<std::string> m_assetExpanded; // models showing their sub-assets
+    float m_assetTile = 76.0f;
+    size_t m_assetManifestSize = static_cast<size_t>(-1);
+    double m_assetScanTime = -100.0;
+
+    // Console.
+    bool m_consoleInfo = true;
+    bool m_consoleWarnings = true;
+    bool m_consoleErrors = true;
+    size_t m_consoleClearedAt = 0;
+    char m_consoleFilter[128] = "";
+
+    // Inspector.
+    char m_componentFilter[64] = "";
 
     // Dialogs.
     PendingAction m_pendingAction = PendingAction::None;

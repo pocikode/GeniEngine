@@ -367,6 +367,13 @@ void Engine::RenderFrame()
         {
             lights = m_currentScene->CollectLights();
         }
+        if (m_hasFallbackSun &&
+            std::none_of(lights.begin(), lights.end(), [](const LightData &light) {
+                return light.type == LightType::Directional;
+            }))
+        {
+            lights.insert(lights.begin(), m_fallbackSun);
+        }
 
         if (cmd)
         {
@@ -606,6 +613,18 @@ void Engine::SetViewOverride(const ViewOverride &view)
 void Engine::ClearViewOverride()
 {
     m_hasViewOverride = false;
+}
+
+void Engine::SetFallbackSun(const LightData &sun)
+{
+    m_fallbackSun = sun;
+    m_fallbackSun.type = LightType::Directional;
+    m_hasFallbackSun = true;
+}
+
+void Engine::ClearFallbackSun()
+{
+    m_hasFallbackSun = false;
 }
 
 CameraData Engine::GetRenderCamera(float aspect)

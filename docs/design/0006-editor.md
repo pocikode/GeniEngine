@@ -107,6 +107,23 @@ editor hidden through a scripted session on a copy of the city project, which th
 has to cook itself; `screenshot_editor` compares the editor's window with a reference;
 the city screenshot and benchmark keep guarding the scene the editor saved.
 
+**Editor UI (revised 2026-11-11).** The first version worked but did not look or behave
+like the editors people know, and a large project opened to a white window for minutes
+while the editor cooked it on the main thread. Now: a project manager when no project is
+given (recent projects, open, create); the first cook runs on its own thread behind an
+import dialog with progress (from the cooker's `--progress` lines) while the editor is
+already drawn; once ready, the editor reopens what was open last time, else the project's
+world with its busiest 4 x 4 cells, else its first scene that is not a world cell. The
+layout follows Unity: hierarchy (with the world's cell grid as a tab) left, inspector right,
+assets and console below, a toolbar with the tools on the left and play, pause and step in
+the middle. The inspector lays properties out as label / value rows with coloured X/Y/Z
+fields; the assets browser is a folder tree and tiles built from the files on disk, one tile
+per model with its sub-assets folding out. The viewport gets a view-options strip, a
+clickable orientation gizmo, a grid that fades with distance and light icons that shrink
+with distance. A scene without a directional light is lit by a preview sun while editing
+(`Engine::SetFallbackSun`). Icons are drawn with ImGui draw lists; there is no icon font
+and no rendered thumbnails yet (the RHI has no ImGui texture binding).
+
 ## Rejected
 
 - **Scene in an ImGui image (render to texture).** Needs sampled-texture registration in

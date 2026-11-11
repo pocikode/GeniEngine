@@ -24,6 +24,9 @@ struct CookOptions
     // Give every input without a `<file>.meta` sidecar a new one with a random GUID.
     // Writes into the source tree; commit the .meta files with their sources.
     bool writeMeta = false;
+    // Print "progress <done>/<total> <path>" to stdout before each input, flushed, so a
+    // tool that runs the cooker (the editor) can show how far it has got.
+    bool progress = false;
 };
 
 // Asset identity (docs/design/0004). A source file's IDs are derived from its root name:

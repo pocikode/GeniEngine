@@ -19,7 +19,10 @@ if(GENI_ENABLE_IMGUI)
   add_executable(geni_editor
     app/main.cpp
     app/EditorApp.cpp
+    app/EditorAssets.cpp
     app/EditorPanels.cpp
+    app/EditorProject.cpp
+    app/EditorTheme.cpp
     app/EditorViewport.cpp
   )
   target_link_libraries(geni_editor PRIVATE geni_editor_core)
@@ -31,10 +34,51 @@ if(GENI_ENABLE_IMGUI)
   target_compile_definitions(geni_editor PRIVATE
     GENI_EDITOR_SLANGC="${GENI_SLANGC_EXECUTABLE}"
     GENI_EDITOR_SHADER_MODULES="${GENI_SHADER_MODULE_DIR}"
+    GENI_EDITOR_FONT_DIR="${PROJECT_SOURCE_DIR}/thirdparty/imgui/misc/fonts"
   )
+  # The UI font beside the editor too, for a copy of the editor without the source tree.
+  add_custom_command(TARGET geni_editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:geni_editor>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/thirdparty/imgui/misc/fonts/Roboto-Medium.ttf"
+            "$<TARGET_FILE_DIR:geni_editor>/fonts/Roboto-Medium.ttf"
+    VERBATIM)
   if(TARGET geni_asset_cooker)
     target_compile_definitions(geni_editor PRIVATE GENI_EDITOR_COOKER="$<TARGET_FILE:geni_asset_cooker>")
     add_dependencies(geni_editor geni_asset_cooker)
+  endif()
+endif()
+
+# `cmake --build <dir> --target edit` opens the editor on its project manager, and on
+# macOS <build>/GeniEngine.app does the same from Finder or the Dock, like Godot.app.
+if(TARGET geni_editor)
+  add_custom_target(edit
+    COMMAND geni_editor
+    DEPENDS geni_editor
+    USES_TERMINAL
+    COMMENT "Opening the GeniEngine editor"
+    VERBATIM)
+
+  if(APPLE)
+    set(GENI_EDITOR_APP "${CMAKE_BINARY_DIR}/GeniEngine.app")
+    file(GENERATE OUTPUT "${GENI_EDITOR_APP}/Contents/Info.plist" CONTENT [=[<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>GeniEngine</string>
+  <key>CFBundleDisplayName</key><string>GeniEngine</string>
+  <key>CFBundleIdentifier</key><string>dev.geniengine.editor</string>
+  <key>CFBundleExecutable</key><string>GeniEngine</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.5</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+]=])
+    # The bundle runs the editor this build tree makes, so it is always the current one.
+    file(GENERATE OUTPUT "${GENI_EDITOR_APP}/Contents/MacOS/GeniEngine"
+      CONTENT "#!/bin/sh\nexec \"$<TARGET_FILE:geni_editor>\" \"$@\"\n"
+      FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
   endif()
 endif()
 

@@ -50,6 +50,10 @@ int main(int argc, char **argv)
         {
             options.writeMeta = true;
         }
+        else if (std::strcmp(arg, "--progress") == 0)
+        {
+            options.progress = true;
+        }
         else if (std::strcmp(arg, "--help") == 0 || std::strcmp(arg, "-h") == 0)
         {
             std::printf(
@@ -58,6 +62,7 @@ int main(int argc, char **argv)
                 "  --input REL    cook one path relative to the source root (repeatable)\n"
                 "  --texture-quality fast|medium|thorough  ASTC search effort (default medium)\n"
                 "  --write-meta   create a .meta file with a new GUID for every input that has none\n"
+                "  --progress     print \"progress <done>/<total> <path>\" before each input\n"
             );
             return 0;
         }

@@ -1,4 +1,5 @@
 #include "EditorApp.h"
+#include "EditorTheme.h"
 
 #include <GLFW/glfw3.h>
 #include <algorithm>
@@ -41,45 +42,35 @@ EditorApp::EditorApp(EditorOptions options) : m_options(std::move(options))
 bool EditorApp::Init()
 {
     auto &engine = Engine::GetInstance();
+    ApplyEditorTheme();
+    LoadEditorFonts(m_options.fontFolder);
+    LoadRecentProjects();
 
     m_scene = new Scene();
     engine.SetScene(m_scene);
     m_document = std::make_unique<EditorDocument>(*m_scene, &engine.GetAssetManager());
+    m_time = NowSeconds();
 
-    m_project.Init(m_options.project, engine.GetFileSystem(), &engine.GetAssetManager(), engine.GetJobSystem());
-    std::string output;
-    if (!m_project.Prepare(&output))
+    if (m_options.project.assets.empty())
     {
-        GENI_LOG_WARN("editor: preparing the project reported problems:\n%s", output.c_str());
-    }
-
-    std::string scene = m_options.scene;
-    if (scene.empty() && m_options.script.empty())
-    {
-        const auto scenes = m_project.ListAssets(".gscene");
-        if (!scenes.empty())
+        // No project on the command line: the project manager.
+        m_stage = Stage::ProjectManager;
+        if (!m_recentProjects.empty())
         {
-            scene = scenes.front();
+            CopyToBuffer(m_projectPath, sizeof(m_projectPath), m_recentProjects.front().path);
         }
+        ApplyPlayState();
+        return true;
     }
-    if (!scene.empty() && !OpenAssetPath(scene))
-    {
-        // A scripted session must not continue on the wrong scene.
-        if (!m_options.script.empty())
-        {
-            return false;
-        }
-    }
+    StartProject();
     ApplyPlayState();
-    GENI_LOG_INFO(
-        "Editor ready: assets %s, cooked %s", m_options.project.assets.string().c_str(),
-        m_options.project.cooked.string().c_str()
-    );
     return true;
 }
 
 void EditorApp::Destroy()
 {
+    SaveProjectState();
+    Engine::GetInstance().ClearFallbackSun();
     m_document.reset();
 }
 
@@ -87,6 +78,20 @@ void EditorApp::Update(float deltaTime)
 {
     m_time = NowSeconds();
     m_document->PruneSelection();
+
+    if (m_stage == Stage::ProjectManager)
+    {
+        DrawProjectManager();
+        RunScript();
+        ApplyPlayState();
+        m_scene->Update(deltaTime, SceneUpdateMode::Edit);
+        UpdateWindowTitle();
+        return;
+    }
+    if (m_stage == Stage::Preparing)
+    {
+        FinishStartup();
+    }
     UpdateHotReload();
 
     // Closing the window with unsaved changes asks first.
@@ -103,21 +108,32 @@ void EditorApp::Update(float deltaTime)
     DrawToolbar();
     DrawStatusBar();
     DrawDockSpace();
+    DrawWorldPanel();
     DrawHierarchy();
     DrawInspector();
     // Console before Assets: of two panels docked together, the one submitted last
     // starts in front.
     DrawConsole();
     DrawAssets();
-    DrawWorldPanel();
     HandleShortcuts();
     UpdateViewport(deltaTime);
     DrawOverlays();
+    DrawViewportToolbar();
     DrawDialogs();
+    if (m_stage == Stage::Preparing)
+    {
+        DrawPrepareProgress();
+    }
     RunScript();
 
     ApplyPlayState();
-    m_scene->Update(deltaTime, m_document->IsPlaying() ? SceneUpdateMode::Play : SceneUpdateMode::Edit);
+    float sceneDelta = deltaTime;
+    if (m_document->IsPlaying() && m_paused)
+    {
+        sceneDelta = m_stepFrame ? 1.0f / 60.0f : 0.0f;
+    }
+    m_scene->Update(sceneDelta, m_document->IsPlaying() ? SceneUpdateMode::Play : SceneUpdateMode::Edit);
+    m_stepFrame = false;
     UpdateWindowTitle();
 }
 
@@ -125,7 +141,26 @@ void EditorApp::ApplyPlayState()
 {
     auto &engine = Engine::GetInstance();
     const bool playing = m_document->IsPlaying();
-    engine.SetPhysicsPaused(!playing);
+    if (!playing)
+    {
+        m_paused = false;
+    }
+    engine.SetPhysicsPaused(!playing || (m_paused && !m_stepFrame));
+
+    // A scene without a sun of its own is lit by a preview sun while editing, as in Godot,
+    // so an unlit scene or a lone cell still reads. It is never saved and never plays.
+    if (m_previewSun && !playing)
+    {
+        LightData sun;
+        sun.type = LightType::Directional;
+        sun.direction = glm::normalize(glm::vec3(-0.45f, -0.8f, -0.35f));
+        sun.color = glm::vec3(1.0f, 0.96f, 0.9f) * 2.2f;
+        engine.SetFallbackSun(sun);
+    }
+    else
+    {
+        engine.ClearFallbackSun();
+    }
 
     GameObject *mainCamera = m_scene->GetMainCamera();
     const bool gameCamera = playing && mainCamera && mainCamera->GetComponent<CameraComponent>();
@@ -148,9 +183,18 @@ void EditorApp::ApplyPlayState()
     engine.GetRenderer().SetSceneViewport(viewport);
 }
 
+void EditorApp::StartProject()
+{
+    auto &engine = Engine::GetInstance();
+    m_project.Init(m_options.project, engine.GetFileSystem(), &engine.GetAssetManager(), engine.GetJobSystem());
+    m_project.StartPrepare();
+    m_stage = Stage::Preparing;
+    m_prepareStarted = m_time;
+}
+
 void EditorApp::UpdateHotReload()
 {
-    if (!m_options.hotReload || m_document->IsPlaying())
+    if (!m_options.hotReload || m_document->IsPlaying() || m_stage != Stage::Ready)
     {
         return;
     }
@@ -159,6 +203,8 @@ void EditorApp::UpdateHotReload()
     {
         return;
     }
+    // A cook may have added or removed files: the assets browser rescans.
+    m_assetScanTime = -100.0;
     for (AssetID prefab : report.prefabs)
     {
         m_document->RefreshPrefabInstances(prefab);
@@ -177,15 +223,24 @@ void EditorApp::UpdateHotReload()
 
 void EditorApp::UpdateWindowTitle()
 {
-    std::string title = "GeniEngine Editor - ";
-    title += m_document->GetPath().empty() ? "untitled" : m_project.ToAssetPath(m_document->GetPath());
-    if (m_document->IsDirty())
+    std::string title = "GeniEngine";
+    if (m_stage != Stage::ProjectManager)
     {
-        title += " *";
+        const std::filesystem::path root = m_options.project.assets.parent_path();
+        title += " - " + root.filename().string() + " - ";
+        title += m_document->GetPath().empty() ? "untitled" : m_project.ToAssetPath(m_document->GetPath());
+        if (m_document->IsDirty())
+        {
+            title += " *";
+        }
+        if (m_document->IsPlaying())
+        {
+            title += " (playing)";
+        }
     }
-    if (m_document->IsPlaying())
+    else
     {
-        title += " (playing)";
+        title += " - Project Manager";
     }
     if (title != m_title)
     {
@@ -201,19 +256,23 @@ void EditorApp::DrawDockSpace()
     const ImGuiViewport *viewport = ImGui::GetMainViewport();
     const ImGuiID dockSpace = ImGui::GetID("GeniEditorDockSpace");
 
-    // First run (no saved layout): hierarchy left, inspector right, assets and console
-    // below, the scene in the middle.
-    if (!m_layoutBuilt)
+    // First run (no saved layout) or Window > Reset Layout: hierarchy (and the world's
+    // cell grid) left, inspector right, assets and console below, the scene in the middle.
+    if (!m_layoutBuilt || m_resetLayout)
     {
         m_layoutBuilt = true;
-        if (ImGui::DockBuilderGetNode(dockSpace) == nullptr)
+        if (m_resetLayout || ImGui::DockBuilderGetNode(dockSpace) == nullptr)
         {
+            m_resetLayout = false;
+            m_showHierarchy = m_showInspector = m_showAssets = m_showConsole = m_showWorld = true;
+            ImGui::DockBuilderRemoveNode(dockSpace);
             ImGui::DockBuilderAddNode(dockSpace, ImGuiDockNodeFlags_DockSpace);
             ImGui::DockBuilderSetNodeSize(dockSpace, viewport->WorkSize);
             ImGuiID center = dockSpace;
-            const ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.20f, nullptr, &center);
-            const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.30f, nullptr, &center);
-            const ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.28f, nullptr, &center);
+            const ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.19f, nullptr, &center);
+            const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.27f, nullptr, &center);
+            const ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.30f, nullptr, &center);
+            ImGui::DockBuilderDockWindow("World", left);
             ImGui::DockBuilderDockWindow("Hierarchy", left);
             ImGui::DockBuilderDockWindow("Inspector", right);
             ImGui::DockBuilderDockWindow("Assets", bottom);
@@ -239,48 +298,66 @@ void EditorApp::DrawMenuBar()
         return;
     }
     const bool playing = m_document->IsPlaying();
+    const bool ready = m_stage == Stage::Ready;
     if (ImGui::BeginMenu("File"))
     {
-        if (ImGui::MenuItem("New Scene", "Ctrl+N"))
+        if (ImGui::MenuItem("New Scene", "Ctrl+N", false, ready))
         {
             RequestAction(PendingAction::NewScene);
         }
-        if (ImGui::MenuItem("Open...", "Ctrl+O"))
+        if (ImGui::MenuItem("Open Scene...", "Ctrl+O", false, ready))
         {
             m_openOpen = true;
         }
-        if (ImGui::MenuItem("Open World..."))
+        if (ImGui::MenuItem("Open World...", nullptr, false, ready))
         {
             m_openWorld = true;
         }
-        if (ImGui::MenuItem("Save", "Ctrl+S", false, !playing))
+        ImGui::Separator();
+        if (ImGui::MenuItem("Save", "Ctrl+S", false, ready && !playing))
         {
             SaveOrAsk();
         }
-        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, !playing))
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, ready && !playing))
         {
             m_openSaveAs = true;
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Cook Assets Now", nullptr, false, !m_options.project.cooker.empty()))
+        if (ImGui::MenuItem("Open Project..."))
         {
-            std::string output;
-            const bool ok = m_project.Cook(&output);
-            Engine::GetInstance().GetAssetManager().ReloadChanged();
-            m_document->SetStatus(ok ? "Cooked assets" : "Cooking failed; see the console");
-            if (!ok)
+            RequestAction(PendingAction::OpenProject);
+        }
+        if (ImGui::BeginMenu("Recent Projects", !m_recentProjects.empty()))
+        {
+            for (const auto &project : m_recentProjects)
             {
-                GENI_LOG_ERROR("cook: %s", output.c_str());
+                if (ImGui::MenuItem(project.path.c_str()))
+                {
+                    RequestAction(PendingAction::OpenProject, project.path);
+                }
             }
+            ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Quit"))
+        if (ImGui::MenuItem("Reimport All Assets", nullptr, false, ready && !m_options.project.cooker.empty() && !m_project.IsBusy()))
+        {
+            m_project.StartPrepare(true);
+            m_stage = Stage::Preparing;
+            m_prepareStarted = m_time;
+            m_reimporting = true;
+        }
+        if (ImGui::MenuItem("Show Project Folder", nullptr, false, ready))
+        {
+            m_document->SetStatus(m_options.project.assets.parent_path().string());
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Quit", "Ctrl+Q"))
         {
             RequestAction(PendingAction::Quit);
         }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Edit"))
+    if (ImGui::BeginMenu("Edit", ready))
     {
         auto &commands = m_document->GetCommands();
         const std::string undo = std::string("Undo ") + commands.GetUndoName();
@@ -295,6 +372,12 @@ void EditorApp::DrawMenuBar()
         }
         ImGui::Separator();
         const bool hasSelection = !m_document->GetSelection().empty() && !playing;
+        if (ImGui::MenuItem("Rename", "F2", false, hasSelection && m_document->CanEdit(m_document->GetPrimary())))
+        {
+            m_renameID = m_document->GetPrimary()->GetID();
+            m_renameFocus = true;
+            CopyToBuffer(m_renameBuffer, sizeof(m_renameBuffer), m_document->GetPrimary()->GetName());
+        }
         if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection))
         {
             m_document->DuplicateSelection();
@@ -308,15 +391,23 @@ void EditorApp::DrawMenuBar()
             m_document->DeleteSelection();
         }
         ImGui::Separator();
+        if (ImGui::MenuItem("Deselect", "Esc", false, !m_document->GetSelection().empty()))
+        {
+            m_document->ClearSelection();
+        }
         if (ImGui::MenuItem("Focus Selection", "F", false, !m_document->GetSelection().empty()))
         {
             FocusSelection();
         }
+        if (ImGui::MenuItem("Frame Scene", "Shift+F"))
+        {
+            FrameScene();
+        }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("GameObject", !playing))
+    if (ImGui::BeginMenu("GameObject", ready && !playing))
     {
-        if (ImGui::MenuItem("Create Empty"))
+        if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+N"))
         {
             m_document->CreateEmpty();
         }
@@ -331,17 +422,21 @@ void EditorApp::DrawMenuBar()
         {
             m_document->CreateCamera();
         }
-        if (ImGui::MenuItem("Directional Light"))
+        if (ImGui::BeginMenu("Light"))
         {
-            m_document->CreateLight(LightType::Directional);
-        }
-        if (ImGui::MenuItem("Point Light"))
-        {
-            m_document->CreateLight(LightType::Point);
-        }
-        if (ImGui::MenuItem("Spot Light"))
-        {
-            m_document->CreateLight(LightType::Spot);
+            if (ImGui::MenuItem("Directional Light"))
+            {
+                m_document->CreateLight(LightType::Directional);
+            }
+            if (ImGui::MenuItem("Point Light"))
+            {
+                m_document->CreateLight(LightType::Point);
+            }
+            if (ImGui::MenuItem("Spot Light"))
+            {
+                m_document->CreateLight(LightType::Spot);
+            }
+            ImGui::EndMenu();
         }
         ImGui::Separator();
         GameObject *primary = m_document->GetPrimary();
@@ -357,15 +452,39 @@ void EditorApp::DrawMenuBar()
         }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("View"))
+    if (ImGui::BeginMenu("Window"))
     {
-        ImGui::MenuItem("Grid", nullptr, &m_showGrid);
-        ImGui::MenuItem("Light and Camera Markers", nullptr, &m_showMarkers);
+        ImGui::MenuItem("Hierarchy", nullptr, &m_showHierarchy);
+        ImGui::MenuItem("Inspector", nullptr, &m_showInspector);
+        ImGui::MenuItem("Assets", nullptr, &m_showAssets);
+        ImGui::MenuItem("Console", nullptr, &m_showConsole);
+        ImGui::MenuItem("World", nullptr, &m_showWorld, m_document->IsWorldDocument());
+        ImGui::Separator();
         bool stats = Engine::GetInstance().GetDebugOverlay().IsVisible();
         if (ImGui::MenuItem("Engine Stats", "F1", &stats))
         {
             Engine::GetInstance().GetDebugOverlay().SetVisible(stats);
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Layout"))
+        {
+            m_resetLayout = true;
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help"))
+    {
+        ImGui::TextDisabled("Scene view");
+        ImGui::BulletText("Right mouse + WASD/QE: fly (Shift: faster)");
+        ImGui::BulletText("Alt + left mouse: orbit    Middle mouse: pan");
+        ImGui::BulletText("Wheel: zoom    F: focus selection    Shift+F: frame scene");
+        ImGui::BulletText("W / E / R: move / rotate / scale    Ctrl while dragging: snap");
+        ImGui::TextDisabled("Objects");
+        ImGui::BulletText("Click: select    Shift/Ctrl+click: add to selection");
+        ImGui::BulletText("F2: rename    Ctrl+D: duplicate    Del: delete");
+        ImGui::BulletText("Drag an asset into the scene or the hierarchy to place it");
+        ImGui::TextDisabled("Play");
+        ImGui::BulletText("Ctrl+P: play / stop    Esc: stop");
         ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
@@ -374,49 +493,117 @@ void EditorApp::DrawMenuBar()
 void EditorApp::DrawToolbar()
 {
     ImGuiViewport *viewport = ImGui::GetMainViewport();
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-    if (ImGui::BeginViewportSideBar("##GeniToolbar", viewport, ImGuiDir_Up, ImGui::GetFrameHeight(), flags))
+    const float height = ImGui::GetFrameHeight() + 12.0f;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+    const bool open = ImGui::BeginViewportSideBar("##GeniToolbar", viewport, ImGuiDir_Up, height, flags);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    if (open)
     {
-        if (ImGui::BeginMenuBar())
+        const bool playing = m_document->IsPlaying();
+        const bool ready = m_stage == Stage::Ready;
+        ImGui::BeginDisabled(!ready);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
+        if (IconButton("##move", Icon::Move, m_gizmo.mode == GizmoMode::Translate, "Move (W)"))
         {
-            const bool playing = m_document->IsPlaying();
-            auto modeButton = [&](const char *label, GizmoMode mode) {
-                const bool active = m_gizmo.mode == mode;
-                if (active)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-                }
-                if (ImGui::Button(label))
-                {
-                    m_gizmo.mode = mode;
-                }
-                if (active)
-                {
-                    ImGui::PopStyleColor();
-                }
-            };
-            modeButton("Move (W)", GizmoMode::Translate);
-            modeButton("Rotate (E)", GizmoMode::Rotate);
-            modeButton("Scale (R)", GizmoMode::Scale);
-            ImGui::Separator();
-            if (ImGui::Button(m_gizmo.space == GizmoSpace::World ? "World" : "Local"))
+            m_gizmo.mode = GizmoMode::Translate;
+        }
+        ImGui::SameLine();
+        if (IconButton("##rotate", Icon::Rotate, m_gizmo.mode == GizmoMode::Rotate, "Rotate (E)"))
+        {
+            m_gizmo.mode = GizmoMode::Rotate;
+        }
+        ImGui::SameLine();
+        if (IconButton("##scale", Icon::Scale, m_gizmo.mode == GizmoMode::Scale, "Scale (R)"))
+        {
+            m_gizmo.mode = GizmoMode::Scale;
+        }
+        ImGui::PopStyleVar();
+        ImGui::SameLine(0.0f, 14.0f);
+
+        // Space: an icon and a word, as in Unity's pivot/global buttons.
+        const bool world = m_gizmo.space == GizmoSpace::World;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        if (ImGui::Button(world ? "      Global" : "      Local"))
+        {
+            m_gizmo.space = world ? GizmoSpace::Local : GizmoSpace::World;
+        }
+        ImGui::SetItemTooltip("Gizmo space (scale always works in the object's own axes)");
+        DrawIcon(*ImGui::GetWindowDrawList(), world ? Icon::Globe : Icon::Cube,
+                 ImVec2(at.x + 15.0f, at.y + ImGui::GetFrameHeight() * 0.5f), ImGui::GetFrameHeight() * 0.55f, Theme::Text);
+        ImGui::SameLine(0.0f, 8.0f);
+        if (IconButton("##snap", Icon::Magnet, m_gizmo.snap.enabled, "Snap (hold Ctrl while dragging to toggle)"))
+        {
+            m_gizmo.snap.enabled = !m_gizmo.snap.enabled;
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!m_gizmo.snap.enabled);
+        ImGui::SetNextItemWidth(64.0f);
+        ImGui::DragFloat("##snapMove", &m_gizmo.snap.translate, 0.05f, 0.01f, 100.0f, "%.2g m");
+        ImGui::SetItemTooltip("Move snap");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(56.0f);
+        ImGui::DragFloat("##snapRotate", &m_gizmo.snap.rotateDegrees, 1.0f, 1.0f, 180.0f, "%.0f°");
+        ImGui::SetItemTooltip("Rotate snap");
+        ImGui::EndDisabled();
+
+        // Play, pause and step in the middle.
+        const float button = ImGui::GetFrameHeight();
+        const float group = button * 3.0f + 4.0f;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX() + 20.0f, (ImGui::GetWindowWidth() - group) * 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
+        if (playing)
+        {
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::ColorConvertU32ToFloat4(Theme::Accent));
+        }
+        if (IconButton("##play", playing ? Icon::Stop : Icon::Play, playing, playing ? "Stop (Ctrl+P)" : "Play (Ctrl+P)"))
+        {
+            TogglePlay();
+        }
+        if (playing)
+        {
+            ImGui::PopStyleColor();
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!playing);
+        if (IconButton("##pause", Icon::Pause, m_paused, "Pause"))
+        {
+            m_paused = !m_paused;
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!m_paused);
+        if (IconButton("##step", Icon::Step, false, "Step one frame"))
+        {
+            m_stepFrame = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+
+        // Right: background work.
+        if (m_project.IsBusy())
+        {
+            const CookProgress progress = m_project.GetCookProgress();
+            char text[96];
+            if (progress.active && progress.total > 0)
             {
-                m_gizmo.space = m_gizmo.space == GizmoSpace::World ? GizmoSpace::Local : GizmoSpace::World;
+                std::snprintf(text, sizeof(text), "Importing %d/%d", progress.done, progress.total);
             }
-            ImGui::Checkbox("Snap", &m_gizmo.snap.enabled);
-            if (m_gizmo.snap.enabled)
+            else
             {
-                ImGui::SetNextItemWidth(60.0f);
-                ImGui::DragFloat("##snapMove", &m_gizmo.snap.translate, 0.05f, 0.01f, 100.0f, "%.2f m");
-                ImGui::SetNextItemWidth(60.0f);
-                ImGui::DragFloat("##snapRotate", &m_gizmo.snap.rotateDegrees, 1.0f, 1.0f, 180.0f, "%.0f deg");
+                std::snprintf(text, sizeof(text), "%s", m_stage == Stage::Preparing ? "Preparing project" : "Reloading");
             }
-            ImGui::Separator();
-            if (ImGui::Button(playing ? "Stop (Ctrl+P)" : "Play (Ctrl+P)"))
-            {
-                TogglePlay();
-            }
-            ImGui::EndMenuBar();
+            const float width = ImGui::CalcTextSize(text).x + 28.0f;
+            ImGui::SameLine(ImGui::GetWindowWidth() - width - 10.0f);
+            const ImVec2 spot = ImGui::GetCursorScreenPos();
+            Spinner(*ImGui::GetWindowDrawList(), ImVec2(spot.x + 8.0f, spot.y + button * 0.5f), 6.0f, Theme::Accent, m_time);
+            ImGui::Dummy(ImVec2(20.0f, button));
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("%s", text);
         }
     }
     ImGui::End();
@@ -430,13 +617,18 @@ void EditorApp::DrawStatusBar()
     {
         if (ImGui::BeginMenuBar())
         {
-            ImGui::TextUnformatted(m_document->GetStatus().c_str());
-            const char *mode = m_document->IsPlaying() ? "PLAYING" : m_document->IsPrefabDocument() ? "Prefab" : "Scene";
-            const std::string right =
-                std::string(mode) + "   " + std::to_string(m_document->GetSelection().size()) + " selected" +
-                (m_project.IsBusy() ? "   cooking..." : "");
-            ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 16.0f);
-            ImGui::TextUnformatted(right.c_str());
+            ImGui::TextDisabled("%s", m_document->GetStatus().c_str());
+            const char *mode = m_document->IsPlaying() ? (m_paused ? "Paused" : "Playing")
+                               : m_document->IsWorldDocument() ? "World"
+                               : m_document->IsPrefabDocument() ? "Prefab"
+                                                                : "Scene";
+            char right[160];
+            std::snprintf(
+                right, sizeof(right), "%s   |   %zu selected   |   %.0f FPS", mode, m_document->GetSelection().size(),
+                ImGui::GetIO().Framerate
+            );
+            ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right).x - 16.0f);
+            ImGui::TextDisabled("%s", right);
             ImGui::EndMenuBar();
         }
     }
@@ -446,11 +638,15 @@ void EditorApp::DrawStatusBar()
 void EditorApp::HandleShortcuts()
 {
     ImGuiIO &io = ImGui::GetIO();
-    if (io.WantTextInput)
+    if (io.WantTextInput || m_stage != Stage::Ready)
     {
         return;
     }
     const bool playing = m_document->IsPlaying();
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Q))
+    {
+        RequestAction(PendingAction::Quit);
+    }
     if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_P))
     {
         TogglePlay();
@@ -488,6 +684,21 @@ void EditorApp::HandleShortcuts()
     {
         m_document->DuplicateSelection();
     }
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_N))
+    {
+        m_document->CreateEmpty();
+    }
+    GameObject *primary = m_document->GetPrimary();
+    if (ImGui::IsKeyPressed(ImGuiKey_F2, false) && primary && m_document->CanEdit(primary))
+    {
+        m_renameID = primary->GetID();
+        m_renameFocus = true;
+        CopyToBuffer(m_renameBuffer, sizeof(m_renameBuffer), primary->GetName());
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !m_gizmo.IsDragging() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopup))
+    {
+        m_document->ClearSelection();
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false))
     {
         m_document->DeleteSelection();
@@ -509,7 +720,14 @@ void EditorApp::HandleShortcuts()
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F, false))
         {
-            FocusSelection();
+            if (io.KeyShift)
+            {
+                FrameScene();
+            }
+            else
+            {
+                FocusSelection();
+            }
         }
     }
 }
@@ -561,6 +779,21 @@ void EditorApp::PerformAction(PendingAction action, const std::string &path)
     case PendingAction::OpenWorld:
         OpenWorldAssetPath(path);
         break;
+    case PendingAction::OpenProject:
+        if (path.empty())
+        {
+            // Back to the project manager to pick one.
+            SaveProjectState();
+            m_document->NewScene();
+            m_expanded.clear();
+            m_stage = Stage::ProjectManager;
+            m_document->SetStatus("");
+        }
+        else
+        {
+            OpenProject(path);
+        }
+        break;
     case PendingAction::Quit:
         SetNeedsToBeClosed(true);
         break;
@@ -579,32 +812,10 @@ bool EditorApp::OpenAssetPath(const std::string &assetPath)
         return false;
     }
     m_expanded.clear();
-
-    // Start with the whole scene in view: frame every object's position, not only the
-    // roots (a scene is often one root with everything under it).
-    glm::vec3 low(0.0f);
-    glm::vec3 high(0.0f);
-    bool any = false;
-    std::vector<GameObject *> stack;
-    for (const auto &root : m_scene->GetObjects())
-    {
-        stack.push_back(root.get());
-    }
-    while (!stack.empty())
-    {
-        GameObject *object = stack.back();
-        stack.pop_back();
-        const glm::vec3 position = object->GetWorldPosition();
-        low = any ? glm::min(low, position) : position;
-        high = any ? glm::max(high, position) : position;
-        any = true;
-        for (const auto &child : object->GetChildren())
-        {
-            stack.push_back(child.get());
-        }
-    }
+    // Start with the whole scene in view.
     m_camera.SetAngles(-35.0f, -25.0f);
-    m_camera.Focus((low + high) * 0.5f, std::max(glm::length(high - low) * 0.25f, 5.0f));
+    FrameScene();
+    SaveProjectState();
     return true;
 }
 
@@ -618,6 +829,7 @@ bool EditorApp::OpenWorldAssetPath(const std::string &assetPath)
         return false;
     }
     m_expanded.clear();
+    m_focusHierarchy = 2;
     // Start the region pick in the middle of the world.
     const WorldSource &world = m_document->GetWorld();
     m_regionPick[0] = m_regionPick[2] = world.cellsX / 2;
@@ -650,6 +862,7 @@ bool EditorApp::LoadRegion(int x0, int z0, int x1, int z1)
     const glm::vec3 centre(0.5f * size * columns, 0.0f, 0.5f * size * rows);
     m_camera.SetAngles(-35.0f, -35.0f);
     m_camera.Focus(centre, 0.45f * size * static_cast<float>(std::max(columns, rows)));
+    SaveProjectState();
     return true;
 }
 
@@ -686,7 +899,9 @@ void EditorApp::SaveOrAsk()
     {
         GENI_LOG_ERROR("editor: %s", error.c_str());
         m_document->SetStatus("Could not save: " + error);
+        return;
     }
+    SaveProjectState();
 }
 
 std::string EditorApp::AssetLabel(AssetID id)
@@ -862,13 +1077,28 @@ void EditorApp::RunScript()
     {
         return;
     }
+    if (m_stage == Stage::Preparing)
+    {
+        // Only waiting and capturing make sense before the project is ready (a capture of
+        // the import dialog); everything else waits for it.
+        if (m_scriptWait > 0)
+        {
+            --m_scriptWait;
+            return;
+        }
+        const std::string next = m_scriptCursor < m_options.script.size() ? m_options.script[m_scriptCursor] : std::string();
+        if (next.rfind("wait ", 0) != 0 && next.rfind("screenshot ", 0) != 0)
+        {
+            return;
+        }
+    }
     // Let asset loads and a requested screenshot settle before the next command.
     if (m_scriptWait > 0)
     {
         --m_scriptWait;
         return;
     }
-    if (Engine::GetInstance().GetAssetManager().IsLoading() || m_project.IsBusy())
+    if (m_stage != Stage::Preparing && (Engine::GetInstance().GetAssetManager().IsLoading() || m_project.IsBusy()))
     {
         return;
     }
@@ -917,6 +1147,17 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
         m_document->NewScene();
         return true;
     }
+    if (command == "default")
+    {
+        // What an interactive start opens: the last scene or world, else the project's
+        // world with its busiest cells, else its first scene.
+        return OpenDefaultContent() || fail("could not open the project's default content");
+    }
+    if (command == "frame")
+    {
+        FrameScene();
+        return true;
+    }
     if (command == "open")
     {
         return OpenAssetPath(rest()) || fail("could not open the scene");
@@ -962,6 +1203,20 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
             return fail("no such object");
         }
         m_document->Select(object->GetID());
+        return true;
+    }
+    if (command == "assets")
+    {
+        // Show a folder in the assets browser, and with a second word, expand that model.
+        std::string folder;
+        std::string expand;
+        stream >> folder >> expand;
+        m_assetFolder = folder == "." ? std::string() : folder;
+        if (!expand.empty())
+        {
+            m_assetExpanded.insert(m_assetFolder.empty() ? expand : m_assetFolder + "/" + expand);
+        }
+        ImGui::SetWindowFocus("Assets");
         return true;
     }
     if (command == "selectroots")

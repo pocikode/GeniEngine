@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1472,6 +1473,15 @@ struct Cooker::Impl
             return false;
         }
 
+        size_t done = 0;
+        auto report = [&](const std::string &input) {
+            if (options.progress)
+            {
+                std::printf("progress %zu/%zu %s\n", done++, inputs.size(), input.c_str());
+                std::fflush(stdout);
+            }
+        };
+
         // glTF first: it cooks referenced images, so standalone images are then cache hits.
         for (const auto &input : inputs)
         {
@@ -1481,6 +1491,7 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb")
             {
+                report(input);
                 if (!CookGLTF(input))
                 {
                     return false;
@@ -1495,6 +1506,7 @@ struct Cooker::Impl
             });
             if (extension == ".png" || extension == ".jpg" || extension == ".jpeg")
             {
+                report(input);
                 if (!CookImageFile(input))
                 {
                     return false;
@@ -1506,6 +1518,10 @@ struct Cooker::Impl
         for (const auto &input : inputs)
         {
             const std::string extension = std::filesystem::path(input).extension().string();
+            if (extension == ".gscene" || extension == ".gprefab")
+            {
+                report(input);
+            }
             if (extension == ".gscene" && !CookSceneFile(input, AssetType::Scene, "geni.scene"))
             {
                 return false;
@@ -1519,7 +1535,12 @@ struct Cooker::Impl
         // Worlds last: their cells and prefabs are cooked by now (docs/design/0007).
         for (const auto &input : inputs)
         {
-            if (std::filesystem::path(input).extension().string() == ".gworld" && !CookWorldFile(input))
+            if (std::filesystem::path(input).extension().string() != ".gworld")
+            {
+                continue;
+            }
+            report(input);
+            if (!CookWorldFile(input))
             {
                 return false;
             }

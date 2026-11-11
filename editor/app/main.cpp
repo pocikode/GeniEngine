@@ -1,6 +1,7 @@
 // geni_editor: the GeniEngine scene editor (ROADMAP M4, docs/design/0006-editor.md).
 //
-// Usage: geni_editor (--project DIR | --assets DIR [--cooked DIR]) [options]
+// Usage: geni_editor [--project DIR | --assets DIR [--cooked DIR]] [options]
+//   (none)            the project manager: recent projects, open or create one
 //   --project DIR     a project folder: assets in DIR/assets, cooked output in DIR/.geni/cooked
 //   --assets DIR      the source assets folder to edit
 //   --cooked DIR      where cooked assets and compiled shaders go (default: next to the
@@ -70,6 +71,9 @@ std::filesystem::path FindTool(const char *bakedPath, const char *name)
 #if !defined(GENI_EDITOR_SHADER_MODULES)
 #define GENI_EDITOR_SHADER_MODULES ""
 #endif
+#if !defined(GENI_EDITOR_FONT_DIR)
+#define GENI_EDITOR_FONT_DIR ""
+#endif
 
 int main(int argc, char **argv)
 {
@@ -83,6 +87,11 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::string arg = argv[i];
+        // Older macOS passes a process serial number when an app is opened from Finder.
+        if (arg.rfind("-psn_", 0) == 0)
+        {
+            continue;
+        }
         auto next = [&]() -> std::string {
             if (i + 1 >= argc)
             {
@@ -165,26 +174,42 @@ int main(int argc, char **argv)
         }
     }
 
+    std::error_code ec;
     if (options.project.assets.empty())
     {
-        std::fprintf(stderr, "geni_editor: give the project with --project DIR or --assets DIR\n");
-        return 2;
+        // Without a project the editor starts on the project manager, which needs a window
+        // (or a script, to capture it).
+        if (hidden && options.script.empty())
+        {
+            std::fprintf(
+                stderr, "geni_editor: --hidden has no window for the project manager; give --project DIR "
+                        "(or run without --hidden to pick a project)\n"
+            );
+            return 2;
+        }
     }
-    std::error_code ec;
-    if (!std::filesystem::is_directory(options.project.assets, ec))
+    else
     {
-        std::fprintf(stderr, "geni_editor: %s is not a folder\n", options.project.assets.string().c_str());
-        return 2;
+        if (!std::filesystem::is_directory(options.project.assets, ec))
+        {
+            std::fprintf(stderr, "geni_editor: %s is not a folder\n", options.project.assets.string().c_str());
+            return 2;
+        }
+        if (options.project.cooked.empty())
+        {
+            options.project.cooked = options.project.assets.parent_path() / ".geni" / "cooked";
+        }
+        std::filesystem::create_directories(options.project.cooked, ec);
     }
-    if (options.project.cooked.empty())
-    {
-        options.project.cooked = options.project.assets.parent_path() / ".geni" / "cooked";
-    }
-    std::filesystem::create_directories(options.project.cooked, ec);
 
     options.project.cooker = cooker.empty() ? FindTool(GENI_EDITOR_COOKER, "geni_asset_cooker") : Absolute(cooker);
     options.project.slangc = slangc.empty() ? FindTool(GENI_EDITOR_SLANGC, "slangc") : Absolute(slangc);
     options.project.shaderModules = GENI_EDITOR_SHADER_MODULES;
+    options.fontFolder = GENI_EDITOR_FONT_DIR;
+    if (options.fontFolder.empty() || !std::filesystem::exists(options.fontFolder / "Roboto-Medium.ttf", ec))
+    {
+        options.fontFolder = Geni::FileSystem().GetExecutableFolder() / "fonts";
+    }
     if (options.project.cooker.empty())
     {
         GENI_LOG_WARN("No asset cooker found: changed models and textures will not be re-cooked (--cooker FILE)");
@@ -195,7 +220,7 @@ int main(int argc, char **argv)
     }
 
     Geni::EngineConfig config;
-    config.title = "GeniEngine Editor";
+    config.title = "GeniEngine";
     config.width = width;
     config.height = height;
     config.visible = !hidden;
@@ -210,8 +235,18 @@ int main(int argc, char **argv)
     }
     else
     {
-        // The dock layout is the user's, kept with the project's generated files.
-        config.imguiIniFile = (options.project.cooked / "geni_editor.ini").string();
+        // The dock layout is the user's, the same for every project, as in Unity and Godot.
+#if defined(_WIN32)
+        const char *home = std::getenv("USERPROFILE");
+#else
+        const char *home = std::getenv("HOME");
+#endif
+        if (home && home[0] != '\0')
+        {
+            const std::filesystem::path folder = std::filesystem::path(home) / ".geni";
+            std::filesystem::create_directories(folder, ec);
+            config.imguiIniFile = (folder / "editor_layout.ini").string();
+        }
     }
 
     auto app = new Geni::Editor::EditorApp(options);

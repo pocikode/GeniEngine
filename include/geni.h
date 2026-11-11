@@ -49,5 +49,6 @@
 #include "scene/components/OrbitCameraComponent.h"
 #include "scene/components/PhysicsComponent.h"
 #include "scene/components/PlayerControllerComponent.h"
-#include "scene/components/SkinnedMeshComponent.h" #include "world/WorldFormat.h"
+#include "scene/components/SkinnedMeshComponent.h"
+#include "world/WorldFormat.h"
 #include "world/WorldStreamer.h"

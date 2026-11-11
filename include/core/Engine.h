@@ -156,6 +156,11 @@ class Engine
     {
         return m_hasViewOverride;
     }
+    // A directional light used only while the scene has none of its own, so an unlit
+    // scene opened in a tool is still readable (the editor's preview sun). Off by default.
+    void SetFallbackSun(const LightData &sun);
+    void ClearFallbackSun();
+
     // The camera the next frame renders with (the override, else the scene's main
     // camera, else identity), for the given aspect ratio.
     CameraData GetRenderCamera(float aspect);
@@ -201,6 +206,8 @@ class Engine
     std::string m_pendingScreenshotPath;
     ViewOverride m_viewOverride;
     bool m_hasViewOverride = false;
+    LightData m_fallbackSun;
+    bool m_hasFallbackSun = false;
     bool m_physicsPaused = false;
 };
 

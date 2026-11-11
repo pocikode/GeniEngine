@@ -101,4 +101,9 @@ region 8 7 8 7
 expect cells 1
 expect cell 8 7 6
 
+# The assets browser and framing (docs/design/0006, editor UI).
+assets models city_kit.gltf
+frame
+default
+
 quit
