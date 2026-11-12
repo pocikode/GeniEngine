@@ -88,6 +88,16 @@ jobs:
             echo "GENI_PRESET=dev-no-gpu" >> "$GITHUB_ENV"
           fi
 
+      # The hosted macOS runners are VMs with an "Apple Paravirtual device" GPU, which
+      # renders the world and title-screen screenshots wrongly (ROADMAP.md, M7). Its full
+      # limits and features are kept for the investigation.
+      - name: Record the GPU's limits and features (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p gpu-info
+          vulkaninfo > gpu-info/vulkaninfo.txt 2>&1 || true
+          grep -E "deviceName|driverVersion|apiVersion" gpu-info/vulkaninfo.txt | head -5 || true
+
       - name: Configure, build and test (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a -s "-screen 0 1280x720x24" cmake --workflow --preset ${{ env.GENI_PRESET }}
@@ -114,6 +124,26 @@ jobs:
             LD_LIBRARY_PATH="$ktx_root/lib" "$ktx_root/bin/ktx" validate "$file" || { echo "::error file=$file::ktx validate failed"; status=1; }
           done < <(find build/dev -name '*.ktx2' -print0)
           exit $status
+
+      # run_screenshot.cmake leaves a marker for each image it did not compare on this GPU.
+      - name: Report screenshots not compared
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for marker in build/dev/screenshots/*.compare-skipped; do
+            echo "::warning::$(cat "$marker")"
+          done
+
+      - name: Upload the GPU description and screenshots (macOS)
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpu-macOS
+          path: |
+            gpu-info/vulkaninfo.txt
+            build/dev/screenshots/*.png
+          if-no-files-found: ignore
 
       - name: Upload logs, crash reports and screenshots
         if: failure()
