@@ -17,17 +17,24 @@ jobs:
           path: .cache/slang
           key: slang-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cmake/GeniShaders.cmake') }}
       - run: brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers vulkan-tools
-      - run: cmake --preset dev && cmake --build build/dev --target platformer
+      - run: cmake --preset dev && cmake --build build/dev --target platformer city
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: 4
       - name: Render each variant
         run: |
           mkdir -p shots
-          for v in none dedicated "dedicated gpuindex" nonindexed; do
-            name=$(echo "$v" | tr ' ' '_')
+          for v in align4k align16k align64k; do
             GENI_DBG_SPRITE="$v" build/dev/samples/platformer/platformer --hidden --no-overlay --frames 30 \
-              --screenshot "shots/$name.png" > "shots/$name.log" 2>&1; rc=$?; grep -E "dbg index" "shots/$name.log" | head -3
-            echo "$v: exit $rc"
+              --screenshot "shots/plat_$v.png" > "shots/plat_$v.log" 2>&1; rc=$?
+            grep -E "dbg index" "shots/plat_$v.log" | head -2; echo "platformer $v: exit $rc"
+          done
+          GENI_DBG_SPRITE=log build/dev/samples/city/city --hidden --no-overlay --frames 60 \
+            --screenshot shots/city_log.png > shots/city_log.log 2>&1; echo "city log: exit $?"
+          grep -E "dbg index" shots/city_log.log | head -40
+          for v in log dedicated; do
+            GENI_DBG_SPRITE="$v" build/dev/samples/city/city --world --route --speed 0 --distance 1200 --hidden \
+              --no-overlay --frames 10 --screenshot "shots/world_$v.png" > "shots/world_$v.log" 2>&1
+            echo "world $v: exit $?"
           done
       - if: always()
         uses: actions/upload-artifact@v7

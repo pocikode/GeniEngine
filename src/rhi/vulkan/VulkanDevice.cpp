@@ -1320,7 +1320,14 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
     BufferRecord record;
     record.size = desc.size;
     VmaAllocationInfo result{};
-    const VkResult vr = vmaCreateBuffer(m_allocator, &info, &allocInfo, &record.buffer, &record.allocation, &result);
+    VkDeviceSize dbgAlign = 0;
+    if (dbg && HasFlag(desc.usage, BufferUsage::Index))
+    {
+        dbgAlign = std::strstr(dbg, "align64k") ? 65536 : std::strstr(dbg, "align16k") ? 16384 : std::strstr(dbg, "align4k") ? 4096 : 0;
+    }
+    const VkResult vr = dbgAlign
+        ? vmaCreateBufferWithAlignment(m_allocator, &info, &allocInfo, dbgAlign, &record.buffer, &record.allocation, &result)
+        : vmaCreateBuffer(m_allocator, &info, &allocInfo, &record.buffer, &record.allocation, &result);
     if (vr != VK_SUCCESS)
     {
         GENI_LOG_ERROR(
