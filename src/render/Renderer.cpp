@@ -29,6 +29,10 @@
 #include "sky_vert.spv.h"
 #include "sprite_frag.spv.h"
 #include "sprite_vert.spv.h"
+#include "sprite_red_frag.spv.h"
+#include "sprite_red_vert.spv.h"
+#include "sprite_ndc_frag.spv.h"
+#include "sprite_ndc_vert.spv.h"
 #include "tonemap_frag.spv.h"
 #include "tonemap_vert.spv.h"
 
@@ -254,11 +258,29 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     m_tonemapFragmentModule = m_device->CreateShaderModule(
         {rhi::ShaderStage::Fragment, geni_spirv_tonemap_frag, sizeof(geni_spirv_tonemap_frag), "builtin/tonemap.frag"}
     );
+    const uint32_t *dbgVert = geni_spirv_sprite_vert;
+    size_t dbgVertSize = sizeof(geni_spirv_sprite_vert);
+    const uint32_t *dbgFrag = geni_spirv_sprite_frag;
+    size_t dbgFragSize = sizeof(geni_spirv_sprite_frag);
+    if (DbgSprite("red"))
+    {
+        dbgVert = geni_spirv_sprite_red_vert;
+        dbgVertSize = sizeof(geni_spirv_sprite_red_vert);
+        dbgFrag = geni_spirv_sprite_red_frag;
+        dbgFragSize = sizeof(geni_spirv_sprite_red_frag);
+    }
+    if (DbgSprite("ndc"))
+    {
+        dbgVert = geni_spirv_sprite_ndc_vert;
+        dbgVertSize = sizeof(geni_spirv_sprite_ndc_vert);
+        dbgFrag = geni_spirv_sprite_ndc_frag;
+        dbgFragSize = sizeof(geni_spirv_sprite_ndc_frag);
+    }
     m_spriteVertexModule = m_device->CreateShaderModule(
-        {rhi::ShaderStage::Vertex, geni_spirv_sprite_vert, sizeof(geni_spirv_sprite_vert), "builtin/sprite.vert"}
+        {rhi::ShaderStage::Vertex, dbgVert, dbgVertSize, "builtin/sprite.vert"}
     );
     m_spriteFragmentModule = m_device->CreateShaderModule(
-        {rhi::ShaderStage::Fragment, geni_spirv_sprite_frag, sizeof(geni_spirv_sprite_frag), "builtin/sprite.frag"}
+        {rhi::ShaderStage::Fragment, dbgFrag, dbgFragSize, "builtin/sprite.frag"}
     );
     rhi::SamplerDesc spriteSampler;
     spriteSampler.addressU = rhi::AddressMode::ClampToEdge;
@@ -1728,6 +1750,13 @@ void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
         cmd.SetBindGroup(1, batch.group);
         cmd.DrawIndexed(batch.quadCount * 6, batch.firstQuad * 6, 0);
         ++m_stats.spriteBatches;
+    }
+    if (std::getenv("GENI_DBG_SPRITE") && m_frameCounter % 10 == 0)
+    {
+        GENI_LOG_INFO(
+            "dbg sprites: frame %llu, %u quads, %u culled, %u batches", static_cast<unsigned long long>(m_frameCounter),
+            m_stats.sprites, m_stats.spritesCulled, m_stats.spriteBatches
+        );
     }
 }
 

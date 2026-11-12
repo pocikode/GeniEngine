@@ -157,6 +157,8 @@ geni_embed_shaders(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite_red.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite_ndc.slang
 )
 
 # glm
