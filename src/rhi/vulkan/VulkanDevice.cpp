@@ -564,6 +564,12 @@ bool VulkanDevice::CreateLogicalDevice()
     queueInfo.queueCount = 1;
     queueInfo.pQueuePriorities = &priority;
 
+    m_dedicatedIndexBuffers = std::strstr(m_properties.deviceName, "Apple Paravirtual device") != nullptr;
+    if (m_dedicatedIndexBuffers)
+    {
+        GENI_LOG_INFO("Vulkan: index buffers get dedicated allocations on %s", m_properties.deviceName);
+    }
+
     std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     if (m_hasPortabilitySubset)
     {
@@ -1309,6 +1315,10 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
     else
     {
         allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    }
+    if (m_dedicatedIndexBuffers && HasFlag(desc.usage, BufferUsage::Index))
+    {
+        allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
     }
 
     BufferRecord record;

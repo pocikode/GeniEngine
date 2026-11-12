@@ -88,9 +88,9 @@ jobs:
             echo "GENI_PRESET=dev-no-gpu" >> "$GITHUB_ENV"
           fi
 
-      # The hosted macOS runners are VMs with an "Apple Paravirtual device" GPU, which
-      # renders the world and title-screen screenshots wrongly (ROADMAP.md, M7). Its full
-      # limits and features are kept for the investigation.
+      # The hosted macOS runners are VMs with an "Apple Paravirtual device" GPU, which needs
+      # a workaround for index buffers (VulkanDevice: m_dedicatedIndexBuffers). Its full
+      # limits and features are kept in case it misbehaves again.
       - name: Record the GPU's limits and features (macOS)
         if: runner.os == 'macOS'
         run: |

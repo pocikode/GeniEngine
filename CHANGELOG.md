@@ -52,6 +52,9 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
   relative to where the game was started.
 - Shader contract: `uFrame.fogColor.w` is the tonemapper (0 ACES, 1 none); it was unused.
 - `FrameStats::drawCalls` counts sprite batches as well as mesh draws.
+- Vulkan: on the "Apple Paravirtual device" (GitHub's macOS VMs) every index buffer gets a
+  dedicated allocation. Index buffers placed deep inside a shared memory block drew nothing
+  or garbage there (missing sprites, distorted world meshes), with no validation error.
 
 ### Known limits
 

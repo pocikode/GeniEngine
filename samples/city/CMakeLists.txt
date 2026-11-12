@@ -74,8 +74,6 @@ if(GENI_BUILD_TESTS)
              -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
              -DTOLERANCE=12
              -DMAX_FRACTION=0.02
-             # GitHub's macOS VMs render this scene wrongly; still run it, skip the compare.
-             "-DSKIP_COMPARE_DEVICES=Apple Paravirtual device"
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_world PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
@@ -93,8 +91,6 @@ if(GENI_BUILD_TESTS)
              -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
              -DTOLERANCE=12
              -DMAX_FRACTION=0.02
-             # GitHub's macOS VMs render this scene wrongly; still run it, skip the compare.
-             "-DSKIP_COMPARE_DEVICES=Apple Paravirtual device"
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_play PROPERTIES LABELS "gpu;game" TIMEOUT 300)
 endif()

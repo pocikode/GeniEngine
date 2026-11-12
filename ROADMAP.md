@@ -254,11 +254,12 @@ it still had open (fixed). macOS failed `screenshot_world` and `screenshot_play`
 hosted runner's "Apple Paravirtual device" GPU (a VM; same compiler and MoltenVK 1.4.2 as
 the development Mac) nearby objects render distorted or missing, the player is not drawn
 and the ground is dark, while the sandbox, city block and editor screenshots match and
-there are no validation errors. The same scenes match on an Apple M4, lavapipe, NVIDIA and
-AMD, and filling new buffers with garbage did not reproduce it. Until the cause is known
-those two tests still run on that GPU but skip the image comparison (with a CI warning),
-and CI keeps its `vulkaninfo` output and screenshots (artifact `gpu-macOS`). Open question:
-a limit of the virtual GPU, or an engine bug only it exposes.
+there are no validation errors. After the 2D work the same GPU drew no sprites at all,
+which narrowed it down: an index buffer placed deep inside a shared VMA block (the sprite
+index buffer sat about 3 MB in) draws nothing or garbage there, at any alignment up to
+64 KB, while small offsets work. Fixed by giving every index buffer a dedicated
+allocation on that device only; the world, title and platformer screenshots match the
+references there again and are compared in CI.
 
 Turn v0.1 into something other people can ship a desktop game with.
 
