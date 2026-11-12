@@ -1311,6 +1311,12 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
         allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     }
 
+    // TEMPORARY (debug/paravirtual-sprites)
+    const char *dbg = std::getenv("GENI_DBG_SPRITE");
+    if (dbg && std::strstr(dbg, "dedicated") && HasFlag(desc.usage, BufferUsage::Index))
+    {
+        allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    }
     BufferRecord record;
     record.size = desc.size;
     VmaAllocationInfo result{};
@@ -1323,6 +1329,13 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
         return {};
     }
     record.mapped = desc.memory == MemoryUsage::CpuToGpu ? result.pMappedData : nullptr;
+    if (dbg && HasFlag(desc.usage, BufferUsage::Index))
+    {
+        GENI_LOG_INFO(
+            "dbg index buffer '%s': %llu bytes at offset %llu in memory type %u", desc.debugName ? desc.debugName : "",
+            static_cast<unsigned long long>(desc.size), static_cast<unsigned long long>(result.offset), result.memoryType
+        );
+    }
     SetDebugName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(record.buffer), desc.debugName);
 
     BufferHandle handle = m_buffers.Add(record);
