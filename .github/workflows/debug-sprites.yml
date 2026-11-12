@@ -1,0 +1,36 @@
+# TEMPORARY (debug/paravirtual-sprites): which sprite pipeline state makes sprites vanish
+# on GitHub's Apple Paravirtual GPU? Each variant renders the platformer's frame 30.
+name: Debug sprites
+on:
+  push:
+    branches: ['debug/**']
+jobs:
+  sprites:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/cache@v4
+        with:
+          path: .cache/slang
+          key: slang-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cmake/GeniShaders.cmake') }}
+      - run: brew install glfw molten-vk vulkan-headers vulkan-loader vulkan-validationlayers vulkan-tools
+      - run: cmake --preset dev && cmake --build build/dev --target platformer
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+      - name: Render each variant
+        run: |
+          mkdir -p shots
+          for v in none noblend nodepth depthwrite gpuindex msaa1 "noblend nodepth" "noblend nodepth gpuindex msaa1"; do
+            name=$(echo "$v" | tr ' ' '_')
+            GENI_DBG_SPRITE="$v" build/dev/samples/platformer/platformer --hidden --no-overlay --frames 30 \
+              --screenshot "shots/$name.png" > "shots/$name.log" 2>&1
+            echo "$v: exit $?"
+          done
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sprite-variants
+          path: shots/

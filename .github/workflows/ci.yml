@@ -3,6 +3,7 @@ name: CI
 # Every pushed branch is built, so a branch is checked before it has a pull request.
 on:
   push:
+    branches-ignore: ['debug/**']
   workflow_dispatch:
 
 concurrency:

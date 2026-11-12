@@ -65,6 +65,13 @@ constexpr uint64_t kSpriteQuadBytes = 4 * sizeof(SpriteVertex);
 // Bind groups for sprite textures not drawn for this many frames are released.
 constexpr uint64_t kSpriteGroupLifetime = 240;
 
+// TEMPORARY (debug/paravirtual-sprites): variants switched by GENI_DBG_SPRITE.
+static bool DbgSprite(const char *token)
+{
+    const char *v = std::getenv("GENI_DBG_SPRITE");
+    return v && std::strstr(v, token) != nullptr;
+}
+
 bool IsSrgbFormat(rhi::Format format)
 {
     return format == rhi::Format::RGBA8Srgb || format == rhi::Format::BC7Srgb || format == rhi::Format::ASTC4x4Srgb;
@@ -166,6 +173,10 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     m_device = device;
     m_config = config;
     m_config.msaaSamples = m_config.msaaSamples == 1 || m_config.msaaSamples == 2 ? m_config.msaaSamples : 4;
+    if (DbgSprite("msaa1"))
+    {
+        m_config.msaaSamples = 1;
+    }
     m_config.cascadeCount = std::clamp<uint32_t>(m_config.cascadeCount, 1, Cascades);
     m_config.shadowMapSize = std::clamp<uint32_t>(m_config.shadowMapSize, 256, 8192);
     m_config.shadowDistance = std::max(1.0f, m_config.shadowDistance);
@@ -992,6 +1003,18 @@ rhi::PipelineHandle Renderer::GetSpritePipeline()
     desc.depthWrite = false;
     desc.depthCompare = rhi::CompareOp::LessOrEqual;
     desc.blend = rhi::BlendMode::Alpha;
+    if (DbgSprite("nodepth"))
+    {
+        desc.depthTest = false;
+    }
+    if (DbgSprite("depthwrite"))
+    {
+        desc.depthWrite = true;
+    }
+    if (DbgSprite("noblend"))
+    {
+        desc.blend = rhi::BlendMode::Opaque;
+    }
     desc.cullMode = rhi::CullMode::None;
     desc.targets.backbuffer = false;
     desc.targets.colorFormats = {rhi::Format::RGBA16Float};
@@ -1509,14 +1532,17 @@ bool Renderer::EnsureSpriteCapacity(FrameResources &frame, uint64_t quads)
         // done with it; the new one is written before any frame uses it.
         m_device->DestroyBuffer(m_spriteIndexBuffer);
         m_spriteIndexBuffer = m_device->CreateBuffer(
-            {capacity * 6 * sizeof(uint32_t), rhi::BufferUsage::Index, rhi::MemoryUsage::CpuToGpu, "sprite indices"}
+            {capacity * 6 * sizeof(uint32_t), rhi::BufferUsage::Index,
+             DbgSprite("gpuindex") ? rhi::MemoryUsage::GpuOnly : rhi::MemoryUsage::CpuToGpu, "sprite indices"}
         );
         if (!m_spriteIndexBuffer.IsValid())
         {
             m_spriteIndexCapacity = 0;
             return false;
         }
-        auto *indices = static_cast<uint32_t *>(m_device->MapBuffer(m_spriteIndexBuffer));
+        std::vector<uint32_t> dbgIndices(DbgSprite("gpuindex") ? capacity * 6 : 0);
+        auto *indices = DbgSprite("gpuindex") ? dbgIndices.data()
+                                              : static_cast<uint32_t *>(m_device->MapBuffer(m_spriteIndexBuffer));
         for (uint64_t q = 0; q < capacity; ++q)
         {
             const uint32_t v = static_cast<uint32_t>(q * 4);
@@ -1527,6 +1553,10 @@ bool Renderer::EnsureSpriteCapacity(FrameResources &frame, uint64_t quads)
             out[3] = v;
             out[4] = v + 2;
             out[5] = v + 3;
+        }
+        if (DbgSprite("gpuindex"))
+        {
+            m_device->UpdateBuffer(m_spriteIndexBuffer, 0, dbgIndices.data(), dbgIndices.size() * sizeof(uint32_t));
         }
         m_spriteIndexCapacity = capacity;
     }
