@@ -258,7 +258,12 @@ there are no validation errors. The same scenes match on an Apple M4, lavapipe, 
 AMD, and filling new buffers with garbage did not reproduce it. Until the cause is known
 those two tests still run on that GPU but skip the image comparison (with a CI warning),
 and CI keeps its `vulkaninfo` output and screenshots (artifact `gpu-macOS`). Open question:
-a limit of the virtual GPU, or an engine bug only it exposes.
+a limit of the virtual GPU, or an engine bug only it exposes. Since the 2D work, the same
+GPU draws no sprites at all (`screenshot_platformer` shows only the clear colour and the
+ImGui HUD, and the sprite pixels in `gpu 2d` are background), again without validation
+errors and with coherent host-visible memory; `screenshot_platformer` skips the compare
+and that test case skips its sprite checks there too. A whole draw path vanishing is the
+cleanest repro so far.
 
 Turn v0.1 into something other people can ship a desktop game with.
 
