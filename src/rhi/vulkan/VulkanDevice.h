@@ -264,6 +264,10 @@ class VulkanDevice final : public Device
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties m_properties{};
     bool m_hasPortabilitySubset = false;
+    // GitHub's macOS VMs ("Apple Paravirtual device"): an index buffer placed deep inside a
+    // shared memory block draws nothing or garbage, at any alignment, without a validation
+    // error. Each index buffer gets its own allocation there (offset 0).
+    bool m_dedicatedIndexBuffers = false;
     uint32_t m_queueFamily = 0;
     VkDevice m_device = VK_NULL_HANDLE;
     VkQueue m_queue = VK_NULL_HANDLE;
