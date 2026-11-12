@@ -1,0 +1,12 @@
+{
+  "format": "geni.scene",
+  "version": 1,
+  "mainCamera": -1,
+  "nodes": [
+    {"name":"Ground","parent":-1,"position":[128.0,-0.5,128.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[256.0,1.0,256.0],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"17124d9b5e5f8f9d","mesh":"21dab5a7aab3fe83"}},{"type":"PhysicsComponent","properties":{"bodyType":"static","colliderType":"box","friction":0.800000011920929,"height":0.0,"mass":0.0,"radius":0.0,"size":[1.0,1.0,1.0]}}]},
+    {"name":"park_1","parent":-1,"position":[64.0,0.0,64.0],"rotation":[0.0,-0.7071070075035095,0.0,0.7071070075035095],"scale":[1.0,1.0,1.0],"active":true,"prefab":"efa604c2165e4958","components":[]},
+    {"name":"residential_0","parent":-1,"position":[192.0,0.0,64.0],"rotation":[0.0,1.0,0.0,0.0],"scale":[1.0,1.0,1.0],"active":true,"prefab":"1d73755c8bc3b34b","components":[]},
+    {"name":"residential_1","parent":-1,"position":[64.0,0.0,192.0],"rotation":[0.0,-0.7071070075035095,0.0,0.7071070075035095],"scale":[1.0,1.0,1.0],"active":true,"prefab":"d80101f4c1fa0f24","components":[]},
+    {"name":"park_1","parent":-1,"position":[192.0,0.0,192.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"prefab":"efa604c2165e4958","components":[]}
+  ]
+}

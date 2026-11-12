@@ -1,0 +1,109 @@
+# A scripted editor session on the city block (samples/city/CMakeLists.txt, editor_smoke).
+# One command per frame; see EditorApp::RunScriptCommand. It runs on a copy of the
+# sample's assets (tests/run_editor_smoke.cmake), so saving is safe.
+
+expect objects 10104
+expect dirty 0
+
+# Select and move an object, then undo and redo the move.
+select Ground
+expect selected 1
+expect position 0 -0.5 0
+move 2 0 0
+expect position 2 -0.5 0
+expect dirty 1
+undo
+expect position 0 -0.5 0
+expect dirty 0
+redo
+expect position 2 -0.5 0
+undo
+
+# Structure: create, parent, duplicate, delete, and undo all of it.
+create Marker
+expect objects 10105
+select Sun
+parent Marker
+select Marker
+expect children 1
+duplicate
+expect objects 10107
+delete
+expect objects 10105
+undo
+expect objects 10107
+undo
+undo
+undo
+expect objects 10104
+expect dirty 0
+
+# A reflected property through the inspector's path.
+select Sun
+set 0 intensity 3.5
+undo
+
+# Prefab: make one from an object with a child, instantiate it again, unpack.
+create Lamp
+select Sun
+duplicate
+parent Lamp
+select Lamp
+expect children 1
+prefab prefabs/lamp.gprefab
+expect children 1
+instantiate prefabs/lamp.gprefab
+expect children 1
+expect objects 10108
+unpack
+undo
+undo
+undo
+undo
+undo
+undo
+expect objects 10104
+expect dirty 0
+
+# Play in editor: the scene simulates, then comes back as it was.
+select Ground
+play
+expect playing 1
+wait 5
+stop
+expect playing 0
+expect objects 10104
+expect selected 1
+expect position 0 -0.5 0
+expect dirty 0
+
+# Save a copy and open it again.
+saveas scenes/copy.gscene
+expect dirty 0
+open scenes/copy.gscene
+expect objects 10104
+
+# A streamed world, edited one region of cells at a time (M5). Moving the ground of cell
+# 7,7 300 m east puts it in cell 8,7 when the region is saved.
+world worlds/metro/metro.gworld
+expect cells 0
+region 7 7 8 8
+expect cells 4
+expect cell 7 7 5
+select Ground
+move 300 0 0
+expect dirty 1
+save
+expect dirty 0
+expect cell 7 7 4
+expect cell 8 7 6
+region 8 7 8 7
+expect cells 1
+expect cell 8 7 6
+
+# The assets browser and framing (docs/design/0006, editor UI).
+assets models city_kit.gltf
+frame
+default
+
+quit

@@ -5,10 +5,23 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/trigonometric.hpp"
 #include "scene/GameObject.h"
+#include "scene/Reflection.h"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Geni
 {
+
+namespace
+{
+const bool s_registered = RegisterComponentType<CameraComponent>(
+    "CameraComponent",
+    {
+        FloatProperty<CameraComponent>("fov", &CameraComponent::GetFieldOfView, &CameraComponent::SetFieldOfView),
+        FloatProperty<CameraComponent>("near", &CameraComponent::GetNearPlane, &CameraComponent::SetNearPlane),
+        FloatProperty<CameraComponent>("far", &CameraComponent::GetFarPlane, &CameraComponent::SetFarPlane),
+    }
+);
+} // namespace
 
 void CameraComponent::Update(float deltaTime)
 {
@@ -33,4 +46,11 @@ glm::mat4 CameraComponent::GetProjectionMatrix(float aspect) const
     return glm::perspective(glm::radians(m_fov), aspect, m_nearPlane, m_farPlane);
 }
 
+} // namespace Geni
+
+namespace Geni
+{
+void LinkCameraComponent()
+{
+}
 } // namespace Geni

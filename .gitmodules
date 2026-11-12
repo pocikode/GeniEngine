@@ -7,6 +7,39 @@
 [submodule "thirdparty/cgltf"]
 	path = thirdparty/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
-[submodule "thirdparty/bullet3"]
-	path = thirdparty/bullet3
-	url = https://github.com/bulletphysics/bullet3.git
+[submodule "thirdparty/tracy"]
+	path = thirdparty/tracy
+	url = https://github.com/wolfpld/tracy.git
+[submodule "thirdparty/doctest"]
+	path = thirdparty/doctest
+	url = https://github.com/doctest/doctest.git
+[submodule "thirdparty/imgui"]
+	path = thirdparty/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "thirdparty/VulkanMemoryAllocator"]
+	path = thirdparty/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "thirdparty/SPIRV-Reflect"]
+	path = thirdparty/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect.git
+[submodule "thirdparty/bc7enc_rdo"]
+	path = thirdparty/bc7enc_rdo
+	url = https://github.com/richgel999/bc7enc_rdo.git
+[submodule "thirdparty/astc-encoder"]
+	path = thirdparty/astc-encoder
+	url = https://github.com/ARM-software/astc-encoder.git
+[submodule "thirdparty/meshoptimizer"]
+	path = thirdparty/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git
+[submodule "thirdparty/JoltPhysics"]
+	path = thirdparty/JoltPhysics
+	url = https://github.com/jrouwe/JoltPhysics.git
+[submodule "thirdparty/lua"]
+	path = thirdparty/lua
+	url = https://github.com/lua/lua.git
+[submodule "thirdparty/miniaudio"]
+	path = thirdparty/miniaudio
+	url = https://github.com/mackron/miniaudio.git
+[submodule "thirdparty/recastnavigation"]
+	path = thirdparty/recastnavigation
+	url = https://github.com/recastnavigation/recastnavigation.git

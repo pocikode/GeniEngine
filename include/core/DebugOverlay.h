@@ -1,0 +1,108 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
+struct GLFWwindow;
+
+namespace Geni
+{
+
+namespace rhi
+{
+class Device;
+class CommandList;
+} // namespace rhi
+
+// Timings and counters for the most recent frame, filled in by Engine::Tick.
+struct FrameStats
+{
+    uint64_t frameIndex = 0;
+    double frameMs = 0.0;    // wall time between the last two frames
+    double simulateMs = 0.0; // fixed steps + Application::Update
+    double renderMs = 0.0;   // queue draw + Application::Render + overlay, excluding buffer swap
+    double fps = 0.0;        // smoothed
+    int fixedSteps = 0;      // fixed steps run this frame
+    double interpolationAlpha = 0.0;
+    double droppedSimulationSeconds = 0.0;
+    int drawCalls = 0;
+
+    // Renderer v1 counters (from Renderer::GetRenderStats).
+    int submittedObjects = 0;
+    int visibleObjects = 0;
+    int culledObjects = 0;
+    int instancesDrawn = 0;
+    int shadowDraws = 0;
+    int clusteredLights = 0;
+    int overflowLights = 0;
+
+    // Cooked asset cache (M3).
+    int assetsLoaded = 0;
+    int assetsPending = 0;
+    double assetBytes = 0.0;
+    // M5: memory (docs/design/0007).
+    double residentGpuBytes = 0.0;  // meshes and textures held by the asset manager
+    double gpuAllocatedBytes = 0.0; // everything the device allocated
+    double gpuBudgetBytes = 0.0;    // the streaming budget for resident assets
+    // Instances drawn per mesh LOD (0 = full detail).
+    int lodInstances[4] = {0, 0, 0, 0};
+    // World streaming; only filled while a world is open.
+    bool worldOpen = false;
+    int cellsLoaded = 0;
+    int cellsLoading = 0;
+    int cellsUnloading = 0;
+    int hlodCells = 0;
+    int loadedNodes = 0;
+    int maxLoadedNodes = 0;
+    bool streamingBudgetLimited = false;
+    double streamingMs = 0.0;
+    int lateStreamingFrames = 0;
+    double worldOrigin[3] = {0.0, 0.0, 0.0};
+    double cameraWorld[3] = {0.0, 0.0, 0.0};
+    float loadRadius = 0.0f;
+    float hlodRadius = 0.0f;
+};
+
+// Dear ImGui integration plus a built-in stats and log window (toggle with F1).
+// The engine owns the ImGui context and the frame: between Application::Update and the
+// end of Application::Render, game code can call ImGui:: functions directly.
+// When the engine is built without GENI_ENABLE_IMGUI every method is a no-op.
+class DebugOverlay
+{
+  public:
+    // The device draws ImGui's output; the overlay itself never touches the GPU API.
+    // `docking` enables Dear ImGui docking; `iniFile` is where ImGui saves its layout
+    // (empty: nowhere).
+    bool Init(GLFWwindow *window, rhi::Device *device, bool docking = false, const std::string &iniFile = std::string());
+    void Shutdown();
+    bool IsInitialized() const;
+
+    void BeginFrame();
+    // Draws the built-in window (if visible) and records all ImGui draw data into the
+    // open render pass of `cmd`. With a null `cmd` (minimized) the frame is ended unseen.
+    void Render(const FrameStats &stats, rhi::CommandList *cmd);
+
+    void SetVisible(bool visible);
+    bool IsVisible() const;
+
+    // True while ImGui is using the mouse / keyboard, so game input should ignore it.
+    bool WantsMouse() const;
+    bool WantsKeyboard() const;
+
+  private:
+    void DrawStatsWindow(const FrameStats &stats);
+    void DrawStreamingSection(const FrameStats &stats);
+
+  private:
+    rhi::Device *m_device = nullptr;
+    bool m_initialized = false;
+    bool m_visible = true;
+    bool m_frameStarted = false;
+    std::string m_iniFile;
+    std::array<float, 120> m_frameTimes = {};
+    size_t m_frameTimeCursor = 0;
+};
+
+} // namespace Geni

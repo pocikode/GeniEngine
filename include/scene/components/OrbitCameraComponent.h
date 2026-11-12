@@ -12,6 +12,10 @@ class OrbitCameraComponent : public Component
 
   public:
     void Update(float deltaTime) override;
+    void OnOriginShift(const glm::vec3 &offset) override
+    {
+        m_target -= offset;
+    }
 
     void SetTarget(const glm::vec3 &target);
     void SetDistance(float distance);

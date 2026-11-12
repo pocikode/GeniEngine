@@ -1,0 +1,9 @@
+{
+  "format": "geni.scene",
+  "version": 1,
+  "mainCamera": 1,
+  "nodes": [
+    {"name":"Sun","parent":-1,"position":[0.0,0.0,0.0],"rotation":[-0.388033002614975,0.41029301285743713,0.19876399636268616,0.8009889721870422],"scale":[1.0,1.0,1.0],"active":true,"components":[{"type":"LightComponent","properties":{"color":[1.0,1.0,1.0],"innerConeAngle":0.0,"intensity":2.0,"outerConeAngle":0.785398006439209,"range":10.0,"type":"directional"}}]},
+    {"name":"Camera","parent":-1,"position":[0.0,10.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"components":[{"type":"CameraComponent","properties":{"far":500.0,"fov":60.0,"near":0.10000000149011612}}]}
+  ]
+}

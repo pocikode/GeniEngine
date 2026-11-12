@@ -1,0 +1,10 @@
+{
+  "format": "geni.prefab",
+  "version": 1,
+  "mainCamera": -1,
+  "nodes": [
+    {"name":"Pair","parent":-1,"position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"components":[]},
+    {"name":"Left","parent":0,"position":[-3.0,1.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[2.0,2.0,2.0],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"3584d29efdb7638e","mesh":"a3cc42af63aff6ca"}}]},
+    {"name":"Right","parent":0,"position":[3.0,1.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[2.0,2.0,2.0],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"3584d29efdb7638e","mesh":"a3cc42af63aff6ca"}}]}
+  ]
+}

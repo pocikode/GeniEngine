@@ -1,78 +1,191 @@
 #include "graphics/Texture.h"
+#include "assets/CookedFormats.h"
+#include "assets/Ktx2.h"
 #include "core/Engine.h"
+#include "core/Log.h"
+#include "rhi/Device.h"
+#include <algorithm>
 #include <memory>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <vector>
 
 namespace Geni
 {
 
-Texture::Texture(int width, int height, int numChannels, unsigned char *data)
-    : m_width(width), m_height(height), m_numChannels(numChannels)
+namespace
 {
-    Init(width, height, numChannels, data);
+
+// Expands 1-4 channels to RGBA, the way OpenGL widened RGB uploads: missing color
+// channels repeat the gray value, missing alpha is opaque.
+std::vector<uint8_t> ToRgba(int width, int height, int channels, const unsigned char *data)
+{
+    const size_t pixels = size_t(width) * size_t(height);
+    std::vector<uint8_t> rgba(pixels * 4);
+    for (size_t p = 0; p < pixels; ++p)
+    {
+        const unsigned char *src = data + p * channels;
+        uint8_t *dst = &rgba[p * 4];
+        switch (channels)
+        {
+        case 1:
+            dst[0] = dst[1] = dst[2] = src[0];
+            dst[3] = 255;
+            break;
+        case 2:
+            dst[0] = dst[1] = dst[2] = src[0];
+            dst[3] = src[1];
+            break;
+        case 3:
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = 255;
+            break;
+        default:
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = src[3];
+            break;
+        }
+    }
+    return rgba;
+}
+
+// Next mip level: average of each 2x2 block (box filter), clamped at odd edges.
+std::vector<uint8_t> Downsample(const std::vector<uint8_t> &src, int width, int height, int &outWidth, int &outHeight)
+{
+    outWidth = std::max(1, width / 2);
+    outHeight = std::max(1, height / 2);
+    std::vector<uint8_t> dst(size_t(outWidth) * size_t(outHeight) * 4);
+    for (int y = 0; y < outHeight; ++y)
+    {
+        const int y0 = std::min(y * 2, height - 1);
+        const int y1 = std::min(y * 2 + 1, height - 1);
+        for (int x = 0; x < outWidth; ++x)
+        {
+            const int x0 = std::min(x * 2, width - 1);
+            const int x1 = std::min(x * 2 + 1, width - 1);
+            for (int c = 0; c < 4; ++c)
+            {
+                const int sum = src[(size_t(y0) * width + x0) * 4 + c] + src[(size_t(y0) * width + x1) * 4 + c] +
+                                src[(size_t(y1) * width + x0) * 4 + c] + src[(size_t(y1) * width + x1) * 4 + c];
+                dst[(size_t(y) * outWidth + x) * 4 + c] = static_cast<uint8_t>((sum + 2) / 4);
+            }
+        }
+    }
+    return dst;
+}
+
+} // namespace
+
+Texture::Texture(int width, int height, int numChannels, const unsigned char *data) : m_width(width), m_height(height)
+{
+    rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
+    if (!device || width <= 0 || height <= 0 || !data || numChannels < 1 || numChannels > 4)
+    {
+        GENI_LOG_ERROR(
+            "Texture %dx%d (%d channels) not created: %s", width, height, numChannels,
+            device ? "invalid image" : "no render device"
+        );
+        return;
+    }
+
+    std::vector<std::vector<uint8_t>> levels;
+    levels.push_back(ToRgba(width, height, numChannels, data));
+    int w = width;
+    int h = height;
+    while (w > 1 || h > 1)
+    {
+        int nextW = 0;
+        int nextH = 0;
+        levels.push_back(Downsample(levels.back(), w, h, nextW, nextH));
+        w = nextW;
+        h = nextH;
+    }
+
+    std::vector<const void *> mipData;
+    for (const auto &level : levels)
+    {
+        mipData.push_back(level.data());
+    }
+
+    rhi::TextureDesc desc;
+    desc.width = static_cast<uint32_t>(width);
+    desc.height = static_cast<uint32_t>(height);
+    desc.mipLevels = static_cast<uint32_t>(levels.size());
+    desc.format = rhi::Format::RGBA8Unorm;
+    desc.debugName = "texture";
+    m_handle = device->CreateTexture(desc, mipData.data());
+    m_mipLevels = static_cast<int>(levels.size());
+    m_format = rhi::Format::RGBA8Unorm;
+}
+
+Texture::Texture(const Ktx2Image &image)
+    : m_width(static_cast<int>(image.width)), m_height(static_cast<int>(image.height)),
+      m_mipLevels(static_cast<int>(image.mipLevels)), m_format(image.format)
+{
+    rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice();
+    if (!device || image.width == 0 || image.height == 0 || image.levels.empty())
+    {
+        GENI_LOG_ERROR("KTX2 texture not created: %s", device ? "empty image" : "no render device");
+        return;
+    }
+
+    std::vector<const void *> mipData;
+    mipData.reserve(image.levels.size());
+    for (const auto &level : image.levels)
+    {
+        mipData.push_back(level.data());
+    }
+
+    rhi::TextureDesc desc;
+    desc.width = image.width;
+    desc.height = image.height;
+    desc.mipLevels = static_cast<uint32_t>(image.levels.size());
+    desc.format = image.format;
+    desc.debugName = "cooked texture";
+    desc.mipByteSizes.reserve(image.levels.size());
+    for (const auto &level : image.levels)
+    {
+        desc.mipByteSizes.push_back(level.size());
+    }
+    m_handle = device->CreateTexture(desc, mipData.data());
 }
 
 Texture::~Texture()
 {
-    if (m_ID > 0)
+    if (rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice())
     {
-        glDeleteTextures(1, &m_ID);
+        device->DestroyTexture(m_handle);
     }
-}
-
-GLuint Texture::GetID() const
-{
-    return m_ID;
-}
-
-void Texture::Init(int width, int height, int numChannels, unsigned char *data)
-{
-    glGenTextures(1, &m_ID);
-    glBindTexture(GL_TEXTURE_2D, m_ID);
-
-    int internalFormat = GL_RGB;
-    int format = GL_RGB;
-
-    if (numChannels == 4)
-    {
-        internalFormat = GL_RGBA;
-        format = GL_RGBA;
-    }
-
-    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, internalFormat, GL_UNSIGNED_BYTE, data);
-
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
 std::shared_ptr<Texture> Texture::Load(const std::string &path)
 {
-    int width, height, numChannels;
+    // Runtime textures are cooked KTX2. Source images (PNG/JPEG) are converted by
+    // tools/asset_cooker; the engine does not link an image decoder.
+    auto &fs = Engine::GetInstance().GetFileSystem();
+    const auto fullPath = fs.ResolveAssetPath(path);
 
-    auto fs = Geni::Engine::GetInstance().GetFileSystem();
-    auto fullPath = fs.GetAssetsFolder() / path;
-
-    if (!std::filesystem::exists(fullPath))
+    std::vector<uint8_t> bytes;
+    if (!cooked::ReadFile(fullPath, bytes))
     {
         return nullptr;
     }
 
-    std::shared_ptr<Texture> result;
-
-    unsigned char *data = stbi_load(fullPath.string().c_str(), &width, &height, &numChannels, 0);
-    if (data)
+    Ktx2Image image;
+    std::string error;
+    if (!ReadKtx2(bytes, image, &error))
     {
-        result = std::make_shared<Texture>(width, height, numChannels, data);
-        stbi_image_free(data);
+        GENI_LOG_ERROR("Texture::Load('%s'): %s", path.c_str(), error.c_str());
+        return nullptr;
     }
 
+    auto result = std::make_shared<Texture>(image);
+    if (!result->GetHandle().IsValid())
+    {
+        return nullptr;
+    }
     return result;
 }
 
@@ -98,6 +211,12 @@ std::shared_ptr<Texture> TextureManager::GetWhiteTexture()
         m_whiteTexture = std::make_shared<Texture>(1, 1, 4, pixels);
     }
     return m_whiteTexture;
+}
+
+void TextureManager::Clear()
+{
+    m_textures.clear();
+    m_whiteTexture.reset();
 }
 
 } // namespace Geni

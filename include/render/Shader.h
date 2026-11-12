@@ -1,0 +1,116 @@
+#pragma once
+
+#include "render/ShaderReflection.h"
+#include "rhi/Handle.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace Geni
+{
+
+// A vertex + fragment shader pair (Slang, compiled to SPIR-V), with what the renderer needs to know
+// about it: the material parameters and textures it reads (set 1) and its vertex inputs.
+// Pipelines are made from it on demand by the Renderer, one per vertex layout.
+class Shader
+{
+  public:
+    struct Uniform
+    {
+        std::string name;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+    };
+    struct TextureSlot
+    {
+        std::string name;
+        uint32_t binding = 0;
+    };
+
+    // Creates the shader from SPIR-V words. Returns nullptr and logs on failure (invalid
+    // SPIR-V, or bindings that break the contract in render/ShaderInterface.h).
+    static std::shared_ptr<Shader> Create(
+        const uint32_t *vertexCode, size_t vertexBytes, const uint32_t *fragmentCode, size_t fragmentBytes,
+        const std::string &name
+    );
+    // Loads "<vertexPath>.vert.spv" and "<fragmentPath>.frag.spv" from the assets folder, as
+    // compiled by geni_compile_shaders from the vertexMain / fragmentMain entry points. The
+    // paths are the Slang sources' asset paths; both may name the same file.
+    static std::shared_ptr<Shader> Load(const std::string &vertexPath, const std::string &fragmentPath);
+
+    // Hot reload (docs/design/0006), for shaders made by Load. Reload reads the SPIR-V
+    // files again and replaces this shader's modules in place: the object (and every
+    // material pointing at it) stays, its ID changes, and its pipelines are rebuilt on
+    // the next draw. A shader that no longer loads or validates keeps what it had.
+    bool Reload();
+    // Reloads every loaded shader whose SPIR-V files changed on disk. Returns how many.
+    static int ReloadChanged();
+
+    Shader(const Shader &) = delete;
+    Shader &operator=(const Shader &) = delete;
+    ~Shader();
+
+    const std::string &GetName() const
+    {
+        return m_name;
+    }
+    // Unique for the life of the process; the pipeline cache is keyed by it.
+    uint64_t GetId() const
+    {
+        return m_id;
+    }
+
+    rhi::ShaderModuleHandle GetVertexModule() const
+    {
+        return m_vertexModule;
+    }
+    rhi::ShaderModuleHandle GetFragmentModule() const
+    {
+        return m_fragmentModule;
+    }
+    rhi::BindGroupLayoutHandle GetMaterialLayout() const
+    {
+        return m_materialLayout;
+    }
+
+    // Material uniform block (set 1). Size 0 when the shader has none.
+    uint32_t GetMaterialBlockSize() const
+    {
+        return m_materialBlockSize;
+    }
+    uint32_t GetMaterialBlockBinding() const
+    {
+        return m_materialBlockBinding;
+    }
+    const Uniform *FindMaterialUniform(const std::string &name) const;
+    const std::vector<TextureSlot> &GetMaterialTextures() const
+    {
+        return m_textures;
+    }
+    const std::vector<uint32_t> &GetVertexInputLocations() const
+    {
+        return m_inputLocations;
+    }
+
+  private:
+    Shader() = default;
+
+    std::string m_name;
+    uint64_t m_id = 0;
+    rhi::ShaderModuleHandle m_vertexModule;
+    rhi::ShaderModuleHandle m_fragmentModule;
+    rhi::BindGroupLayoutHandle m_materialLayout;
+    uint32_t m_materialBlockSize = 0;
+    uint32_t m_materialBlockBinding = 0;
+    std::vector<Uniform> m_uniforms;
+    std::vector<TextureSlot> m_textures;
+    std::vector<uint32_t> m_inputLocations;
+    // Set by Load: the asset paths and the SPIR-V files' modification times.
+    std::string m_vertexPath;
+    std::string m_fragmentPath;
+    int64_t m_fileTime = 0;
+};
+
+} // namespace Geni

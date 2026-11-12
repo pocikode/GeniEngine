@@ -1,11 +1,12 @@
 #include "scene/components/OrbitCameraComponent.h"
 #include "core/Engine.h"
 #include "scene/GameObject.h"
+#include "scene/Reflection.h"
 #define GLM_ENABLE_EXPERIMENTAL
+#include <GLFW/glfw3.h>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/trigonometric.hpp>
-#include <GLFW/glfw3.h>
 
 namespace Geni
 {
@@ -14,9 +15,8 @@ void OrbitCameraComponent::Update(float deltaTime)
 {
     auto &inputManager = Engine::GetInstance().GetInputManager();
 
-    // Check if ImGui wants mouse input (engine will handle this through imgui integration if available)
-    // For now, we just use input directly
-    bool imguiWantsMouse = false;
+    // Dragging or scrolling over a debug window must not move the camera.
+    bool imguiWantsMouse = Engine::GetInstance().GetDebugOverlay().WantsMouse();
 
     if (!imguiWantsMouse)
     {
@@ -35,9 +35,7 @@ void OrbitCameraComponent::Update(float deltaTime)
             float pitchRad = glm::radians(m_pitch);
 
             glm::vec3 forward = {
-                glm::cos(pitchRad) * glm::sin(yawRad),
-                glm::sin(pitchRad),
-                glm::cos(pitchRad) * glm::cos(yawRad)
+                glm::cos(pitchRad) * glm::sin(yawRad), glm::sin(pitchRad), glm::cos(pitchRad) * glm::cos(yawRad)
             };
 
             glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
@@ -60,8 +58,7 @@ void OrbitCameraComponent::Update(float deltaTime)
     float pitchRad = glm::radians(m_pitch);
 
     glm::vec3 offset = {
-        m_distance * glm::cos(pitchRad) * glm::sin(yawRad),
-        m_distance * glm::sin(pitchRad),
+        m_distance * glm::cos(pitchRad) * glm::sin(yawRad), m_distance * glm::sin(pitchRad),
         m_distance * glm::cos(pitchRad) * glm::cos(yawRad)
     };
 
@@ -132,4 +129,29 @@ float OrbitCameraComponent::GetPitch() const
     return m_pitch;
 }
 
+namespace
+{
+const bool s_registered = RegisterComponentType<OrbitCameraComponent>(
+    "OrbitCameraComponent",
+    {
+        Vec3Property<OrbitCameraComponent>(
+            "target", [](const OrbitCameraComponent &component) { return component.GetTarget(); },
+            [](OrbitCameraComponent &component, const glm::vec3 &value) { component.SetTarget(value); }
+        ),
+        FloatProperty<OrbitCameraComponent>(
+            "distance", &OrbitCameraComponent::GetDistance, &OrbitCameraComponent::SetDistance
+        ),
+        FloatProperty<OrbitCameraComponent>("yaw", &OrbitCameraComponent::GetYaw, &OrbitCameraComponent::SetYaw),
+        FloatProperty<OrbitCameraComponent>("pitch", &OrbitCameraComponent::GetPitch, &OrbitCameraComponent::SetPitch),
+    }
+);
+} // namespace
+
+} // namespace Geni
+
+namespace Geni
+{
+void LinkOrbitCameraComponent()
+{
+}
 } // namespace Geni

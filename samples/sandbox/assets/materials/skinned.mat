@@ -1,0 +1,6 @@
+{
+  "shader": {
+    "vertex": "shaders/skinned.slang",
+    "fragment": "shaders/lit.slang"
+  }
+}

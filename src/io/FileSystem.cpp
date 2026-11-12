@@ -37,8 +37,28 @@ std::filesystem::path FileSystem::GetExecutableFolder() const
 #endif
 }
 
+void FileSystem::SetAssetsFolder(const std::filesystem::path &path)
+{
+    m_assetsFolderOverride = path;
+}
+
+void FileSystem::SetCookedFolder(const std::filesystem::path &path)
+{
+    m_cookedFolderOverride = path;
+}
+
+std::filesystem::path FileSystem::GetCookedFolder() const
+{
+    return m_cookedFolderOverride.empty() ? GetExecutableFolder() / "assets" : m_cookedFolderOverride;
+}
+
 std::filesystem::path FileSystem::GetAssetsFolder() const
 {
+    if (!m_assetsFolderOverride.empty())
+    {
+        return m_assetsFolderOverride;
+    }
+
 #if defined(ASSETS_ROOT)
     // ASSETS_ROOT is an absolute path baked in at build time (the build host's
     // source assets/ folder) so the app can run straight from the build tree.
@@ -84,9 +104,25 @@ std::vector<char> FileSystem::LoadFile(const std::filesystem::path &path)
     return buffer;
 }
 
+std::filesystem::path FileSystem::ResolveAssetPath(const std::string &relativePath) const
+{
+    const auto primary = GetAssetsFolder() / relativePath;
+    std::error_code ec;
+    if (std::filesystem::exists(primary, ec))
+    {
+        return primary;
+    }
+    const auto besideExecutable = GetCookedFolder() / relativePath;
+    if (std::filesystem::exists(besideExecutable, ec))
+    {
+        return besideExecutable;
+    }
+    return primary;
+}
+
 std::vector<char> FileSystem::LoadAssetFile(const std::string &relativePath)
 {
-    return LoadFile(GetAssetsFolder() / relativePath);
+    return LoadFile(ResolveAssetPath(relativePath));
 }
 
 std::string FileSystem::LoadAssetFileText(const std::string &relativePath)

@@ -1,7 +1,13 @@
 #include "render/Material.h"
+#include "assets/AssetManager.h"
 #include "core/Engine.h"
-#include "graphics/ShaderProgram.h"
+#include "core/Log.h"
 #include "graphics/Texture.h"
+#include "render/Renderer.h"
+#include "render/Shader.h"
+#include "rhi/Device.h"
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -9,64 +15,170 @@
 namespace Geni
 {
 
-void Material::SetShaderProgram(const std::shared_ptr<ShaderProgram> &shaderProgram)
+Material::Material(const Material &other)
+    : Asset(other), m_shader(other.m_shader), m_floatParams(other.m_floatParams), m_float2Params(other.m_float2Params),
+      m_float4Params(other.m_float4Params), m_textures(other.m_textures)
 {
-    m_shaderProgram = shaderProgram;
 }
 
-ShaderProgram *Material::GetShaderProgram()
+Material &Material::operator=(const Material &other)
 {
-    return m_shaderProgram.get();
+    if (this != &other)
+    {
+        ReleaseGpuState();
+        Asset::operator=(other);
+        m_shader = other.m_shader;
+        m_floatParams = other.m_floatParams;
+        m_float2Params = other.m_float2Params;
+        m_float4Params = other.m_float4Params;
+        m_textures = other.m_textures;
+    }
+    return *this;
+}
+
+Material::~Material()
+{
+    ReleaseGpuState();
+}
+
+void Material::ReleaseGpuState()
+{
+    if (rhi::Device *device = Engine::GetInstance().GetRenderer().GetDevice())
+    {
+        device->DestroyBindGroup(m_bindGroup);
+        device->DestroyBuffer(m_uniformBuffer);
+    }
+    m_bindGroup = {};
+    m_uniformBuffer = {};
+    m_gpuShaderId = 0;
+    m_uniformsDirty = true;
+    m_bindingsDirty = true;
+}
+
+void Material::SetShader(const std::shared_ptr<Shader> &shader)
+{
+    m_shader = shader;
 }
 
 void Material::SetParam(const std::string &name, float value)
 {
     m_floatParams[name] = value;
+    m_uniformsDirty = true;
 }
 
 void Material::SetParam(const std::string &name, float v0, float v1)
 {
     m_float2Params[name] = {v0, v1};
+    m_uniformsDirty = true;
 }
 
 void Material::SetParam(const std::string &name, const glm::vec4 &value)
 {
     m_float4Params[name] = value;
+    m_uniformsDirty = true;
 }
 
 void Material::SetParam(const std::string &name, const std::shared_ptr<Texture> &texture)
 {
     m_textures[name] = texture;
+    m_bindingsDirty = true;
 }
 
-void Material::Bind()
+int Material::ReplaceTexture(const Texture *previous, const std::shared_ptr<Texture> &replacement)
 {
-    if (!m_shaderProgram)
+    int replaced = 0;
+    for (auto &slot : m_textures)
     {
-        return;
+        if (slot.second.get() == previous)
+        {
+            slot.second = replacement;
+            ++replaced;
+        }
+    }
+    if (replaced > 0)
+    {
+        m_bindingsDirty = true;
+    }
+    return replaced;
+}
+
+rhi::BindGroupHandle Material::PrepareBindGroup(Renderer &renderer)
+{
+    rhi::Device *device = renderer.GetDevice();
+    if (!m_shader || !device)
+    {
+        return {};
     }
 
-    m_shaderProgram->Bind();
-
-    for (const auto &param : m_floatParams)
+    if (m_gpuShaderId != m_shader->GetId())
     {
-        m_shaderProgram->SetUniform(param.first, param.second);
+        ReleaseGpuState();
+        m_gpuShaderId = m_shader->GetId();
+        if (m_shader->GetMaterialBlockSize() > 0)
+        {
+            m_uniformBuffer = device->CreateBuffer(
+                {m_shader->GetMaterialBlockSize(), rhi::BufferUsage::Uniform, rhi::MemoryUsage::GpuOnly,
+                 "material uniforms"}
+            );
+        }
     }
 
-    for (const auto &param : m_float2Params)
+    if (m_uniformsDirty && m_uniformBuffer.IsValid())
     {
-        m_shaderProgram->SetUniform(param.first, param.second.first, param.second.second);
+        std::vector<uint8_t> block(m_shader->GetMaterialBlockSize(), 0);
+        auto write = [&](const std::string &name, const void *value, uint32_t size) {
+            if (const Shader::Uniform *uniform = m_shader->FindMaterialUniform(name))
+            {
+                std::memcpy(block.data() + uniform->offset, value, std::min(size, uniform->size));
+            }
+        };
+        for (const auto &param : m_floatParams)
+        {
+            write(param.first, &param.second, sizeof(float));
+        }
+        for (const auto &param : m_float2Params)
+        {
+            const float values[2] = {param.second.first, param.second.second};
+            write(param.first, values, sizeof(values));
+        }
+        for (const auto &param : m_float4Params)
+        {
+            write(param.first, &param.second, sizeof(glm::vec4));
+        }
+        // Waits for frames in flight; parameters change rarely (materials are set up once).
+        device->UpdateBuffer(m_uniformBuffer, 0, block.data(), block.size());
+        m_uniformsDirty = false;
     }
 
-    for (const auto &param : m_float4Params)
+    if (m_bindingsDirty || !m_bindGroup.IsValid())
     {
-        m_shaderProgram->SetUniform(param.first, param.second);
+        rhi::BindGroupDesc desc;
+        desc.layout = m_shader->GetMaterialLayout();
+        if (m_uniformBuffer.IsValid())
+        {
+            desc.entries.push_back(
+                {m_shader->GetMaterialBlockBinding(), m_uniformBuffer, 0, m_shader->GetMaterialBlockSize()}
+            );
+        }
+        for (const auto &slot : m_shader->GetMaterialTextures())
+        {
+            auto it = m_textures.find(slot.name);
+            std::shared_ptr<Texture> texture = it != m_textures.end() ? it->second : nullptr;
+            if (!texture || !texture->GetHandle().IsValid())
+            {
+                texture = Engine::GetInstance().GetTextureManager().GetWhiteTexture();
+            }
+            rhi::BindGroupEntry entry;
+            entry.binding = slot.binding;
+            entry.texture = texture->GetHandle();
+            entry.sampler = renderer.GetDefaultSampler();
+            desc.entries.push_back(entry);
+        }
+        device->DestroyBindGroup(m_bindGroup);
+        m_bindGroup = device->CreateBindGroup(desc);
+        m_bindingsDirty = false;
     }
-
-    for (const auto &param : m_textures)
-    {
-        m_shaderProgram->SetTexture(param.first, param.second.get());
-    }
+    return m_bindGroup;
 }
 
 std::shared_ptr<Material> Material::Load(const std::string &path)
@@ -86,19 +198,20 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
         std::string vertexPath = shaderObj.value("vertex", "");
         std::string fragmentPath = shaderObj.value("fragment", "");
 
-        auto &fs = Engine::GetInstance().GetFileSystem();
-        auto vertexSrc = fs.LoadAssetFileText(vertexPath);
-        auto fragmentSrc = fs.LoadAssetFileText(fragmentPath);
-
-        auto &graphicsAPI = Engine::GetInstance().GetGraphicsAPI();
-        auto shaderProgram = graphicsAPI.CreateShaderProgram(vertexSrc, fragmentSrc);
-        if (!shaderProgram)
+        auto shader = Shader::Load(vertexPath, fragmentPath);
+        if (!shader)
         {
             return nullptr;
         }
 
         result = std::make_shared<Material>();
-        result->SetShaderProgram(shaderProgram);
+        result->SetShader(shader);
+    }
+
+    if (!result)
+    {
+        GENI_LOG_ERROR("Material '%s' has no \"shader\" object", path.c_str());
+        return nullptr;
     }
 
     if (json.contains("params"))
@@ -128,6 +241,19 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
             }
         }
 
+        // floats 4
+        if (paramsObj.contains("float4"))
+        {
+            for (auto &p : paramsObj["float4"])
+            {
+                std::string name = p.value("name", "");
+                glm::vec4 value(
+                    p.value("value0", 0.0f), p.value("value1", 0.0f), p.value("value2", 0.0f), p.value("value3", 0.0f)
+                );
+                result->SetParam(name, value);
+            }
+        }
+
         // textures
         if (paramsObj.contains("textures"))
         {
@@ -135,9 +261,25 @@ std::shared_ptr<Material> Material::Load(const std::string &path)
             {
                 std::string name = p.value("name", "");
                 std::string texPath = p.value("path", "");
-                auto texture = Texture::Load(texPath);
+                std::replace(texPath.begin(), texPath.end(), '\\', '/');
+                std::shared_ptr<Texture> texture;
+                // Prefer the cooked KTX2 variant when the asset manifest has one; fall
+                // back to decoding the source image for an uncooked project.
+                auto &assets = Engine::GetInstance().GetAssetManager();
+                auto cooked = assets.LoadTexture(assets.FindBySource(AssetType::Texture, texPath), false);
+                if (cooked.IsReady())
+                {
+                    texture = cooked.Shared();
+                }
+                else
+                {
+                    GENI_LOG_WARN("material '%s': no cooked texture for '%s'", path.c_str(), texPath.c_str());
+                }
 
-                result->SetParam(name, texture);
+                if (texture)
+                {
+                    result->SetParam(name, texture);
+                }
             }
         }
     }

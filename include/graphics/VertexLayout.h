@@ -1,17 +1,22 @@
 #pragma once
-#include <GL/glew.h>
 #include <cstdint>
 #include <vector>
 
 namespace Geni
 {
 
+// Component type of a vertex attribute. Vertex data is always interleaved floats.
+enum class VertexElementType : uint32_t
+{
+    Float,
+};
+
 struct VertexElement
 {
-    GLuint index;    // attribute location
-    GLuint size;     // number of components
-    GLuint type;     // data type (e.g. GL_FLOAT)
-    uint32_t offset; // bytes offset
+    uint32_t index = 0;                                // attribute location
+    uint32_t size = 0;                                 // number of components, 1-4
+    VertexElementType type = VertexElementType::Float; // component type
+    uint32_t offset = 0;                               // byte offset within a vertex
 
     static constexpr int PositionIndex = 0;
     static constexpr int ColorIndex = 1;
@@ -19,6 +24,10 @@ struct VertexElement
     static constexpr int NormalIndex = 3;
     static constexpr int JointsIndex = 4;
     static constexpr int WeightsIndex = 5;
+    // Locations 6-9 are reserved for the per-instance model matrix columns; 10 is the
+    // cascade index of the shadow pass. They are not part of a mesh's interleaved vertex.
+    static constexpr int InstanceMatrixIndex = 6;
+    static constexpr int CascadeIndex = 10;
 };
 
 struct VertexLayout
