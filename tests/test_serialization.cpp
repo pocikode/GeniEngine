@@ -154,8 +154,12 @@ TEST_SUITE("scene serialization")
         INFO(error);
         REQUIRE(saved);
 
-        std::ifstream file(path);
-        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        std::string text;
+        {
+            // Closed before the remove below: Windows cannot delete a file that is still open.
+            std::ifstream file(path);
+            text.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+        }
         CHECK(text.find("\"format\": \"geni.scene\"") != std::string::npos);
         CHECK(text.find('\n') != std::string::npos);
 
