@@ -201,6 +201,45 @@ Every function available to scripts is listed in the [Lua API reference](scripti
 | Rebindable controls | `assets/input/actions.json` | [0009](design/0009-input-actions.md) |
 | Sounds that follow objects | `AudioSourceComponent` | [0012](design/0012-audio.md) |
 | Gameplay in C++ | Your own `Component` with `RegisterComponentType<T>` (it appears in the editor and in Lua) | [0005](design/0005-scene-storage-and-serialization.md) |
+| A 2D game | `SpriteComponent`, `SpriteAnimatorComponent`, `TilemapComponent`, an orthographic `CameraComponent`, `PhysicsComponent` with `plane2D` | [0017](design/0017-2d.md) |
+| A build to give to players | `geni_add_package(<game>)`, then `cmake --build <dir> --target package_<game>` | [0016](design/0016-packaging.md) |
 
 `samples/city/` is the complete reference: `PlayMode.cpp` is the C++ set-up and
-`assets/scripts/` the game.
+`assets/scripts/` the game. `samples/platformer/` is the same for 2D.
+
+## 5. A 2D game
+
+2D content lies in the XY plane, +Y up, seen by a camera looking down -Z:
+
+- **Camera**: a `CameraComponent` with `projection` set to `orthographic` and `orthoSize` to
+  the number of world units that fit the screen's height.
+- **Colours as painted**: `GetRenderer().SetTonemapper(Geni::Tonemapper::None)` and
+  `SetBackground(false, clearColor)`; with exposure 1 a sprite's pixels reach the screen
+  unchanged.
+- **Sprites**: `SpriteComponent` (texture, `size` in world units, `pivot`, `color`, an atlas
+  grid of `columns` x `rows` and the `frame` shown, `flipX`, `layer`, `filter`). Lower layers
+  draw behind higher ones. Add a `SpriteAnimatorComponent` to play frames.
+- **Pixel art**: give the image a `.meta` with `"usage": "sprite"` so the cooker keeps it
+  exact (no compression, no mipmaps), and set `filter` to `nearest`.
+- **Tilemaps**: `TilemapComponent` with a tileset texture cut into `tilesetColumns` x
+  `tilesetRows`, the map size, and `tiles` as CSV text (the object's origin is the map's
+  top-left corner). With `collision` on, the tiles named in `solidTiles` (`"0-7,12"`)
+  collide.
+- **Physics**: `PhysicsComponent` with `plane2D` moves only in X and Y. A
+  `CharacterControllerComponent` with `turnSpeed` 0 is a platformer hero: move it with
+  `SetMoveInput(glm::vec3(x, 0, 0), run)` and `Jump()`.
+
+## 6. Ship it
+
+```cmake
+geni_add_sample(mygame main.cpp)          # or your own add_executable + assets copy
+geni_add_package(mygame NAME "My Game" BUNDLE_ID com.example.mygame)
+```
+
+`cmake --build build --target package_mygame` writes
+`build/packages/MyGame-<version>-<platform>/` and a `.zip` (macOS, Windows) or `.tar.gz`
+(Linux): a macOS app bundle with GLFW, the Vulkan loader and MoltenVK inside, a Windows
+folder with its DLLs, or a Linux folder with `lib/`. Build it from a Release configuration
+(`cmake --workflow --preset package` does that for the samples). Only cooked assets go in;
+in a packaged build `FileSystem::IsPackaged()` is true and the engine never reads your source
+folder. Signing with your Developer ID and notarising (macOS) are up to you.

@@ -65,7 +65,7 @@ struct FrameUniforms
     glm::vec4 sunColor;              // rgb
     glm::vec4 skyZenith;             // rgb; w = ambient intensity
     glm::vec4 skyHorizon;            // rgb; w = fog density (1/m)
-    glm::vec4 fogColor;              // rgb; w = shadow texel size
+    glm::vec4 fogColor;              // rgb; w = tonemapper (0 ACES, 1 none)
     glm::mat4 shadowMatrices[Cascades];
     glm::vec4 cascadeSplits; // x..w = far view-space depth of cascades 0..3
     glm::vec4 shadowParams;  // x = depth bias (texels), y = normal bias (m), z = cascade count, w = 1/size

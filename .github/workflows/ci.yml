@@ -155,3 +155,67 @@ jobs:
             build/dev/**/geni_crash_*.log
             build/dev/screenshots/*.png
           if-no-files-found: ignore
+
+  # One command makes a distributable build per platform (docs/design/0016); the archives
+  # are kept as artifacts so a build can be handed to a tester.
+  package:
+    name: Package (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Cache the Slang compiler
+        uses: actions/cache@v4
+        with:
+          path: .cache/slang
+          key: slang-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cmake/GeniShaders.cmake') }}
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install glfw molten-vk vulkan-headers vulkan-loader
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libglfw3-dev libvulkan-dev
+
+      - name: Install the Vulkan SDK and point VCPKG_ROOT at vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Invoke-WebRequest -UseBasicParsing https://vulkan.lunarg.com/sdk/latest/windows.txt).Content.Trim()
+          $installer = "$env:RUNNER_TEMP\vulkan-sdk.exe"
+          Invoke-WebRequest -UseBasicParsing "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan-sdk.exe" -OutFile $installer
+          $root = "C:\VulkanSDK\$version"
+          Start-Process -Wait -FilePath $installer -ArgumentList "--root", $root, "--accept-licenses", "--default-answer", "--confirm-command", "install"
+          echo "VULKAN_SDK=$root" >> $env:GITHUB_ENV
+          echo "$root\Bin" >> $env:GITHUB_PATH
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      - name: Build and package the games
+        run: cmake --workflow --preset package
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.name }}
+          path: |
+            build/package/packages/*.zip
+            build/package/packages/*.tar.gz
+          if-no-files-found: error

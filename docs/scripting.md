@@ -95,6 +95,8 @@ add methods:
 | `AudioSourceComponent` | `play()`, `stop(fade)`, `playing()` |
 | `ThirdPersonCameraComponent` | `set_target(object)`, `target()`, `snap()` (behind the target now) |
 | `PhysicsComponent` | `velocity()`, `set_velocity(v)`, `impulse(v)` |
+| `SpriteAnimatorComponent` | `play(first, count, fps, loop)` (the same clip again keeps its place, so call it every frame), `stop()`, `finished()` |
+| `TilemapComponent` | `tile(column, row)` (-1 when empty), `set_tile(column, row, tile)`, `solid(column, row)`, `cell_at(position)` → column, row, `cell_center(column, row)` → vec3 |
 | `ScriptComponent` | `instance()`: the other script's instance table |
 
 ## Libraries

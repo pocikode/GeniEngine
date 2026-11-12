@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Common.h"
+#include "render/Sprite.h"
 #include <cstddef>
 #include <glm/mat4x4.hpp>
 #include <vector>
@@ -32,11 +33,17 @@ class RenderQueue
 {
   public:
     void Submit(const RenderCommand &command);
+    // 2D quads (docs/design/0017), drawn after the opaque meshes in the scene pass.
+    void SubmitSprites(const SpriteCommand &command);
     // Runs the renderer's frame (shadows, HDR scene, tonemap) with the queued commands
     // and clears the queue. The tonemap render pass stays open for later draws.
     void Draw(
         Renderer &renderer, rhi::CommandList &cmd, const CameraData &cameraData, const std::vector<LightData> &lights
     );
+    const std::vector<SpriteCommand> &GetPendingSprites() const
+    {
+        return m_sprites;
+    }
     // Drops queued commands without drawing them.
     void Clear();
     // Commands waiting for the next Draw.
@@ -46,6 +53,7 @@ class RenderQueue
 
   private:
     std::vector<RenderCommand> m_commands;
+    std::vector<SpriteCommand> m_sprites;
     int m_lastDrawCallCount = 0;
 };
 

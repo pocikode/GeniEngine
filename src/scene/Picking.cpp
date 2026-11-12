@@ -7,6 +7,8 @@
 #include "scene/components/LightComponent.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/SkinnedMeshComponent.h"
+#include "scene/components/SpriteComponent.h"
+#include "scene/components/TilemapComponent.h"
 
 #include <algorithm>
 #include <cmath>
@@ -141,6 +143,30 @@ void PickRecursive(GameObject &object, const Ray &ray, const PickOptions &option
         // A flat mesh (a quad) still needs some thickness to be hit.
         const glm::vec3 pad(1e-4f);
         hit = RayIntersectsBox(ray, bounds.min - pad, bounds.max + pad, object.GetWorldTransform(), distance);
+    }
+    else if (auto *sprite = object.GetComponent<SpriteComponent>())
+    {
+        // The rectangle in the object's XY plane, as SpriteComponent::BuildQuad lays it out.
+        const glm::vec2 lo = -sprite->GetPivot() * sprite->GetSize();
+        const glm::vec2 hi = lo + sprite->GetSize();
+        const glm::vec3 pad(0.0f, 0.0f, 1e-4f);
+        hit = sprite->IsVisible() &&
+              RayIntersectsBox(ray, glm::vec3(lo, 0.0f) - pad, glm::vec3(hi, 0.0f) + pad, object.GetWorldTransform(), distance);
+        // Flat sprites often share a depth: the one drawn on top (higher layer) wins.
+        distance -= 1e-3f * static_cast<float>(sprite->GetLayer());
+    }
+    else if (auto *tilemap = object.GetComponent<TilemapComponent>())
+    {
+        const glm::vec2 size(
+            static_cast<float>(tilemap->GetWidth()) * tilemap->GetTileSize().x,
+            static_cast<float>(tilemap->GetHeight()) * tilemap->GetTileSize().y
+        );
+        const glm::vec3 pad(0.0f, 0.0f, 1e-4f);
+        hit = RayIntersectsBox(
+            ray, glm::vec3(0.0f, -size.y, 0.0f) - pad, glm::vec3(size.x, 0.0f, 0.0f) + pad, object.GetWorldTransform(),
+            distance
+        );
+        distance -= 1e-3f * static_cast<float>(tilemap->GetLayer());
     }
     else if (object.GetComponent<LightComponent>() || object.GetComponent<CameraComponent>())
     {

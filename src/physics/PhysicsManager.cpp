@@ -256,6 +256,10 @@ void PhysicsManager::AddRigidBody(RigidBody *body)
     );
     settings.mFriction = body->GetFriction();
     settings.mUserData = body->GetUserData();
+    if (body->IsPlane2D() && body->GetType() == BodyType::Dynamic)
+    {
+        settings.mAllowedDOFs = JPH::EAllowedDOFs::Plane2D;
+    }
     if (body->GetType() == BodyType::Dynamic && body->GetMass() > 0.0f)
     {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;

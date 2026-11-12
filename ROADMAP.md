@@ -229,10 +229,25 @@ Enough to build the reference game.
 
 ### M7: Desktop 1.0 (next, about 150 h)
 
-**Status (2026-11-12):** not started. v0.1 passes all 21 CTest tests locally on macOS and
-Linux, but CI has never run green, nothing has been verified on Windows, the M0–M6 work
-is still on `feat/roadmap-implementation` (not merged to `main`), and nobody other than
-the author has used the engine.
+**Status (2026-11-12):** in progress. Done locally on macOS (Apple M4, MoltenVK, validation
+layers on): **packaging** (design page `docs/design/0016-packaging.md`; `geni_add_package`,
+`cmake --workflow --preset package`, a signed app bundle that runs from any folder with
+only its own MoltenVK, tests `package_layout` and `package_run`, a CI job that uploads the
+archives for all three platforms) and the **API stability policy** (`docs/api-policy.md`,
+`core/Version.h`, an "Unreleased" section in `CHANGELOG.md`). **2D support** was moved
+forward from "After v0.1" at the author's request (design page `docs/design/0017-2d.md`):
+sprites, sprite animation, tilemaps with collision, orthographic cameras, physics in a
+plane, exact colours, and a second sample, **Geni Plains** (`samples/platformer`), with a
+scripted play-through, a screenshot, an editor session and a 10,000-sprite benchmark
+(8.6 ms per frame, release, 1280×720). All 27 CTest tests pass locally on macOS. Not done:
+CI green (still blocked by the GitHub billing lock), Windows and Linux packages run on a
+clean machine, anything on Windows hardware or the Steam Deck, outside users, per-platform
+audio compression and cooked navigation tiles.
+
+Before this work: v0.1 passed all 21 CTest tests locally on macOS and Linux, but CI has
+never run green, nothing has been verified on Windows, the M0–M6 work is still on
+`feat/roadmap-implementation` (not merged to `main`), and nobody other than the author has
+used the engine.
 
 First CI run (2026-11-12): Linux green. Windows failed one unit test that deleted a file
 it still had open (fixed). macOS failed `screenshot_world` and `screenshot_play`: on the
@@ -257,10 +272,13 @@ Turn v0.1 into something other people can ship a desktop game with.
   their bug reports are fixed or recorded as known limits
 - Packaging: one command produces a distributable game build per platform (macOS app
   bundle, Windows folder or installer, Linux/Steam Deck build) with cooked assets
+  (done on macOS; Windows and Linux built by CI, not yet run on a clean machine)
 - Per-platform audio compression and navigation tiles cooked instead of built at load
   (from the M6 known limits)
 - API stability policy: semantic versioning, what counts as public API, a deprecation
-  rule, and `CHANGELOG.md` kept per release
+  rule, and `CHANGELOG.md` kept per release (done: `docs/api-policy.md`)
+- 2D: sprites, sprite animation, tilemaps, orthographic cameras and 2D physics, with a 2D
+  sample (done; moved forward from "After v0.1")
 - Tagged **v0.2 (desktop beta)** once CI is green and Windows is verified, and
   **v1.0** once outside users have shipped or released a build
 
@@ -295,7 +313,8 @@ Chosen by what users ask for, not planned in detail now:
 
 - Open-world layers: traffic and pedestrian simulation, time of day, weather, mission system
 - Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles
-- 2D rendering, sprites and tilemaps
+- 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; still
+  open: lit sprites, a Tiled importer, sprite atlases packed by the cooker)
 - Networking and multiplayer
 - Plugin system and package distribution
 - Visual tools: material editor, animation graph editor, timeline for cutscenes

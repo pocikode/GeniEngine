@@ -55,7 +55,7 @@ class SandboxApp : public Geni::Application
         // Prefer the source tree when it is there, so asset edits need no rebuild.
         // A packaged build falls back to the assets/ folder next to the executable.
         std::error_code ec;
-        if (std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
+        if (!engine.GetFileSystem().IsPackaged() && std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
         {
             engine.GetFileSystem().SetAssetsFolder(GENI_SAMPLE_ASSETS_DIR);
         }

@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 30,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "dev",
@@ -27,36 +31,81 @@
         "GENI_ENABLE_IMGUI": "ON",
         "GENI_ENABLE_TRACY": "OFF"
       }
+    },
+    {
+      "name": "package",
+      "displayName": "Package",
+      "description": "Release build of the games for distribution (docs/design/0016): no tests, no editor, no Tracy; libstdc++ linked statically on Linux.",
+      "binaryDir": "${sourceDir}/build/package",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENI_BUILD_TESTS": "OFF",
+        "GENI_BUILD_SAMPLES": "ON",
+        "GENI_BUILD_TOOLS": "ON",
+        "GENI_BUILD_EDITOR": "OFF",
+        "GENI_ENABLE_IMGUI": "ON",
+        "GENI_ENABLE_TRACY": "OFF",
+        "GENI_STATIC_RUNTIME": "ON"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "dev", "configurePreset": "dev", "configuration": "Debug" },
-    { "name": "release", "configurePreset": "release", "configuration": "RelWithDebInfo" }
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "package",
+      "configurePreset": "package",
+      "configuration": "Release",
+      "targets": [
+        "package_city",
+        "package_platformer"
+      ]
+    }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev",
       "configuration": "Debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "dev-no-gpu",
       "description": "Skips tests that need a window and a Vulkan device.",
       "inherits": "dev",
-      "filter": { "exclude": { "label": "gpu" } }
+      "filter": {
+        "exclude": {
+          "label": "gpu"
+        }
+      }
     },
     {
       "name": "release",
       "configurePreset": "release",
       "configuration": "RelWithDebInfo",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "release-no-gpu",
       "description": "Skips tests that need a window and a Vulkan device.",
       "inherits": "release",
-      "filter": { "exclude": { "label": "gpu" } }
+      "filter": {
+        "exclude": {
+          "label": "gpu"
+        }
+      }
     }
   ],
   "workflowPresets": [
@@ -64,36 +113,86 @@
       "name": "dev",
       "description": "Configure, build and test the development build.",
       "steps": [
-        { "type": "configure", "name": "dev" },
-        { "type": "build", "name": "dev" },
-        { "type": "test", "name": "dev" }
+        {
+          "type": "configure",
+          "name": "dev"
+        },
+        {
+          "type": "build",
+          "name": "dev"
+        },
+        {
+          "type": "test",
+          "name": "dev"
+        }
       ]
     },
     {
       "name": "dev-no-gpu",
       "description": "Like dev, without the tests that need a GPU.",
       "steps": [
-        { "type": "configure", "name": "dev" },
-        { "type": "build", "name": "dev" },
-        { "type": "test", "name": "dev-no-gpu" }
+        {
+          "type": "configure",
+          "name": "dev"
+        },
+        {
+          "type": "build",
+          "name": "dev"
+        },
+        {
+          "type": "test",
+          "name": "dev-no-gpu"
+        }
       ]
     },
     {
       "name": "release",
       "description": "Configure, build and test the release build.",
       "steps": [
-        { "type": "configure", "name": "release" },
-        { "type": "build", "name": "release" },
-        { "type": "test", "name": "release" }
+        {
+          "type": "configure",
+          "name": "release"
+        },
+        {
+          "type": "build",
+          "name": "release"
+        },
+        {
+          "type": "test",
+          "name": "release"
+        }
       ]
     },
     {
       "name": "release-no-gpu",
       "description": "Like release, without the tests that need a GPU.",
       "steps": [
-        { "type": "configure", "name": "release" },
-        { "type": "build", "name": "release" },
-        { "type": "test", "name": "release-no-gpu" }
+        {
+          "type": "configure",
+          "name": "release"
+        },
+        {
+          "type": "build",
+          "name": "release"
+        },
+        {
+          "type": "test",
+          "name": "release-no-gpu"
+        }
+      ]
+    },
+    {
+      "name": "package",
+      "description": "Build and package the games: build/package/packages/<game>-<version>-<platform>.<zip|tar.gz>.",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "package"
+        },
+        {
+          "type": "build",
+          "name": "package"
+        }
       ]
     }
   ]

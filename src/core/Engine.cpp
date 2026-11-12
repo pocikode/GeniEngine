@@ -116,6 +116,12 @@ bool Engine::Init(const EngineConfig &config)
 
     glfwSetErrorCallback(glfwErrorCallback);
     rhi::PrepareWindowSystem();
+#if defined(__APPLE__)
+    // Inside a .app bundle GLFW would make Contents/Resources the working directory, and
+    // relative screenshots, logs and crash reports would land in (and break the signature
+    // of) the bundle. Assets are found through FileSystem::GetResourcesFolder instead.
+    glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
+#endif
     if (!glfwInit())
     {
         GENI_LOG_ERROR("Failed to initialize GLFW");
@@ -202,7 +208,8 @@ bool Engine::Init(const EngineConfig &config)
         std::error_code ec;
         if (font.empty())
         {
-            const auto local = m_fileSystem.GetExecutableFolder() / "fonts" / "Roboto-Medium.ttf";
+            // Next to the executable, or in a package's resources folder (docs/design/0016).
+            const auto local = m_fileSystem.GetResourcesFolder() / "fonts" / "Roboto-Medium.ttf";
             font = std::filesystem::exists(local, ec) ? local.string() : std::string(GENI_DEFAULT_UI_FONT);
         }
         m_gameUI.Init(font);

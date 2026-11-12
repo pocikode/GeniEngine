@@ -14,7 +14,7 @@ struct Frame
     float4 sunColor;                // rgb
     float4 skyZenith;               // rgb; w = ambient intensity
     float4 skyHorizon;              // rgb; w = fog density (1/m)
-    float4 fogColor;                // rgb
+    float4 fogColor;                // rgb; w = tonemapper (0 ACES, 1 none)
     float4x4 shadowMatrices[4];
     float4 cascadeSplits;           // x..w = far view-space depth of cascades 0..3
     float4 shadowParams;            // x = depth bias (texels), y = normal bias (m), z = cascade count, w = 1/size

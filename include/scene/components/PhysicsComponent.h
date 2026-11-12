@@ -69,8 +69,20 @@ class PhysicsComponent : public Component
         return m_rigidBody ? m_rigidBody->GetFriction() : m_friction;
     }
 
+    // Dynamic bodies move in the XY plane only (docs/design/0017). Read when the body is
+    // created.
+    void SetPlane2D(bool plane2D)
+    {
+        m_plane2D = plane2D;
+    }
+    bool GetPlane2D() const
+    {
+        return m_rigidBody ? m_rigidBody->IsPlane2D() : m_plane2D;
+    }
+
   private:
     std::shared_ptr<RigidBody> m_rigidBody;
+    bool m_plane2D = false;
     BodyType m_bodyType = BodyType::Static;
     ColliderType m_colliderType = ColliderType::Box;
     glm::vec3 m_size{1.0f};

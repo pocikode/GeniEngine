@@ -1,0 +1,104 @@
+{
+  "actions": {
+    "move_x": {
+      "type": "axis",
+      "group": "gameplay",
+      "bindings": [
+        {
+          "control": "key:D"
+        },
+        {
+          "control": "key:Right"
+        },
+        {
+          "control": "key:A",
+          "scale": -1
+        },
+        {
+          "control": "key:Left",
+          "scale": -1
+        },
+        "pad:LeftX"
+      ]
+    },
+    "jump": {
+      "type": "button",
+      "group": "gameplay",
+      "bindings": [
+        "key:Space",
+        "key:W",
+        "key:Up",
+        "pad:A"
+      ]
+    },
+    "run": {
+      "type": "button",
+      "group": "gameplay",
+      "bindings": [
+        "key:LeftShift",
+        "pad:X"
+      ]
+    },
+    "pause": {
+      "type": "button",
+      "bindings": [
+        "key:Escape",
+        "key:P",
+        "pad:Start"
+      ]
+    },
+    "ui_up": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Up",
+        "key:W",
+        "pad:DpadUp"
+      ]
+    },
+    "ui_down": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Down",
+        "key:S",
+        "pad:DpadDown"
+      ]
+    },
+    "ui_left": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Left",
+        "key:A",
+        "pad:DpadLeft"
+      ]
+    },
+    "ui_right": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Right",
+        "key:D",
+        "pad:DpadRight"
+      ]
+    },
+    "ui_accept": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Enter",
+        "key:Space",
+        "pad:A"
+      ]
+    },
+    "ui_back": {
+      "type": "button",
+      "group": "ui",
+      "bindings": [
+        "key:Escape",
+        "pad:B"
+      ]
+    }
+  }
+}

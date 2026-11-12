@@ -1,0 +1,43 @@
+# A scripted editor session on the 2D level (samples/platformer/CMakeLists.txt,
+# editor_smoke_2d; docs/design/0017). One command per frame, on a copy of the assets.
+
+expect objects 51
+expect dirty 0
+
+# Move a crate (a sprite with a 2D physics body), undo and redo.
+select Crate 0.0
+expect selected 1
+move 2 0 0
+expect dirty 1
+undo
+expect dirty 0
+redo
+undo
+
+# Tilemap and sprite properties through the inspector's path.
+select Tilemap
+set 0 width 120
+expect dirty 1
+undo
+expect dirty 0
+select Coin 0
+set 0 frame 3
+set 0 flipX true
+undo
+undo
+expect dirty 0
+
+# Play in editor: the crates fall onto the tilemap's colliders, then it all comes back.
+select Crate 0.0
+play
+expect playing 1
+wait 30
+stop
+expect playing 0
+expect objects 51
+expect dirty 0
+
+saveas scenes/copy.gscene
+expect dirty 0
+open scenes/copy.gscene
+expect objects 51

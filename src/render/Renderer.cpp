@@ -1,6 +1,7 @@
 #include "render/Renderer.h"
 #include "core/Log.h"
 #include "core/Profiler.h"
+#include "graphics/Texture.h"
 #include "render/ClusterGrid.h"
 #include "render/Frustum.h"
 #include "render/Material.h"
@@ -26,6 +27,8 @@
 #include "skinned_vert.spv.h"
 #include "sky_frag.spv.h"
 #include "sky_vert.spv.h"
+#include "sprite_frag.spv.h"
+#include "sprite_vert.spv.h"
 #include "tonemap_frag.spv.h"
 #include "tonemap_vert.spv.h"
 
@@ -48,6 +51,29 @@ const glm::mat4 kDepthZeroToOne(
 constexpr uint64_t kInitialDrawCapacity = 1u << 20;
 constexpr uint64_t kInstanceStride = sizeof(glm::mat4);          // 64
 constexpr uint64_t kShadowInstanceStride = kInstanceStride + 16; // matrix + cascade index + padding
+
+// One sprite corner (docs/design/0017): camera-relative position with the sRGB-decode
+// flag in w, texture coordinate, linear colour.
+struct SpriteVertex
+{
+    glm::vec4 position;
+    glm::vec2 uv;
+    glm::vec4 color;
+};
+static_assert(sizeof(SpriteVertex) == 40, "sprite vertex stride");
+constexpr uint64_t kSpriteQuadBytes = 4 * sizeof(SpriteVertex);
+// Bind groups for sprite textures not drawn for this many frames are released.
+constexpr uint64_t kSpriteGroupLifetime = 240;
+
+bool IsSrgbFormat(rhi::Format format)
+{
+    return format == rhi::Format::RGBA8Srgb || format == rhi::Format::BC7Srgb || format == rhi::Format::ASTC4x4Srgb;
+}
+
+float SrgbChannelToLinear(float c)
+{
+    return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+}
 
 struct ShadowInstance
 {
@@ -129,6 +155,11 @@ void WorldBounds(const RenderCommand &command, glm::vec3 &center, float &radius)
     radius = posedRadius * MaxScale(command.modelMatrix);
 }
 } // namespace
+
+glm::vec4 SrgbToLinear(const glm::vec4 &srgb)
+{
+    return glm::vec4(SrgbChannelToLinear(srgb.r), SrgbChannelToLinear(srgb.g), SrgbChannelToLinear(srgb.b), srgb.a);
+}
 
 bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
 {
@@ -212,6 +243,33 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     m_tonemapFragmentModule = m_device->CreateShaderModule(
         {rhi::ShaderStage::Fragment, geni_spirv_tonemap_frag, sizeof(geni_spirv_tonemap_frag), "builtin/tonemap.frag"}
     );
+    m_spriteVertexModule = m_device->CreateShaderModule(
+        {rhi::ShaderStage::Vertex, geni_spirv_sprite_vert, sizeof(geni_spirv_sprite_vert), "builtin/sprite.vert"}
+    );
+    m_spriteFragmentModule = m_device->CreateShaderModule(
+        {rhi::ShaderStage::Fragment, geni_spirv_sprite_frag, sizeof(geni_spirv_sprite_frag), "builtin/sprite.frag"}
+    );
+    rhi::SamplerDesc spriteSampler;
+    spriteSampler.addressU = rhi::AddressMode::ClampToEdge;
+    spriteSampler.addressV = rhi::AddressMode::ClampToEdge;
+    m_spriteLinearSampler = m_device->CreateSampler(spriteSampler);
+    spriteSampler.minFilter = rhi::Filter::Nearest;
+    spriteSampler.magFilter = rhi::Filter::Nearest;
+    spriteSampler.mipmapFilter = rhi::Filter::Nearest;
+    m_spriteNearestSampler = m_device->CreateSampler(spriteSampler);
+    {
+        const uint8_t white[4] = {255, 255, 255, 255};
+        const void *levels[1] = {white};
+        rhi::TextureDesc whiteDesc;
+        whiteDesc.debugName = "sprite white";
+        m_spriteWhiteTexture = m_device->CreateTexture(whiteDesc, levels);
+    }
+    if (!m_spriteVertexModule.IsValid() || !m_spriteFragmentModule.IsValid() || !m_spriteLinearSampler.IsValid() ||
+        !m_spriteNearestSampler.IsValid() || !m_spriteWhiteTexture.IsValid())
+    {
+        return false;
+    }
+
     if (!m_shadowVertexModule.IsValid() || !m_shadowSkinnedVertexModule.IsValid() ||
         !m_shadowFragmentModule.IsValid() || !m_tonemapVertexModule.IsValid() || !m_tonemapFragmentModule.IsValid())
     {
@@ -234,7 +292,7 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
         }
     }
 
-    if (!GetSkyPipeline().IsValid() || !GetTonemapPipeline().IsValid())
+    if (!GetSkyPipeline().IsValid() || !GetTonemapPipeline().IsValid() || !GetSpritePipeline().IsValid())
     {
         return false;
     }
@@ -263,8 +321,29 @@ void Renderer::Shutdown()
     m_shadowPipelines.clear();
     m_device->DestroyPipeline(m_skyPipeline);
     m_device->DestroyPipeline(m_tonemapPipeline);
+    m_device->DestroyPipeline(m_spritePipeline);
     m_skyPipeline = {};
     m_tonemapPipeline = {};
+    m_spritePipeline = {};
+    for (auto &entry : m_spriteGroups)
+    {
+        m_device->DestroyBindGroup(entry.second.group);
+    }
+    m_spriteGroups.clear();
+    m_spriteBatches.clear();
+    m_device->DestroyBuffer(m_spriteIndexBuffer);
+    m_spriteIndexBuffer = {};
+    m_spriteIndexCapacity = 0;
+    m_device->DestroyTexture(m_spriteWhiteTexture);
+    m_spriteWhiteTexture = {};
+    m_device->DestroySampler(m_spriteLinearSampler);
+    m_device->DestroySampler(m_spriteNearestSampler);
+    m_spriteLinearSampler = {};
+    m_spriteNearestSampler = {};
+    m_device->DestroyShaderModule(m_spriteVertexModule);
+    m_device->DestroyShaderModule(m_spriteFragmentModule);
+    m_spriteVertexModule = {};
+    m_spriteFragmentModule = {};
 
     m_device->DestroyShaderModule(m_shadowVertexModule);
     m_device->DestroyShaderModule(m_shadowSkinnedVertexModule);
@@ -318,6 +397,9 @@ void Renderer::DestroyFrameResources(FrameResources &frame)
     m_device->DestroyBuffer(frame.clusterIndicesBuffer);
     m_device->DestroyBuffer(frame.instanceBuffer);
     m_device->DestroyBuffer(frame.drawBuffer);
+    m_device->DestroyBuffer(frame.spriteVertexBuffer);
+    frame.spriteVertexBuffer = {};
+    frame.spriteQuadCapacity = 0;
     frame.frameBuffer = {};
     frame.lightsBuffer = {};
     frame.clusterGridBuffer = {};
@@ -736,7 +818,7 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
     }
     uniforms.skyZenith = glm::vec4(m_config.skyZenith, m_config.ambientIntensity);
     uniforms.skyHorizon = glm::vec4(m_config.skyHorizon, m_config.fogDensity);
-    uniforms.fogColor = glm::vec4(m_config.fogColor, 0.0f);
+    uniforms.fogColor = glm::vec4(m_config.fogColor, m_config.tonemapper == Tonemapper::None ? 1.0f : 0.0f);
     for (uint32_t i = 0; i < Cascades; ++i)
     {
         // The cascades are fitted with OpenGL-style depth; the RHI clips at 0..1.
@@ -889,6 +971,36 @@ rhi::PipelineHandle Renderer::GetSkyPipeline()
     desc.debugName = "sky";
     m_skyPipeline = m_device->CreatePipeline(desc);
     return m_skyPipeline;
+}
+
+rhi::PipelineHandle Renderer::GetSpritePipeline()
+{
+    if (m_spritePipeline.IsValid())
+    {
+        return m_spritePipeline;
+    }
+    rhi::PipelineDesc desc;
+    desc.vertexShader = m_spriteVertexModule;
+    desc.fragmentShader = m_spriteFragmentModule;
+    desc.vertexLayout.buffers.push_back({0, static_cast<uint32_t>(sizeof(SpriteVertex)), rhi::VertexStepMode::Vertex});
+    desc.vertexLayout.attributes.push_back({0, rhi::VertexFormat::Float4, 0, 0});
+    desc.vertexLayout.attributes.push_back({1, rhi::VertexFormat::Float2, 16, 0});
+    desc.vertexLayout.attributes.push_back({2, rhi::VertexFormat::Float4, 24, 0});
+    // Sprites are hidden by opaque geometry in front of them but do not hide each other:
+    // their order comes from the sort.
+    desc.depthTest = true;
+    desc.depthWrite = false;
+    desc.depthCompare = rhi::CompareOp::LessOrEqual;
+    desc.blend = rhi::BlendMode::Alpha;
+    desc.cullMode = rhi::CullMode::None;
+    desc.targets.backbuffer = false;
+    desc.targets.colorFormats = {rhi::Format::RGBA16Float};
+    desc.targets.depthFormat = m_device->GetDepthFormat();
+    desc.targets.sampleCount = m_config.msaaSamples;
+    desc.bindGroupLayouts = {m_frameLayout, m_tonemapLayout};
+    desc.debugName = "sprite";
+    m_spritePipeline = m_device->CreatePipeline(desc);
+    return m_spritePipeline;
 }
 
 rhi::PipelineHandle Renderer::GetTonemapPipeline()
@@ -1076,13 +1188,16 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
     pass.colorLoad = rhi::LoadOp::Clear;
     pass.depthLoad = rhi::LoadOp::Clear;
     pass.depthStore = rhi::StoreOp::DontCare;
-    pass.clearColor[0] = m_config.skyHorizon.x;
-    pass.clearColor[1] = m_config.skyHorizon.y;
-    pass.clearColor[2] = m_config.skyHorizon.z;
+    // Without a sky the clear colour is what shows; it is given in sRGB.
+    const glm::vec3 clear =
+        m_config.sky ? m_config.skyHorizon : glm::vec3(SrgbToLinear(glm::vec4(m_config.clearColor, 1.0f)));
+    pass.clearColor[0] = clear.x;
+    pass.clearColor[1] = clear.y;
+    pass.clearColor[2] = clear.z;
     pass.clearColor[3] = 1.0f;
     cmd.BeginRenderPass(pass);
 
-    if (m_skyPipeline.IsValid())
+    if (m_config.sky && m_skyPipeline.IsValid())
     {
         cmd.SetPipeline(m_skyPipeline);
         cmd.SetBindGroup(FrameSet, frame.frameGroup);
@@ -1156,6 +1271,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
         i += count;
     }
 
+    RenderSprites(cmd, frame);
     cmd.EndRenderPass();
 }
 
@@ -1221,17 +1337,18 @@ SceneViewport Renderer::GetSceneRect() const
 
 void Renderer::RenderFrame(
     rhi::CommandList &cmd, const std::vector<RenderCommand> &commands, const CameraData &camera,
-    const std::vector<LightData> &lights
+    const std::vector<LightData> &lights, const std::vector<SpriteCommand> &sprites
 )
 {
     GENI_PROFILE_SCOPE("Renderer::RenderFrame");
-    const bool sceneDrawn = RenderScene(cmd, commands, camera, lights);
+    ++m_frameCounter;
+    const bool sceneDrawn = RenderScene(cmd, commands, camera, lights, sprites);
     RenderTonemap(cmd, sceneDrawn);
 }
 
 bool Renderer::RenderScene(
     rhi::CommandList &cmd, const std::vector<RenderCommand> &commands, const CameraData &camera,
-    const std::vector<LightData> &lights
+    const std::vector<LightData> &lights, const std::vector<SpriteCommand> &sprites
 )
 {
     const SceneViewport rect = GetSceneRect();
@@ -1352,9 +1469,236 @@ bool Renderer::RenderScene(
         std::memcpy(instanceBase + i * kInstanceStride, &model, kInstanceStride);
     }
 
+    if (!PrepareSprites(frame, sprites, camera))
+    {
+        m_spriteBatches.clear();
+    }
+
     RenderShadows(cmd, all);
     RenderMain(cmd, items);
     return true;
+}
+
+bool Renderer::EnsureSpriteCapacity(FrameResources &frame, uint64_t quads)
+{
+    if (quads > frame.spriteQuadCapacity)
+    {
+        uint64_t capacity = std::max<uint64_t>(frame.spriteQuadCapacity, 256);
+        while (capacity < quads)
+        {
+            capacity *= 2;
+        }
+        m_device->DestroyBuffer(frame.spriteVertexBuffer);
+        frame.spriteVertexBuffer = m_device->CreateBuffer(
+            {capacity * kSpriteQuadBytes, rhi::BufferUsage::Vertex, rhi::MemoryUsage::CpuToGpu, "sprite vertices"}
+        );
+        frame.spriteQuadCapacity = frame.spriteVertexBuffer.IsValid() ? capacity : 0;
+        if (!frame.spriteVertexBuffer.IsValid())
+        {
+            return false;
+        }
+    }
+    if (quads > m_spriteIndexCapacity)
+    {
+        uint64_t capacity = std::max<uint64_t>(m_spriteIndexCapacity, 256);
+        while (capacity < quads)
+        {
+            capacity *= 2;
+        }
+        // Every frame slot shares the index buffer. The old one is destroyed once the GPU is
+        // done with it; the new one is written before any frame uses it.
+        m_device->DestroyBuffer(m_spriteIndexBuffer);
+        m_spriteIndexBuffer = m_device->CreateBuffer(
+            {capacity * 6 * sizeof(uint32_t), rhi::BufferUsage::Index, rhi::MemoryUsage::CpuToGpu, "sprite indices"}
+        );
+        if (!m_spriteIndexBuffer.IsValid())
+        {
+            m_spriteIndexCapacity = 0;
+            return false;
+        }
+        auto *indices = static_cast<uint32_t *>(m_device->MapBuffer(m_spriteIndexBuffer));
+        for (uint64_t q = 0; q < capacity; ++q)
+        {
+            const uint32_t v = static_cast<uint32_t>(q * 4);
+            uint32_t *out = indices + q * 6;
+            out[0] = v;
+            out[1] = v + 1;
+            out[2] = v + 2;
+            out[3] = v;
+            out[4] = v + 2;
+            out[5] = v + 3;
+        }
+        m_spriteIndexCapacity = capacity;
+    }
+    return true;
+}
+
+rhi::BindGroupHandle Renderer::GetSpriteGroup(const Texture *texture, SpriteFilter filter)
+{
+    const rhi::TextureHandle handle =
+        texture && texture->GetHandle().IsValid() ? texture->GetHandle() : m_spriteWhiteTexture;
+    const SpriteGroupKey key{handle.index, handle.generation, filter};
+    auto it = m_spriteGroups.find(key);
+    if (it == m_spriteGroups.end())
+    {
+        rhi::BindGroupDesc desc;
+        desc.layout = m_tonemapLayout; // one sampled texture at binding 0
+        rhi::BindGroupEntry entry;
+        entry.binding = 0;
+        entry.texture = handle;
+        entry.sampler = filter == SpriteFilter::Nearest ? m_spriteNearestSampler : m_spriteLinearSampler;
+        desc.entries.push_back(entry);
+        SpriteGroup group;
+        group.group = m_device->CreateBindGroup(desc);
+        it = m_spriteGroups.emplace(key, group).first;
+    }
+    it->second.lastUsedFrame = m_frameCounter;
+    return it->second.group;
+}
+
+bool Renderer::PrepareSprites(
+    FrameResources &frame, const std::vector<SpriteCommand> &sprites, const CameraData &camera
+)
+{
+    GENI_PROFILE_SCOPE("Renderer::PrepareSprites");
+    m_spriteBatches.clear();
+
+    // Groups of textures that are no longer drawn (destruction waits for the GPU).
+    if (m_frameCounter % 60 == 0)
+    {
+        for (auto it = m_spriteGroups.begin(); it != m_spriteGroups.end();)
+        {
+            if (it->second.lastUsedFrame + kSpriteGroupLifetime < m_frameCounter)
+            {
+                m_device->DestroyBindGroup(it->second.group);
+                it = m_spriteGroups.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+    if (sprites.empty())
+    {
+        return true;
+    }
+
+    struct SpriteItem
+    {
+        const SpriteCommand *command = nullptr;
+        float viewDepth = 0.0f;
+        uint32_t order = 0;
+    };
+    const glm::mat4 viewProjection = kDepthZeroToOne * camera.projectionMatrix * camera.viewMatrix;
+    const Frustum frustum = Frustum::FromViewProjection(viewProjection);
+    std::vector<SpriteItem> items;
+    items.reserve(sprites.size());
+    uint64_t quadCount = 0;
+    for (size_t i = 0; i < sprites.size(); ++i)
+    {
+        const SpriteCommand &command = sprites[i];
+        const glm::vec3 center = glm::vec3(command.modelMatrix * glm::vec4(command.boundsCenter, 1.0f));
+        if (command.boundsRadius > 0.0f &&
+            !frustum.IntersectsSphere(center, command.boundsRadius * MaxScale(command.modelMatrix)))
+        {
+            ++m_stats.spritesCulled;
+            continue;
+        }
+        SpriteItem item;
+        item.command = &command;
+        // View space looks down -Z: the most negative depth is the farthest.
+        item.viewDepth = (camera.viewMatrix * glm::vec4(center, 1.0f)).z;
+        item.order = static_cast<uint32_t>(i);
+        items.push_back(item);
+        quadCount += command.quadCount;
+    }
+    if (items.empty())
+    {
+        return true;
+    }
+    std::sort(items.begin(), items.end(), [](const SpriteItem &a, const SpriteItem &b) {
+        if (a.command->layer != b.command->layer)
+        {
+            return a.command->layer < b.command->layer;
+        }
+        if (a.viewDepth != b.viewDepth)
+        {
+            return a.viewDepth < b.viewDepth;
+        }
+        return a.order < b.order;
+    });
+
+    if (!EnsureSpriteCapacity(frame, quadCount))
+    {
+        return false;
+    }
+    auto *vertices = static_cast<SpriteVertex *>(m_device->MapBuffer(frame.spriteVertexBuffer));
+    uint32_t written = 0;
+    for (const SpriteItem &item : items)
+    {
+        const SpriteCommand &command = *item.command;
+        const glm::mat4 model = RelativeTo(command.modelMatrix, m_renderOrigin);
+        const glm::vec3 axisX(model[0]);
+        const glm::vec3 axisY(model[1]);
+        const glm::vec3 origin(model[3]);
+        const float decode =
+            command.texture && command.texture->GetHandle().IsValid() && !IsSrgbFormat(command.texture->GetFormat())
+                ? 1.0f
+                : 0.0f;
+
+        const rhi::BindGroupHandle group = GetSpriteGroup(command.texture, command.filter);
+        if (!group.IsValid())
+        {
+            continue;
+        }
+        if (m_spriteBatches.empty() || m_spriteBatches.back().group != group)
+        {
+            m_spriteBatches.push_back({group, written, 0});
+        }
+
+        for (uint32_t q = 0; q < command.quadCount; ++q)
+        {
+            const SpriteQuad &quad = command.quads[q];
+            SpriteVertex *out = vertices + static_cast<uint64_t>(written) * 4;
+            const glm::vec3 x0 = origin + axisX * quad.min.x;
+            const glm::vec3 x1 = origin + axisX * quad.max.x;
+            const glm::vec3 y0 = axisY * quad.min.y;
+            const glm::vec3 y1 = axisY * quad.max.y;
+            // Bottom-left, bottom-right, top-right, top-left: counter-clockwise from +Z.
+            out[0] = {glm::vec4(x0 + y0, decode), {quad.uvTopLeft.x, quad.uvBottomRight.y}, quad.color};
+            out[1] = {glm::vec4(x1 + y0, decode), quad.uvBottomRight, quad.color};
+            out[2] = {glm::vec4(x1 + y1, decode), {quad.uvBottomRight.x, quad.uvTopLeft.y}, quad.color};
+            out[3] = {glm::vec4(x0 + y1, decode), quad.uvTopLeft, quad.color};
+            ++written;
+        }
+        m_spriteBatches.back().quadCount = written - m_spriteBatches.back().firstQuad;
+    }
+    m_stats.sprites = written;
+    return true;
+}
+
+void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
+{
+    if (m_spriteBatches.empty() || !m_spritePipeline.IsValid() || !frame.spriteVertexBuffer.IsValid() ||
+        !m_spriteIndexBuffer.IsValid())
+    {
+        return;
+    }
+    cmd.SetPipeline(m_spritePipeline);
+    cmd.SetBindGroup(FrameSet, frame.frameGroup);
+    cmd.SetVertexBuffer(0, frame.spriteVertexBuffer);
+    cmd.SetIndexBuffer(m_spriteIndexBuffer, rhi::IndexFormat::Uint32);
+    for (const SpriteBatch &batch : m_spriteBatches)
+    {
+        if (batch.quadCount == 0)
+        {
+            continue;
+        }
+        cmd.SetBindGroup(1, batch.group);
+        cmd.DrawIndexed(batch.quadCount * 6, batch.firstQuad * 6, 0);
+        ++m_stats.spriteBatches;
+    }
 }
 
 void Renderer::SelectLod(DrawItem &item, float pixelsPerUnit) const

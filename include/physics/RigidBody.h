@@ -72,6 +72,17 @@ class RigidBody
     void SetRotation(const glm::quat &rotation);
     glm::quat GetRotation() const;
 
+    // Dynamic bodies only: moves in X and Y and rotates about Z (2D games,
+    // docs/design/0017). Set before the body is added to the world.
+    void SetPlane2D(bool plane2D)
+    {
+        m_plane2D = plane2D;
+    }
+    bool IsPlane2D() const
+    {
+        return m_plane2D;
+    }
+
     // Returned with ray and sphere hits (PhysicsHit::userData). Set before the body is
     // added to the world.
     void SetUserData(uint64_t userData)
@@ -106,6 +117,7 @@ class RigidBody
     glm::quat m_rotation{1.0f, 0.0f, 0.0f, 0.0f};
     uint32_t m_bodyId = InvalidBodyId;
     uint64_t m_userData = 0;
+    bool m_plane2D = false;
 };
 
 } // namespace Geni

@@ -33,7 +33,7 @@ class PlayApp : public Geni::Application
         auto &engine = Geni::Engine::GetInstance();
 #if defined(GENI_SAMPLE_ASSETS_DIR)
         std::error_code ec;
-        if (std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
+        if (!engine.GetFileSystem().IsPackaged() && std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
         {
             // Scripts, graphs and bindings are edited in the source tree while playing.
             engine.GetFileSystem().SetAssetsFolder(GENI_SAMPLE_ASSETS_DIR);
