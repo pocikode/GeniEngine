@@ -1015,10 +1015,13 @@ rhi::PipelineHandle Renderer::GetSpritePipeline()
     rhi::PipelineDesc desc;
     desc.vertexShader = m_spriteVertexModule;
     desc.fragmentShader = m_spriteFragmentModule;
-    desc.vertexLayout.buffers.push_back({0, static_cast<uint32_t>(sizeof(SpriteVertex)), rhi::VertexStepMode::Vertex});
+    const bool dbgAligned = DbgSprite("aligned48");
+    desc.vertexLayout.buffers.push_back(
+        {0, dbgAligned ? 48u : static_cast<uint32_t>(sizeof(SpriteVertex)), rhi::VertexStepMode::Vertex}
+    );
     desc.vertexLayout.attributes.push_back({0, rhi::VertexFormat::Float4, 0, 0});
     desc.vertexLayout.attributes.push_back({1, rhi::VertexFormat::Float2, 16, 0});
-    desc.vertexLayout.attributes.push_back({2, rhi::VertexFormat::Float4, 24, 0});
+    desc.vertexLayout.attributes.push_back({2, rhi::VertexFormat::Float4, dbgAligned ? 32u : 24u, 0});
     // Sprites are hidden by opaque geometry in front of them but do not hide each other:
     // their order comes from the sort.
     desc.depthTest = true;
@@ -1535,7 +1538,8 @@ bool Renderer::EnsureSpriteCapacity(FrameResources &frame, uint64_t quads)
         }
         m_device->DestroyBuffer(frame.spriteVertexBuffer);
         frame.spriteVertexBuffer = m_device->CreateBuffer(
-            {capacity * kSpriteQuadBytes, rhi::BufferUsage::Vertex, rhi::MemoryUsage::CpuToGpu, "sprite vertices"}
+            {capacity * 6 * 48, rhi::BufferUsage::Vertex,
+             DbgSprite("gpuvertex") ? rhi::MemoryUsage::GpuOnly : rhi::MemoryUsage::CpuToGpu, "sprite vertices"}
         );
         frame.spriteQuadCapacity = frame.spriteVertexBuffer.IsValid() ? capacity : 0;
         if (!frame.spriteVertexBuffer.IsValid())
@@ -1685,7 +1689,8 @@ bool Renderer::PrepareSprites(
     {
         return false;
     }
-    auto *vertices = static_cast<SpriteVertex *>(m_device->MapBuffer(frame.spriteVertexBuffer));
+    std::vector<SpriteVertex> dbgVertices(quadCount * 4);
+    SpriteVertex *vertices = dbgVertices.data();
     uint32_t written = 0;
     for (const SpriteItem &item : items)
     {
@@ -1727,6 +1732,35 @@ bool Renderer::PrepareSprites(
         m_spriteBatches.back().quadCount = written - m_spriteBatches.back().firstQuad;
     }
     m_stats.sprites = written;
+    // Lay the quads out as the variant asks: 40- or 48-byte vertices, 4 (indexed) or 6 per quad.
+    const bool aligned = DbgSprite("aligned48");
+    const bool nonIndexed = DbgSprite("nonindexed");
+    const size_t stride = aligned ? 48 : sizeof(SpriteVertex);
+    const int perQuad = nonIndexed ? 6 : 4;
+    static const int kCorners[6] = {0, 1, 2, 0, 2, 3};
+    std::vector<uint8_t> bytes(static_cast<size_t>(written) * perQuad * stride, 0);
+    for (uint32_t q = 0; q < written; ++q)
+    {
+        for (int c = 0; c < perQuad; ++c)
+        {
+            const SpriteVertex &v = dbgVertices[q * 4 + (nonIndexed ? kCorners[c] : c)];
+            uint8_t *out = bytes.data() + (static_cast<size_t>(q) * perQuad + c) * stride;
+            std::memcpy(out, &v.position, 16);
+            std::memcpy(out + 16, &v.uv, 8);
+            std::memcpy(out + (aligned ? 32 : 24), &v.color, 16);
+        }
+    }
+    if (!bytes.empty())
+    {
+        if (DbgSprite("gpuvertex"))
+        {
+            m_device->UpdateBuffer(frame.spriteVertexBuffer, 0, bytes.data(), bytes.size());
+        }
+        else
+        {
+            std::memcpy(m_device->MapBuffer(frame.spriteVertexBuffer), bytes.data(), bytes.size());
+        }
+    }
     return true;
 }
 
@@ -1748,7 +1782,14 @@ void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
             continue;
         }
         cmd.SetBindGroup(1, batch.group);
-        cmd.DrawIndexed(batch.quadCount * 6, batch.firstQuad * 6, 0);
+        if (DbgSprite("nonindexed"))
+        {
+            cmd.Draw(batch.quadCount * 6, batch.firstQuad * 6);
+        }
+        else
+        {
+            cmd.DrawIndexed(batch.quadCount * 6, batch.firstQuad * 6, 0);
+        }
         ++m_stats.spriteBatches;
     }
     if (std::getenv("GENI_DBG_SPRITE") && m_frameCounter % 10 == 0)

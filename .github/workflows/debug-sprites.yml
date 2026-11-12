@@ -23,7 +23,7 @@ jobs:
       - name: Render each variant
         run: |
           mkdir -p shots
-          for v in none red ndc "ndc nodepth" "red nodepth noblend msaa1"; do
+          for v in none aligned48 gpuvertex nonindexed "aligned48 gpuvertex nonindexed" "ndc aligned48 gpuvertex nonindexed nodepth"; do
             name=$(echo "$v" | tr ' ' '_')
             GENI_DBG_SPRITE="$v" build/dev/samples/platformer/platformer --hidden --no-overlay --frames 30 \
               --screenshot "shots/$name.png" > "shots/$name.log" 2>&1; rc=$?; grep -E "dbg" "shots/$name.log" | tail -1
