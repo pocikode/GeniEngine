@@ -1,6 +1,6 @@
 # GeniEngine Roadmap
 
-Last updated: 2026-11-11
+Last updated: 2026-11-12
 
 ## Goal
 
@@ -15,12 +15,13 @@ The long-term ambition is an engine that could carry large productions. This roa
 | Time budget | 5–10 hours/week (planned at about 8 h/week, roughly 100 hours per quarter) |
 | First focus | Open-world 3D |
 | Graphics API | Vulkan only, with MoltenVK on Apple platforms |
-| Platforms | macOS, Windows, Linux/Steam Deck first; Android and iOS next; web last |
+| Platforms | macOS, Windows, Linux/Steam Deck through Desktop 1.0; Android, iOS and web deferred (see "Later: mobile and web") |
 | How work gets done | Solo, with AI agents writing most of the code |
 
 Two consequences of these choices:
 
-- **Web cannot run Vulkan.** Browsers only expose WebGPU and WebGL. Web support therefore needs a second backend (WebGPU) behind the rendering interface. It is placed last (M8), and the rendering interface in M1 is kept thin enough to allow it.
+- **Web cannot run Vulkan.** Browsers only expose WebGPU and WebGL. Web support therefore needs a second backend (WebGPU) behind the rendering interface. It is deferred until after Desktop 1.0, and the rendering interface in M1 is kept thin enough to allow it.
+- **Mobile and web are deferred, not dropped.** The mobile limits in rule 5 and the WebGPU-shaped RHI stay in force so that adding them later is a port, not a rewrite.
 - **At 8 h/week the reference game lands in late 2030.** The same plan at 20 h/week lands in about 2028. Hours per week is the biggest lever on every date below.
 
 ## Rules that apply to every milestone
@@ -226,22 +227,67 @@ Enough to build the reference game.
 
 **Done when:** `samples/city` is playable: walk around a streamed city block, enter a car, drive, with pedestrians or traffic moving around. This is tagged **v0.1** and announced publicly with documentation, a getting-started guide and contribution guidelines.
 
-### M7: Mobile (2031)
+### M7: Desktop 1.0 (next, about 150 h)
+
+**Status (2026-11-12):** not started. v0.1 passes all 21 CTest tests locally on macOS and
+Linux, but CI has never run green, nothing has been verified on Windows, the M0–M6 work
+is still on `feat/roadmap-implementation` (not merged to `main`), and nobody other than
+the author has used the engine.
+
+First CI run (2026-11-12): Linux green. Windows failed one unit test that deleted a file
+it still had open (fixed). macOS failed `screenshot_world` and `screenshot_play`: on the
+hosted runner's "Apple Paravirtual device" GPU (a VM; same compiler and MoltenVK 1.4.2 as
+the development Mac) nearby objects render distorted or missing, the player is not drawn
+and the ground is dark, while the sandbox, city block and editor screenshots match and
+there are no validation errors. The same scenes match on an Apple M4, lavapipe, NVIDIA and
+AMD, and filling new buffers with garbage did not reproduce it. Until the cause is known
+those two tests still run on that GPU but skip the image comparison (with a CI warning),
+and CI keeps its `vulkaninfo` output and screenshots (artifact `gpu-macOS`). Open question:
+a limit of the virtual GPU, or an engine bug only it exposes.
+
+Turn v0.1 into something other people can ship a desktop game with.
+
+- CI green on macOS, Windows and Linux (resolve the GitHub billing lock first), then
+  merge to `main`
+- Windows verified on a real GPU: tests, screenshots, `benchmark_city` and the
+  `benchmark_world` flight, with validation layers on
+- Budgets measured on a mid-range Windows GPU and on the Steam Deck; fix what misses
+  (closes the open items from M2 and M5)
+- At least two or three outside users build something with the engine and editor;
+  their bug reports are fixed or recorded as known limits
+- Packaging: one command produces a distributable game build per platform (macOS app
+  bundle, Windows folder or installer, Linux/Steam Deck build) with cooked assets
+- Per-platform audio compression and navigation tiles cooked instead of built at load
+  (from the M6 known limits)
+- API stability policy: semantic versioning, what counts as public API, a deprecation
+  rule, and `CHANGELOG.md` kept per release
+- Tagged **v0.2 (desktop beta)** once CI is green and Windows is verified, and
+  **v1.0** once outside users have shipped or released a build
+
+**Done when:** a fresh clone builds, tests and packages Geni City on macOS, Windows and
+Linux in CI; it holds its frame budget on a mid-range Windows GPU and the Steam Deck; and
+at least one person other than the author has made a playable build with the engine.
+
+### Later: mobile and web
+
+Deferred until after Desktop 1.0. Rule 5 keeps them reachable.
+
+**Mobile**
 
 - Android (native Vulkan) and iOS (MoltenVK) builds and packaging
 - Touch input, lifecycle handling (pause and resume), device performance tiers
 - Reduced-quality renderer settings and smaller streaming budgets
 
-**Done when:** the reference game runs at 30 fps on a mid-range Android phone and a recent iPhone.
+Done when: the reference game runs at 30 fps on a mid-range Android phone and a recent iPhone.
 
-### M8: Web (2031–2032)
+**Web**
 
 - WebGPU backend behind the RHI
-- Shader translation from SPIR-V to WGSL
+- Shader translation to WGSL (Slang compiles the same sources)
 - Emscripten build, with asset streaming over HTTP
 - Reduced world size, because browser memory and threading are limited
 
-**Done when:** a cut-down reference scene runs in Chrome and Safari.
+Done when: a cut-down reference scene runs in Chrome and Safari.
 
 ### After v0.1: widening to general-purpose
 
@@ -268,7 +314,7 @@ Each has a default so work is never blocked. Change them before the milestone th
 |---|---|---|
 | Scripting language | Decided in M6: Lua 5.4, compiled as C++, hand-written bindings (`docs/design/0013-lua-scripting.md`) | M6 |
 | Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
-| Shader language: GLSL or Slang | Decided before M3: Slang, compiled offline to SPIR-V by a pinned `slangc`; the same sources compile to WGSL for M8 (`docs/design/0003-slang-shaders.md`) | M3 |
+| Shader language: GLSL or Slang | Decided before M3: Slang, compiled offline to SPIR-V by a pinned `slangc`; the same sources compile to WGSL for the later web backend (`docs/design/0003-slang-shaders.md`) | M3 |
 | Anti-aliasing: MSAA or TAA | Decided in M2: 4x MSAA, configurable (`docs/design/0002-renderer-v1.md`); TAA revisited with M5 camera-relative rendering | M2 |
 | Licence and contribution terms | Decided in M6: keep the MIT licence; contributions are under the same terms (`CONTRIBUTING.md`) | M6 |
 
