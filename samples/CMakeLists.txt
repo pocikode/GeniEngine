@@ -11,6 +11,13 @@ function(geni_add_sample name)
   target_link_libraries(${name} PRIVATE GeniEngine)
   # Function names in crash-report stack traces on Linux.
   set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
+  if(UNIX AND NOT APPLE)
+    # A package (docs/design/0016) ships GLFW in lib/ next to the game.
+    set_property(TARGET ${name} APPEND PROPERTY BUILD_RPATH "\$ORIGIN/lib")
+    if(GENI_STATIC_RUNTIME AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      target_link_options(${name} PRIVATE -static-libstdc++ -static-libgcc)
+    endif()
+  endif()
 
   # The game UI's font (docs/design/0015), next to the executable.
   add_custom_command(TARGET ${name} POST_BUILD
@@ -50,3 +57,4 @@ endfunction()
 add_subdirectory(sandbox)
 
 add_subdirectory(city)
+add_subdirectory(platformer)

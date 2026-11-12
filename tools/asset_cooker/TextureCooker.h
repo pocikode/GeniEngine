@@ -15,14 +15,18 @@ namespace Geni::cook
 // | Color  | averaged in linear light     | BC7 sRGB | ASTC 4x4 sRGB | RGBA8 sRGB |
 // | Linear | averaged as stored           | BC7      | ASTC 4x4      | RGBA8      |
 // | Normal | averaged, then renormalized  | BC5 (XY) | ASTC 4x4      | RGBA8      |
+// | Sprite | none (one level)             | -        | -             | RGBA8 sRGB |
 //
 // Colour is glTF base colour and emissive. Linear is data: metallic-roughness,
 // occlusion, masks. Normal-map shaders rebuild Z from X and Y, so BC5 needs no blue.
+// Sprite is 2D art (docs/design/0017): kept exact, so pixel art and atlases do not bleed
+// or blur; only the RGBA8 file is written.
 enum class TextureUsage
 {
     Color,
     Linear,
-    Normal
+    Normal,
+    Sprite
 };
 
 const char *TextureUsageName(TextureUsage usage);

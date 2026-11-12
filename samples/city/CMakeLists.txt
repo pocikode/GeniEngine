@@ -4,6 +4,8 @@
 # (nine meshes, one per material), 100 point lights and a sun. Interactive when run
 # normally; --budget-ms turns it into the CI performance check.
 geni_add_sample(city main.cpp WorldMode.cpp PlayMode.cpp)
+# One command for a distributable build (docs/design/0016): cmake --build <dir> --target package_city
+geni_add_package(city NAME "Geni City")
 
 # Frame-time budget (ROADMAP M2, rule 4). The default is loose because CI may run on
 # software Vulkan (lavapipe) and on shared runners; the target on real hardware is

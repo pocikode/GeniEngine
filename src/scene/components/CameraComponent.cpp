@@ -19,6 +19,11 @@ const bool s_registered = RegisterComponentType<CameraComponent>(
         FloatProperty<CameraComponent>("fov", &CameraComponent::GetFieldOfView, &CameraComponent::SetFieldOfView),
         FloatProperty<CameraComponent>("near", &CameraComponent::GetNearPlane, &CameraComponent::SetNearPlane),
         FloatProperty<CameraComponent>("far", &CameraComponent::GetFarPlane, &CameraComponent::SetFarPlane),
+        EnumProperty<CameraComponent, CameraProjection>(
+            "projection", &CameraComponent::GetProjection, &CameraComponent::SetProjection,
+            {{CameraProjection::Perspective, "perspective"}, {CameraProjection::Orthographic, "orthographic"}}
+        ),
+        FloatProperty<CameraComponent>("orthoSize", &CameraComponent::GetOrthoSize, &CameraComponent::SetOrthoSize),
     }
 );
 } // namespace
@@ -43,6 +48,12 @@ glm::mat4 CameraComponent::GetViewMatrix() const
 
 glm::mat4 CameraComponent::GetProjectionMatrix(float aspect) const
 {
+    if (m_projection == CameraProjection::Orthographic)
+    {
+        const float halfHeight = 0.5f * m_orthoSize;
+        const float halfWidth = halfHeight * aspect;
+        return glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, m_nearPlane, m_farPlane);
+    }
     return glm::perspective(glm::radians(m_fov), aspect, m_nearPlane, m_farPlane);
 }
 

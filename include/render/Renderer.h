@@ -5,6 +5,7 @@
 #include "render/Mesh.h"
 #include "render/RenderQueue.h"
 #include "render/ShaderInterface.h"
+#include "render/Sprite.h"
 #include "rhi/Handle.h"
 #include "rhi/Types.h"
 #include <array>
@@ -27,6 +28,17 @@ class CommandList;
 class Material;
 class Renderer;
 class Shader;
+class Texture;
+
+// The curve that maps HDR scene colour to the display.
+enum class Tonemapper : uint8_t
+{
+    // ACES filmic: highlights roll off, colours are slightly desaturated (3D scenes).
+    Aces,
+    // Clamped, otherwise unchanged: with exposure 1 a sprite's colours reach the screen as
+    // painted (2D games, docs/design/0017).
+    None
+};
 
 // Art-direction and quality settings for renderer v1. Mobile quality tiers (M7) and the
 // CI benchmark change these; the defaults are the desktop baseline.
@@ -50,6 +62,10 @@ struct RendererConfig
     uint32_t maxLightsPerCluster = ShaderInterface::MaxLightsPerCluster;
     // Tonemapping and atmosphere.
     float exposure = 1.0f;
+    Tonemapper tonemapper = Tonemapper::Aces;
+    // false: no sky; the scene pass is cleared to clearColor (sRGB) instead.
+    bool sky = true;
+    glm::vec3 clearColor{0.0f};
     glm::vec3 skyZenith{0.05f, 0.13f, 0.32f};
     glm::vec3 skyHorizon{0.38f, 0.50f, 0.68f};
     glm::vec3 fogColor{0.44f, 0.55f, 0.70f};
@@ -84,6 +100,10 @@ struct RenderStats
     uint32_t instances = 0;
     uint32_t clusteredLights = 0;
     uint32_t overflowLights = 0;
+    // 2D (docs/design/0017): quads drawn, sprite commands culled, and indexed draws.
+    uint32_t sprites = 0;
+    uint32_t spritesCulled = 0;
+    uint32_t spriteBatches = 0;
     // Visible instances drawn at each LOD (index 0 is the full mesh).
     std::array<uint32_t, MaxMeshLods> lodInstances{};
 };
@@ -109,6 +129,21 @@ class Renderer
     const RenderStats &GetRenderStats() const
     {
         return m_stats;
+    }
+    // Settings that need no new GPU objects can change between frames.
+    void SetTonemapper(Tonemapper tonemapper)
+    {
+        m_config.tonemapper = tonemapper;
+    }
+    void SetExposure(float exposure)
+    {
+        m_config.exposure = exposure;
+    }
+    // With `sky` off, the scene pass is cleared to `clearColor` (sRGB).
+    void SetBackground(bool sky, const glm::vec3 &clearColor = glm::vec3(0.0f))
+    {
+        m_config.sky = sky;
+        m_config.clearColor = clearColor;
     }
 
     // The HDR targets take the viewport's size and the tonemap pass draws into its
@@ -141,9 +176,10 @@ class Renderer
 
     // Runs one frame inside the command buffer, starting with the shadow passes and
     // ending with the tonemap pass still open. `commands` may be empty (sky only).
+    // `sprites` are drawn after the opaque meshes, in the same pass.
     void RenderFrame(
         rhi::CommandList &cmd, const std::vector<RenderCommand> &commands, const CameraData &camera,
-        const std::vector<LightData> &lights
+        const std::vector<LightData> &lights, const std::vector<SpriteCommand> &sprites = std::vector<SpriteCommand>()
     );
 
     // Destroys the cached pipelines made from a shader (called when it is destroyed).
@@ -185,6 +221,10 @@ class Renderer
         uint32_t width = 0;
         uint32_t height = 0;
 
+        // Sprite vertices (4 per quad), rewritten every frame.
+        rhi::BufferHandle spriteVertexBuffer;
+        uint64_t spriteQuadCapacity = 0;
+
         // Per-cascade instance streams: model matrix plus the cascade index (80 bytes).
         std::array<rhi::BufferHandle, ShaderInterface::Cascades> shadowInstanceBuffers{};
         std::array<uint64_t, ShaderInterface::Cascades> shadowInstanceCapacities{};
@@ -207,6 +247,30 @@ class Renderer
         // World-space bounding sphere (radius 0: unknown, never culled).
         glm::vec3 center{0.0f};
         float radius = 0.0f;
+    };
+
+    // A run of sorted sprite quads that share a texture and filter: one indexed draw.
+    struct SpriteBatch
+    {
+        rhi::BindGroupHandle group;
+        uint32_t firstQuad = 0;
+        uint32_t quadCount = 0;
+    };
+
+    struct SpriteGroupKey
+    {
+        uint32_t index = 0;
+        uint32_t generation = 0;
+        SpriteFilter filter = SpriteFilter::Linear;
+        bool operator<(const SpriteGroupKey &o) const
+        {
+            return std::tie(index, generation, filter) < std::tie(o.index, o.generation, o.filter);
+        }
+    };
+    struct SpriteGroup
+    {
+        rhi::BindGroupHandle group;
+        uint64_t lastUsedFrame = 0;
     };
 
     struct MainPipelineKey
@@ -246,11 +310,16 @@ class Renderer
     // Shadow, HDR scene passes. False when nothing was drawn (resources missing).
     bool RenderScene(
         rhi::CommandList &cmd, const std::vector<RenderCommand> &commands, const CameraData &camera,
-        const std::vector<LightData> &lights
+        const std::vector<LightData> &lights, const std::vector<SpriteCommand> &sprites
     );
     // `casters` is every submitted object, not only those the camera sees.
     void RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &casters);
     void RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &items);
+    // Culls, sorts and writes this frame's sprite vertices; fills m_spriteBatches.
+    bool PrepareSprites(FrameResources &frame, const std::vector<SpriteCommand> &sprites, const CameraData &camera);
+    void RenderSprites(rhi::CommandList &cmd, FrameResources &frame);
+    rhi::BindGroupHandle GetSpriteGroup(const Texture *texture, SpriteFilter filter);
+    bool EnsureSpriteCapacity(FrameResources &frame, uint64_t quads);
     // Always opens the backbuffer pass; draws the HDR image only when `sceneDrawn`.
     void RenderTonemap(rhi::CommandList &cmd, bool sceneDrawn);
 
@@ -258,6 +327,7 @@ class Renderer
     rhi::PipelineHandle GetShadowPipeline(const Mesh &mesh, bool skinned);
     rhi::PipelineHandle GetSkyPipeline();
     rhi::PipelineHandle GetTonemapPipeline();
+    rhi::PipelineHandle GetSpritePipeline();
 
     void BuildVertexInput(
         const Mesh &mesh, rhi::VertexLayoutDesc &layout, const std::vector<uint32_t> *shaderInputs
@@ -289,6 +359,20 @@ class Renderer
 
     rhi::PipelineHandle m_skyPipeline;
     rhi::PipelineHandle m_tonemapPipeline;
+
+    // 2D (docs/design/0017).
+    rhi::ShaderModuleHandle m_spriteVertexModule;
+    rhi::ShaderModuleHandle m_spriteFragmentModule;
+    rhi::PipelineHandle m_spritePipeline;
+    rhi::SamplerHandle m_spriteLinearSampler;
+    rhi::SamplerHandle m_spriteNearestSampler;
+    rhi::TextureHandle m_spriteWhiteTexture;
+    // Quad indices (0 1 2, 0 2 3 per quad), shared by every frame; replaced when it grows.
+    rhi::BufferHandle m_spriteIndexBuffer;
+    uint64_t m_spriteIndexCapacity = 0;
+    std::map<SpriteGroupKey, SpriteGroup> m_spriteGroups;
+    std::vector<SpriteBatch> m_spriteBatches;
+    uint64_t m_frameCounter = 0;
 
     std::vector<FrameResources> m_frames;
     // One map per cascade, shared by every frame slot: a pass's external dependency orders

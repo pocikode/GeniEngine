@@ -340,7 +340,7 @@ struct Cooker::Impl
                     out.hasUsage = true;
                     if (!TextureUsageFromName(document.value("usage", std::string()), out.usage))
                     {
-                        return Fail(relative + ".meta: \"usage\" must be color, linear or normal");
+                        return Fail(relative + ".meta: \"usage\" must be color, linear, normal or sprite");
                     }
                 }
             }

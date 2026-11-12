@@ -9,7 +9,16 @@ if(WIN32
   set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 endif()
 
-project(GeniEngine)
+# The version lives in include/core/Version.h (docs/api-policy.md).
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/include/core/Version.h _geni_version_lines
+     REGEX "^#define GENI_VERSION_(MAJOR|MINOR|PATCH|SUFFIX) ")
+foreach(_line ${_geni_version_lines})
+  if(_line MATCHES "^#define GENI_VERSION_([A-Z]+) \"?([^\"]*)\"?$")
+    set(_geni_version_${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
+  endif()
+endforeach()
+project(GeniEngine VERSION ${_geni_version_MAJOR}.${_geni_version_MINOR}.${_geni_version_PATCH})
+set(GENI_VERSION "${PROJECT_VERSION}${_geni_version_SUFFIX}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,6 +31,9 @@ option(GENI_BUILD_EDITOR "Build the scene editor (geni_editor)" ${PROJECT_IS_TOP
 option(GENI_ENABLE_IMGUI "Build Dear ImGui into the engine and enable the debug overlay" ON)
 option(GENI_ENABLE_TRACY "Build the Tracy profiler client into the engine" OFF)
 option(GENI_FORCE_ASSERTS "Keep GENI_ASSERT enabled in release builds" OFF)
+# Packaged Linux builds (docs/design/0016): libstdc++ and libgcc linked statically, because
+# the Steam Linux Runtime's are older than a current GCC's.
+option(GENI_STATIC_RUNTIME "Link libstdc++ and libgcc statically into games (Linux, GCC)" OFF)
 
 include(cmake/GeniSubmodules.cmake)
 geni_require_submodules(glm nlohmann_json cgltf JoltPhysics VulkanMemoryAllocator SPIRV-Reflect bc7enc_rdo astc-encoder
@@ -107,6 +119,8 @@ set(SRC_FILES
   src/scene/components/AudioSourceComponent.cpp
   src/scene/components/NavAgentComponent.cpp
   src/scene/components/ScriptComponent.cpp
+  src/scene/components/SpriteComponent.cpp
+  src/scene/components/TilemapComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp
@@ -142,6 +156,7 @@ geni_embed_shaders(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/shadow_skinned.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite.slang
 )
 
 # glm
@@ -316,6 +331,9 @@ endif()
 if(GENI_BUILD_EDITOR)
   add_subdirectory(editor)
 endif()
+
+# Packaging a game build (docs/design/0016): geni_add_package(<target>).
+include(cmake/GeniPackage.cmake)
 
 if(GENI_BUILD_SAMPLES)
   add_subdirectory(samples)

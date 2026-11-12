@@ -21,6 +21,8 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0013 | [Lua scripting](0013-lua-scripting.md) | M6 | Done |
 | 0014 | [Navigation meshes and AI agents](0014-navigation.md) | M6 | Done |
 | 0015 | [Game UI](0015-game-ui.md) | M6 | Done |
+| 0016 | [Packaging a game build](0016-packaging.md) | M7 | Accepted |
+| 0017 | [2D sprites, tilemaps and physics](0017-2d.md) | M7 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

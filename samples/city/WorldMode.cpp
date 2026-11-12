@@ -37,7 +37,7 @@ class WorldApp : public Geni::Application
         auto &engine = Geni::Engine::GetInstance();
 #if defined(GENI_SAMPLE_ASSETS_DIR)
         std::error_code ec;
-        if (std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
+        if (!engine.GetFileSystem().IsPackaged() && std::filesystem::exists(GENI_SAMPLE_ASSETS_DIR, ec))
         {
             engine.GetFileSystem().SetAssetsFolder(GENI_SAMPLE_ASSETS_DIR);
         }

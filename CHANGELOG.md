@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased (v0.2, desktop beta)
+
+Follows the [API stability policy](docs/api-policy.md) from this release on.
+
+### Added
+
+- **2D** (docs/design/0017): `SpriteComponent` (texture, size, pivot, sRGB tint, atlas
+  frames, flips, sort layer, linear or nearest filtering), `SpriteAnimatorComponent`
+  (frame clips at a rate, looping or one-shot) and `TilemapComponent` (a tileset grid,
+  tiles as CSV text, drawn in 16 x 16 chunks that are culled, static colliders for the
+  solid tiles merged into runs). Sprites are drawn in the scene pass after opaque meshes,
+  sorted by layer and depth and batched by texture (10,000 sprites in 8 draws at 8.6 ms
+  per frame on an Apple M4, release, 1280x720). `RenderQueue::SubmitSprites` takes quads
+  directly. Lua: `play`/`stop`/`finished` on sprite animators, `tile`/`set_tile`/`solid`/
+  `cell_at`/`cell_center` on tilemaps.
+- **Orthographic cameras**: `CameraComponent` properties `projection` and `orthoSize`.
+- **Physics in a plane**: `PhysicsComponent` property `plane2D` (Jolt `Plane2D`:
+  move in X and Y, rotate about Z), `RigidBody::SetPlane2D`.
+- **Colours as painted**: `RendererConfig::tonemapper` (`Tonemapper::Aces` or `None`, which
+  encodes with the exact sRGB curve), `RendererConfig::sky` and `clearColor`, and
+  `Renderer::SetTonemapper`, `SetExposure`, `SetBackground` to change them between frames.
+- **Sprite textures in the cooker**: `"usage": "sprite"` in a `.meta` keeps an image as
+  RGBA8 sRGB with one mip level and no BC/ASTC variants.
+- **Geni Plains** (`samples/platformer`): a 2D platformer with a tilemap level, crates,
+  coins, parallax layers and a HUD; tests `play_platformer`, `screenshot_platformer`,
+  `benchmark_sprites` and `editor_smoke_2d`. `tools/gen_2d_assets.py` draws its art.
+- **Packaging** (docs/design/0016): `geni_add_package(<game>)` and the `package_<game>`
+  targets make a macOS app bundle (GLFW, the Vulkan loader and MoltenVK inside, signed ad
+  hoc), a Windows folder with its DLLs, or a Linux folder with `lib/`, each also archived.
+  `cmake --workflow --preset package` packages Geni City and Geni Plains; CI uploads the
+  archives. `FileSystem::GetResourcesFolder` and `FileSystem::IsPackaged`; tests
+  `package_layout` and `package_run`. `GENI_STATIC_RUNTIME` links libstdc++ statically on
+  Linux.
+- **Versioning**: `core/Version.h` (`GENI_VERSION_STRING`, `GENI_VERSION_NUMBER`,
+  `GENI_MAKE_VERSION`, `GENI_DEPRECATED`); CMake reads the version from it.
+- `docs/api-policy.md`: semantic versioning, what is public API, deprecation and changelog
+  rules.
+
+### Changed
+
+- Scene files saved by this version carry the new reflected properties (`orthoSize` and
+  `projection` on cameras, `plane2D` on physics components). Older files load unchanged;
+  the checked-in scenes and `tools/gen_assets.py` were updated so an editor save does not
+  touch every file.
+- `FileSystem::GetCookedFolder` and the default assets folder are `assets/` in the
+  resources folder, which is the executable's folder everywhere except inside a macOS
+  bundle (`Contents/Resources`). In a packaged build the build-time `ASSETS_ROOT` is ignored.
+- macOS: GLFW no longer changes the working directory to `Contents/Resources` when the
+  game runs from a bundle, so relative paths (screenshots, logs, crash reports) are
+  relative to where the game was started.
+- Shader contract: `uFrame.fogColor.w` is the tonemapper (0 ACES, 1 none); it was unused.
+- `FrameStats::drawCalls` counts sprite batches as well as mesh draws.
+
+### Known limits
+
+- Sprites are unlit and do not cast shadows. A lit mesh under an orthographic camera is
+  only roughly clustered.
+- Tilemap colliders are made where the map is when it starts; moving the tilemap object
+  later does not move them.
+- Packages are checked on macOS only so far. Windows and Linux packages are built by CI
+  but have not been run on a clean machine or a Steam Deck.
+
 ## v0.1 (M6: gameplay systems)
 
 The first version meant for other people: the reference game, **Geni City**, is

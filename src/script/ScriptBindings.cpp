@@ -13,7 +13,9 @@
 #include "scene/components/NavAgentComponent.h"
 #include "scene/components/PhysicsComponent.h"
 #include "scene/components/ScriptComponent.h"
+#include "scene/components/SpriteComponent.h"
 #include "scene/components/ThirdPersonCameraComponent.h"
+#include "scene/components/TilemapComponent.h"
 #include "scene/components/VehicleComponent.h"
 #include "script/ScriptSystem.h"
 #include "ui/GameUI.h"
@@ -640,6 +642,76 @@ int CharacterJump(lua_State *L)
 {
     CheckTyped<CharacterControllerComponent>(L, 1)->Jump();
     return 0;
+}
+
+// 2D (docs/design/0017). Sprite and tilemap properties (frame, flipX, color, ...) are
+// reflected and need no functions here.
+int SpriteAnimatorPlay(lua_State *L)
+{
+    auto *animator = CheckTyped<SpriteAnimatorComponent>(L, 1);
+    const int first = static_cast<int>(luaL_checkinteger(L, 2));
+    const int count = static_cast<int>(luaL_checkinteger(L, 3));
+    const float fps = static_cast<float>(luaL_optnumber(L, 4, animator->GetFps()));
+    const bool loop = lua_isnoneornil(L, 5) ? true : lua_toboolean(L, 5) != 0;
+    animator->Play(first, count, fps, loop);
+    return 0;
+}
+
+int SpriteAnimatorStop(lua_State *L)
+{
+    CheckTyped<SpriteAnimatorComponent>(L, 1)->Stop();
+    return 0;
+}
+
+int SpriteAnimatorFinished(lua_State *L)
+{
+    lua_pushboolean(L, CheckTyped<SpriteAnimatorComponent>(L, 1)->IsFinished());
+    return 1;
+}
+
+int TilemapTile(lua_State *L)
+{
+    auto *map = CheckTyped<TilemapComponent>(L, 1);
+    lua_pushinteger(
+        L, map->GetTile(static_cast<int>(luaL_checkinteger(L, 2)), static_cast<int>(luaL_checkinteger(L, 3)))
+    );
+    return 1;
+}
+
+int TilemapSetTile(lua_State *L)
+{
+    auto *map = CheckTyped<TilemapComponent>(L, 1);
+    map->SetTile(
+        static_cast<int>(luaL_checkinteger(L, 2)), static_cast<int>(luaL_checkinteger(L, 3)),
+        static_cast<int>(luaL_checkinteger(L, 4))
+    );
+    return 0;
+}
+
+int TilemapSolid(lua_State *L)
+{
+    auto *map = CheckTyped<TilemapComponent>(L, 1);
+    lua_pushboolean(
+        L, map->IsSolid(static_cast<int>(luaL_checkinteger(L, 2)), static_cast<int>(luaL_checkinteger(L, 3)))
+    );
+    return 1;
+}
+
+// map:cell_at(position) -> column, row (of a world position in scene space).
+int TilemapCellAt(lua_State *L)
+{
+    auto *map = CheckTyped<TilemapComponent>(L, 1);
+    const glm::ivec2 cell = map->WorldToCell(CheckVec3(L, 2));
+    lua_pushinteger(L, cell.x);
+    lua_pushinteger(L, cell.y);
+    return 2;
+}
+
+int TilemapCellCenter(lua_State *L)
+{
+    auto *map = CheckTyped<TilemapComponent>(L, 1);
+    PushVec3(L, map->CellToWorld(static_cast<int>(luaL_checkinteger(L, 2)), static_cast<int>(luaL_checkinteger(L, 3))));
+    return 1;
 }
 
 int CharacterTeleport(lua_State *L)
@@ -1743,6 +1815,18 @@ void Register(lua_State *L, ScriptSystem &system)
     AddMethods(L, "PhysicsComponent", physics);
     const luaL_Reg script[] = {{"instance", ScriptInstance}, {nullptr, nullptr}};
     AddMethods(L, "ScriptComponent", script);
+    const luaL_Reg spriteAnimator[] = {
+        {"play", SpriteAnimatorPlay},
+        {"stop", SpriteAnimatorStop},
+        {"finished", SpriteAnimatorFinished},
+        {nullptr, nullptr}
+    };
+    AddMethods(L, "SpriteAnimatorComponent", spriteAnimator);
+    const luaL_Reg tilemap[] = {
+        {"tile", TilemapTile},      {"set_tile", TilemapSetTile},       {"solid", TilemapSolid},
+        {"cell_at", TilemapCellAt}, {"cell_center", TilemapCellCenter}, {nullptr, nullptr},
+    };
+    AddMethods(L, "TilemapComponent", tilemap);
 
     const luaL_Reg log[] = {{"info", LogInfo}, {"warn", LogWarn}, {"error", LogError}, {nullptr, nullptr}};
     NewLibrary(L, "log", log);

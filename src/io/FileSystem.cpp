@@ -37,6 +37,34 @@ std::filesystem::path FileSystem::GetExecutableFolder() const
 #endif
 }
 
+std::filesystem::path FileSystem::GetResourcesFolder() const
+{
+    if (m_resourcesFolder.empty())
+    {
+        const std::filesystem::path executable = GetExecutableFolder();
+        m_resourcesFolder = executable;
+#if defined(__APPLE__)
+        // <Name>.app/Contents/MacOS/<exe>: data lives in <Name>.app/Contents/Resources.
+        const std::filesystem::path macos = executable.parent_path();
+        if (macos.filename() == "MacOS" && macos.parent_path().filename() == "Contents")
+        {
+            m_resourcesFolder = macos.parent_path() / "Resources";
+        }
+#endif
+    }
+    return m_resourcesFolder;
+}
+
+bool FileSystem::IsPackaged() const
+{
+    if (m_packaged < 0)
+    {
+        std::error_code ec;
+        m_packaged = std::filesystem::exists(GetResourcesFolder() / "geni_package.json", ec) ? 1 : 0;
+    }
+    return m_packaged == 1;
+}
+
 void FileSystem::SetAssetsFolder(const std::filesystem::path &path)
 {
     m_assetsFolderOverride = path;
@@ -49,7 +77,7 @@ void FileSystem::SetCookedFolder(const std::filesystem::path &path)
 
 std::filesystem::path FileSystem::GetCookedFolder() const
 {
-    return m_cookedFolderOverride.empty() ? GetExecutableFolder() / "assets" : m_cookedFolderOverride;
+    return m_cookedFolderOverride.empty() ? GetResourcesFolder() / "assets" : m_cookedFolderOverride;
 }
 
 std::filesystem::path FileSystem::GetAssetsFolder() const
@@ -68,18 +96,19 @@ std::filesystem::path FileSystem::GetAssetsFolder() const
     // that case, which — uncaught — aborts the process on startup. Use the
     // non-throwing overload so a bad/unreachable ASSETS_ROOT simply falls through
     // to the executable-relative assets folder that ships next to the binary.
+    // A packaged game never reads the build host's source folder.
     std::error_code ec;
     auto path = std::filesystem::path(std::string(ASSETS_ROOT));
-    if (std::filesystem::exists(path, ec))
+    if (!IsPackaged() && std::filesystem::exists(path, ec))
     {
         return path;
     }
 #endif
     std::error_code canonEc;
-    auto assets = std::filesystem::weakly_canonical(GetExecutableFolder() / "assets", canonEc);
+    auto assets = std::filesystem::weakly_canonical(GetResourcesFolder() / "assets", canonEc);
     if (canonEc)
     {
-        assets = GetExecutableFolder() / "assets";
+        assets = GetResourcesFolder() / "assets";
     }
     return assets;
 }

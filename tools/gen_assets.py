@@ -580,7 +580,7 @@ def static_box():
     # The collider is a unit box in the object's space; the object's scale sizes it.
     return {"type": "PhysicsComponent", "properties": {
         "bodyType": "static", "colliderType": "box", "size": [1.0, 1.0, 1.0],
-        "radius": 0.0, "height": 0.0, "mass": 0.0, "friction": 0.8}}
+        "radius": 0.0, "height": 0.0, "mass": 0.0, "plane2D": False, "friction": 0.8}}
 
 
 def point_light(color, intensity, light_range):
@@ -681,7 +681,7 @@ def metro_world():
             "color": [1.0, 0.95, 0.85], "innerConeAngle": 0.0, "intensity": 2.2,
             "outerConeAngle": 0.785398, "range": 10.0, "type": "directional"}}]),
         node("Camera", -1, (0.0, 60.0, 180.0), rotation=(-0.13052619, 0.0, 0.0, 0.99144486), components=[
-            {"type": "CameraComponent", "properties": {"far": 2400.0, "fov": 60.0, "near": 0.5}},
+            {"type": "CameraComponent", "properties": {"far": 2400.0, "fov": 60.0, "near": 0.5, "orthoSize": 10.0, "projection": "perspective"}},
             {"type": "FlyCameraComponent", "properties": {"speed": 30.0, "boost": 4.0, "sensitivity": 0.15}}]),
     ]}
     write_scene_text(folder / "persistent.gscene", persistent)
@@ -759,7 +759,7 @@ def tiny_world():
                  "color": [1.0, 1.0, 1.0], "innerConeAngle": 0.0, "intensity": 2.0,
                  "outerConeAngle": 0.785398, "range": 10.0, "type": "directional"}}]),
         node("Camera", -1, (0.0, 10.0, 0.0), components=[
-            {"type": "CameraComponent", "properties": {"far": 500.0, "fov": 60.0, "near": 0.1}}]),
+            {"type": "CameraComponent", "properties": {"far": 500.0, "fov": 60.0, "near": 0.1, "orthoSize": 10.0, "projection": "perspective"}}]),
     ]})
     for z in range(4):
         for x in range(4):

@@ -47,7 +47,12 @@ build/release/samples/city/city --play  # Geni City, the reference game (v0.1)
 build/dev/samples/sandbox/sandbox       # everything the engine can do, in one scene
 build/dev/samples/city/city             # the reference game's first city block (the M2 benchmark)
 build/dev/samples/city/city --world     # its streamed 4 km x 4 km world, flown with a free camera
+build/dev/samples/platformer/platformer # Geni Plains, the 2D sample
 ```
+
+`platformer` is a 2D platformer (docs/design/0017): A/D or the arrow keys move, Space jumps, Shift runs, Esc quits; a gamepad works too. The level, `samples/platformer/assets/scenes/level.gscene`, is a tilemap with collision, crates on 2D physics, animated coins and parallax layers, edited in the editor (`cmake --build build/dev --target edit_platformer`). CTest plays it (`play_platformer`), compares a screenshot, and draws 10,000 sprites against a budget (`benchmark_sprites`).
+
+To make builds you can give to other people, run `cmake --workflow --preset package`: it writes `build/package/packages/GeniCity-<version>-<platform>` and `GeniPlains-…` folders and archives (docs/design/0016).
 
 `city --play` is the game. Walk with W A S D and the mouse (Shift runs, Space jumps), press E next to the red car to drive it (W/S accelerate and brake, A/D steer, Space is the handbrake, H the horn) and E again to get out; Esc opens the menu with volume settings. A gamepad works too (left stick, triggers, A/B/X/Y, Start). Its rules, menus and HUD are Lua in `samples/city/assets/scripts/`; edit them while it runs. `city --play --autopilot` plays itself (walk to the car, drive, get out) and exits non-zero if a step fails; CTest runs it as `play_city`.
 

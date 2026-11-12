@@ -346,6 +346,8 @@ const char *TextureUsageName(TextureUsage usage)
         return "linear";
     case TextureUsage::Normal:
         return "normal";
+    case TextureUsage::Sprite:
+        return "sprite";
     case TextureUsage::Color:
         break;
     }
@@ -360,6 +362,8 @@ bool TextureUsageFromName(const std::string &name, TextureUsage &out)
         out = TextureUsage::Linear;
     else if (name == "normal")
         out = TextureUsage::Normal;
+    else if (name == "sprite")
+        out = TextureUsage::Sprite;
     else
         return false;
     return true;
@@ -431,6 +435,16 @@ bool CookTexture(
     stbi_image_free(decoded);
 
     const TextureUsage usage = settings.usage;
+    if (usage == TextureUsage::Sprite)
+    {
+        std::vector<std::vector<uint8_t>> levels{rgba};
+        std::vector<uint8_t> file;
+        WriteKtx2(Ktx2Format::RGBA8Srgb, static_cast<uint32_t>(width), static_cast<uint32_t>(height), levels, file);
+        out.rgba8 = outputStem + "_rgba8.ktx2";
+        out.bc.clear();
+        out.astc.clear();
+        return WriteRelative(outputRoot, out.rgba8, file, error);
+    }
     std::vector<std::pair<int, int>> sizes;
     const std::vector<std::vector<uint8_t>> rgbaLevels = BuildMipChain(rgba, width, height, usage, sizes);
 

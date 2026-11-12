@@ -30,12 +30,16 @@ Nothing merges without (ROADMAP rule 4):
 2. **Screenshot comparisons** still matching (`ctest -R screenshot`). After an intended
    visual change, regenerate with `GENI_UPDATE_REFERENCES=1 ctest --preset dev -R screenshot`
    and look at every new image before committing it.
-3. **Performance budgets** still met (`benchmark_city`, `benchmark_world`), and the
-   reference game's scripted run passing (`play_city`).
+3. **Performance budgets** still met (`benchmark_city`, `benchmark_world`,
+   `benchmark_sprites`), and the scripted runs passing (`play_city`, `play_platformer`).
 4. **Zero Vulkan validation errors**: the debug tests fail on any.
 
-CI builds and tests every pushed branch on macOS, Windows and Linux
-(`.github/workflows/ci.yml`).
+CI builds and tests every pushed branch on macOS, Windows and Linux, and packages the
+games on each (`.github/workflows/ci.yml`).
+
+A change to a public header, the Lua API or a file format follows the
+[API stability policy](docs/api-policy.md): keep it compatible, or add a **Breaking** or
+**Deprecated** entry under "Unreleased" in `CHANGELOG.md`.
 
 ## Code
 

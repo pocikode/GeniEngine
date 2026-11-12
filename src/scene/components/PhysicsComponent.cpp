@@ -79,6 +79,7 @@ void PhysicsComponent::Init()
             break;
         }
         m_rigidBody = std::make_shared<RigidBody>(m_bodyType, collider, m_mass, m_friction);
+        m_rigidBody->SetPlane2D(m_plane2D);
     }
 
     // Bodies live in world coordinates (docs/design/0008): add the scene's origin, so an
@@ -157,6 +158,7 @@ const bool s_registered = RegisterComponentType<PhysicsComponent>(
         FloatProperty<PhysicsComponent>("height", &PhysicsComponent::GetHeight, &PhysicsComponent::SetHeight),
         FloatProperty<PhysicsComponent>("mass", &PhysicsComponent::GetMass, &PhysicsComponent::SetMass),
         FloatProperty<PhysicsComponent>("friction", &PhysicsComponent::GetFriction, &PhysicsComponent::SetFriction),
+        BoolProperty<PhysicsComponent>("plane2D", &PhysicsComponent::GetPlane2D, &PhysicsComponent::SetPlane2D),
     }
 );
 } // namespace

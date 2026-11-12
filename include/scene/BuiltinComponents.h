@@ -24,6 +24,8 @@ void LinkAnimatorComponent();
 void LinkAudioSourceComponent();
 void LinkNavAgentComponent();
 void LinkScriptComponent();
+void LinkSpriteComponent();
+void LinkTilemapComponent();
 
 inline void RegisterBuiltinComponents()
 {
@@ -43,6 +45,8 @@ inline void RegisterBuiltinComponents()
     LinkAudioSourceComponent();
     LinkNavAgentComponent();
     LinkScriptComponent();
+    LinkSpriteComponent();
+    LinkTilemapComponent();
 }
 
 } // namespace Geni
