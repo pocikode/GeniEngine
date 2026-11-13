@@ -83,6 +83,7 @@ set(SRC_FILES
   src/audio/AudioSystem.cpp
   src/audio/MiniaudioImplementation.c
   src/nav/NavigationSystem.cpp
+  src/nav/NavMeshBuilder.cpp
   src/script/ScriptSystem.cpp
   src/script/ScriptBindings.cpp
   src/ui/GameUI.cpp
