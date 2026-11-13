@@ -328,7 +328,7 @@ Chosen by what users ask for, not planned in detail now:
   docs/design/0018, with night lights), weather (first version done: docs/design/0020),
   mission system
 - Rendering: global illumination, GPU-driven culling, terrain (first version done:
-  docs/design/0022), vegetation, particles (first version done: docs/design/0019,
+  docs/design/0022), vegetation (first version done: docs/design/0023), particles (first version done: docs/design/0019,
   CPU-simulated billboards)
 - 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; lit
   sprites, a Tiled importer and cooker-packed atlases done: docs/design/0021)

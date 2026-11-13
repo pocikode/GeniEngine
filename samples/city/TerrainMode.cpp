@@ -7,6 +7,8 @@
 #include <geni.h>
 
 #include <GLFW/glfw3.h>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -99,6 +101,13 @@ class TerrainApp : public Geni::Application
     void Update(float deltaTime) override
     {
         auto &engine = Geni::Engine::GetInstance();
+        const auto now = std::chrono::steady_clock::now();
+        if (m_frame > kWarmup)
+        {
+            m_totalMs += std::chrono::duration<double, std::milli>(now - m_lastTime).count();
+            ++m_measured;
+        }
+        m_lastTime = now;
         if (engine.GetInputManager().IsKeyPressed(GLFW_KEY_ESCAPE))
         {
             SetNeedsToBeClosed(true);
@@ -123,8 +132,28 @@ class TerrainApp : public Geni::Application
     {
     }
 
+    double MeanFrameMs() const
+    {
+        return m_measured > 0 ? m_totalMs / static_cast<double>(m_measured) : 0.0;
+    }
+    size_t DrawnPlants() const
+    {
+        size_t drawn = 0;
+        if (m_scene)
+        {
+            m_scene->ForEachComponent<Geni::FoliageComponent>([&drawn](Geni::FoliageComponent &foliage) {
+                drawn += foliage.GetDrawnInstances();
+            });
+        }
+        return drawn;
+    }
+
   private:
+    static constexpr long kWarmup = 10;
     TerrainOptions m_options;
+    double m_totalMs = 0.0;
+    long m_measured = 0;
+    std::chrono::steady_clock::time_point m_lastTime = std::chrono::steady_clock::now();
     Geni::Scene *m_scene = nullptr;
     long m_frame = 0;
 };
@@ -172,11 +201,15 @@ int ParseTerrainOptions(int argc, char **argv, TerrainOptions &options)
         {
             options.screenshotPath = argv[++i];
         }
+        else if (std::strcmp(arg, "--budget-ms") == 0 && hasValue)
+        {
+            options.budgetMs = std::strtod(argv[++i], nullptr);
+        }
         else
         {
             GENI_LOG_ERROR(
                 "Unknown argument '%s'. Usage: city --terrain [FILE] [--time HOURS] [--weather rain|snow|fog] "
-                "[--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]",
+                "[--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE] [--budget-ms MS]",
                 arg
             );
             return 2;
@@ -192,9 +225,9 @@ int RunTerrain(const TerrainOptions &options)
     config.width = options.width;
     config.height = options.height;
     config.visible = !options.hidden;
-    config.vsync = !options.hidden;
+    config.vsync = !options.hidden && options.budgetMs <= 0.0;
     config.debugOverlay = !options.hidden;
-    if (options.hidden)
+    if (options.hidden && options.budgetMs <= 0.0)
     {
         config.deterministicFrameTime = 1.0f / 60.0f;
     }
@@ -207,11 +240,25 @@ int RunTerrain(const TerrainOptions &options)
         return 1;
     }
     engine.Run();
+    const double meanMs = app->MeanFrameMs();
+    const size_t plants = app->DrawnPlants();
+    const Geni::RenderStats stats = engine.GetRenderer().GetRenderStats();
     engine.Destroy();
     if (const auto errors = Geni::rhi::GetValidationErrorCount())
     {
         GENI_LOG_ERROR("%llu Vulkan validation errors", static_cast<unsigned long long>(errors));
         return 3;
+    }
+    if (options.budgetMs > 0.0)
+    {
+        std::printf(
+            "terrain: %.2f ms/frame (%.1f fps), %zu plants drawn, %u draw calls; budget %.2f ms\n", meanMs,
+            meanMs > 0.0 ? 1000.0 / meanMs : 0.0, plants, stats.mainDraws, options.budgetMs
+        );
+        if (meanMs > options.budgetMs)
+        {
+            return 4;
+        }
     }
     return 0;
 }

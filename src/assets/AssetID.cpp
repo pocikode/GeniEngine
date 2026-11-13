@@ -32,6 +32,8 @@ const char *AssetTypeName(AssetType type)
         return "atlas";
     case AssetType::Heightfield:
         return "heightfield";
+    case AssetType::Foliage:
+        return "foliage";
     case AssetType::Unknown:
         break;
     }
@@ -62,6 +64,8 @@ AssetType AssetTypeFromName(std::string_view name)
         return AssetType::Atlas;
     if (name == "heightfield")
         return AssetType::Heightfield;
+    if (name == "foliage")
+        return AssetType::Foliage;
     return AssetType::Unknown;
 }
 

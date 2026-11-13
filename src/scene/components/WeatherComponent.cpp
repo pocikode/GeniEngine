@@ -45,26 +45,14 @@ float Wrap(float value, float low, float span)
     return low + t;
 }
 
-// The camera's position (scene space) and right/up axes this frame: the editor's view
-// when it overrides the scene's camera, else the main camera.
+// The camera's position (scene space) and right/up axes this frame.
 bool FindView(glm::vec3 &position, glm::vec3 &right, glm::vec3 &up)
 {
-    Engine &engine = Engine::GetInstance();
-    if (engine.HasViewOverride())
-    {
-        const glm::mat4 cameraWorld = glm::inverse(engine.GetViewOverride().viewMatrix);
-        position = engine.GetViewOverride().position;
-        right = glm::normalize(glm::vec3(cameraWorld[0]));
-        up = glm::normalize(glm::vec3(cameraWorld[1]));
-        return true;
-    }
-    Scene *scene = engine.GetScene();
-    GameObject *camera = scene ? scene->GetMainCamera() : nullptr;
-    if (!camera)
+    glm::mat4 world(1.0f);
+    if (!Engine::GetInstance().GetActiveView(world))
     {
         return false;
     }
-    const glm::mat4 world = camera->GetWorldTransform();
     position = glm::vec3(world[3]);
     right = glm::normalize(glm::vec3(world[0]));
     up = glm::normalize(glm::vec3(world[1]));

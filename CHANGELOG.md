@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Vegetation** (docs/design/0023): `.gterrain` scatter rules (prefab, density, slope and
+  height limits, scale range, seed, draw distance) cook into `foliage` assets
+  (`world/Foliage.h`); `FoliageComponent` draws every instance of a prefab's meshes
+  without objects, skipping 32 m cells beyond its draw distance, through the renderer's
+  normal culling, instancing and shadows (`SetInstances`, `AddPart` for run-time use).
+  `Engine::GetActiveView`. Geni City's hills have a pine forest; `benchmark_terrain`.
 - **Terrain** (docs/design/0022): a `.gterrain` (8- or 16-bit heightmap PNG, size, height,
   chunks, grass/rock/snow colours) cooks into chunk meshes whose LODs keep their borders
   (no cracks), a `builtin:terrain` material, a `heightfield` asset and a scene.

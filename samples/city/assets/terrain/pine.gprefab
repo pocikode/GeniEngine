@@ -1,0 +1,10 @@
+{
+  "format": "geni.prefab",
+  "version": 1,
+  "mainCamera": -1,
+  "nodes": [
+    {"name":"Pine","parent":-1,"position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0],"active":true,"components":[]},
+    {"name":"Trunk","parent":0,"position":[0.0,2.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[0.44999998807907104,4.0,0.44999998807907104],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"f031851fb20d7d2e","mesh":"e49518a787d139c6"}}]},
+    {"name":"Crown","parent":0,"position":[0.0,6.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[3.5999999046325684,7.5,3.5999999046325684],"active":true,"components":[{"type":"MeshComponent","properties":{"material":"ab9fd8f786c18a9d","mesh":"ff2c3c377fadeedf"}}]}
+  ]
+}

@@ -6,6 +6,7 @@
 #include "core/Log.h"
 #include "render/SpriteAtlas.h"
 #include "scene/components/AnimationComponent.h"
+#include "world/Foliage.h"
 #include "world/Heightfield.h"
 #include "world/WorldFormat.h"
 
@@ -65,6 +66,13 @@ class HeightfieldAsset : public Asset
 {
   public:
     HeightfieldData heights;
+};
+
+// Placed plant instances (docs/design/0023).
+class FoliageAsset : public Asset
+{
+  public:
+    std::vector<FoliageInstance> instances;
 };
 
 struct AssetLoadStats
@@ -134,6 +142,7 @@ class AssetManager
     AssetHandle<WorldAsset> LoadWorld(AssetID id, bool async = false);
     AssetHandle<AtlasAsset> LoadAtlas(AssetID id, bool async = false);
     AssetHandle<HeightfieldAsset> LoadHeightfield(AssetID id, bool async = false);
+    AssetHandle<FoliageAsset> LoadFoliage(AssetID id, bool async = false);
 
     // The file of a cooked asset of `type`, for systems that read raw cooked data (a
     // world's navigation tiles); empty when the manifest has no such asset.
@@ -204,6 +213,10 @@ class AssetManager
     );
     void FinishWorld(
         const std::shared_ptr<Detail::AssetSlot<WorldAsset>> &slot, WorldDescription &world, const std::string &source
+    );
+    void FinishFoliage(
+        const std::shared_ptr<Detail::AssetSlot<FoliageAsset>> &slot, std::vector<FoliageInstance> &instances,
+        const std::string &source
     );
     void FinishHeightfield(
         const std::shared_ptr<Detail::AssetSlot<HeightfieldAsset>> &slot, HeightfieldData &heights,

@@ -693,6 +693,24 @@ void Engine::ClearViewOverride()
     m_hasViewOverride = false;
 }
 
+bool Engine::GetActiveView(glm::mat4 &cameraWorld)
+{
+    if (m_hasViewOverride)
+    {
+        cameraWorld = glm::inverse(m_viewOverride.viewMatrix);
+        cameraWorld[3] = glm::vec4(m_viewOverride.position, 1.0f);
+        return true;
+    }
+    Scene *scene = GetScene();
+    GameObject *camera = scene ? scene->GetMainCamera() : nullptr;
+    if (!camera)
+    {
+        return false;
+    }
+    cameraWorld = camera->GetWorldTransform();
+    return true;
+}
+
 void Engine::SetFallbackSun(const LightData &sun)
 {
     m_fallbackSun = sun;

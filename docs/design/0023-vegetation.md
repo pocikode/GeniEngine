@@ -1,6 +1,6 @@
 # 0023: Vegetation
 
-Milestone: After v0.1 (rendering) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (rendering) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
@@ -50,5 +50,6 @@ screenshot test covers it and a benchmark keeps it inside the frame budget.
 
 ## To verify
 
-- CPU cost of submitting ~20,000 commands per frame. Default: draw distance 350 m and
-  cell culling; measured by `benchmark_terrain`.
+- CPU cost of submitting tens of thousands of commands per frame. The city view draws 535
+  pines (two parts each) in 62 draw calls at 8.3 ms per frame (Apple M4, release,
+  1280x720); denser forests should be measured before raising the draw distance.

@@ -8,6 +8,7 @@
 #include "Cooker.h"
 #include "Ktx2Writer.h"
 #include "MeshProcessing.h"
+#include "TerrainCooker.h"
 #include "TextureCooker.h"
 #include "TiledImporter.h"
 #include "assets/CookedFormats.h"
@@ -724,5 +725,56 @@ TEST_SUITE("cooker")
         );
         CHECK(error.find("maps/missing.tsj") != std::string::npos);
         CHECK(Geni::cook::FormatTileList({5, 1, 2, 3, 9, 2}) == "1-3,5,9");
+    }
+
+    TEST_CASE("scatter rules place plants by density, slope and height, the same way every time")
+    {
+        // 128 m square: flat at 0 m on the left half, a 45-degree slope on the right.
+        Geni::HeightfieldData grid;
+        grid.samples = 129;
+        grid.cellSize = 1.0f;
+        grid.heights.resize(129 * 129);
+        for (uint32_t z = 0; z < 129; ++z)
+        {
+            for (uint32_t x = 0; x < 129; ++x)
+            {
+                grid.heights[z * 129 + x] = x < 64 ? 0.0f : static_cast<float>(x - 64);
+            }
+        }
+        Geni::cook::TerrainSource source;
+        source.height = 64.0f;
+        Geni::cook::ScatterRule rule;
+        rule.density = 0.01f; // one per 100 m^2
+        rule.maxSlope = 20.0f;
+        rule.scaleMin = 0.5f;
+        rule.scaleMax = 2.0f;
+        const auto instances = Geni::cook::ScatterFoliage(grid, source, rule);
+        // About half the area is flat: 128 * 64 / 100 = 82 candidates.
+        CHECK(instances.size() > 60);
+        CHECK(instances.size() < 100);
+        for (const auto &i : instances)
+        {
+            CHECK(i.position.x <= 64.5f);
+            CHECK(i.position.y == doctest::Approx(0.0f));
+            CHECK(i.scale >= 0.5f);
+            CHECK(i.scale <= 2.0f);
+        }
+        const auto again = Geni::cook::ScatterFoliage(grid, source, rule);
+        REQUIRE(again.size() == instances.size());
+        CHECK(again.front().position == instances.front().position);
+
+        rule.maxSlope = 60.0f;
+        rule.minHeight = 0.5f; // above 32 m: only the upper part of the slope
+        for (const auto &i : Geni::cook::ScatterFoliage(grid, source, rule))
+        {
+            CHECK(i.position.y >= 32.0f - 1e-3f);
+        }
+
+        std::vector<uint8_t> bytes;
+        Geni::WriteFoliage(instances, bytes);
+        std::vector<Geni::FoliageInstance> read;
+        REQUIRE(Geni::ReadFoliage(bytes, read));
+        CHECK(read.size() == instances.size());
+        CHECK(read.back().yaw == instances.back().yaw);
     }
 }

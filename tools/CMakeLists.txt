@@ -50,6 +50,7 @@ add_library(geni_cook STATIC
   ${PROJECT_SOURCE_DIR}/src/world/WorldFormat.cpp
   ${PROJECT_SOURCE_DIR}/src/nav/NavMeshBuilder.cpp
   ${PROJECT_SOURCE_DIR}/src/world/Heightfield.cpp
+  ${PROJECT_SOURCE_DIR}/src/world/Foliage.cpp
   asset_cooker/Ktx2Writer.cpp
   asset_cooker/TextureCooker.cpp
   ${PROJECT_SOURCE_DIR}/src/assets/AssetID.cpp

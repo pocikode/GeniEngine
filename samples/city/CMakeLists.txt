@@ -48,6 +48,13 @@ set_tests_properties(play_city PROPERTIES LABELS "gpu;game" TIMEOUT 2000)
 
 # Screenshot comparison: the instanced, cascaded, tonemapped path must look the same
 # every run (see tests/run_screenshot.cmake).
+# The terrain view with its forest (docs/design/0022, 0023). Loose by default for software
+# Vulkan; -DGENI_TERRAIN_BUDGET_MS=16.6 on real hardware.
+set(GENI_TERRAIN_BUDGET_MS 2000 CACHE STRING "Frame-time budget for the terrain view benchmark, in milliseconds")
+add_test(NAME benchmark_terrain
+         COMMAND city --terrain --frames 120 --hidden --width 640 --height 360 --budget-ms ${GENI_TERRAIN_BUDGET_MS})
+set_tests_properties(benchmark_terrain PROPERTIES LABELS "gpu;perf" TIMEOUT 300)
+
 if(GENI_BUILD_TESTS)
   add_test(NAME screenshot_city
            COMMAND ${CMAKE_COMMAND}

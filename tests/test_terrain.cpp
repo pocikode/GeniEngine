@@ -8,9 +8,14 @@
 #include "core/Engine.h"
 #include "io/FileSystem.h"
 #include "physics/PhysicsManager.h"
+#include "render/RenderQueue.h"
+#include "render/Renderer.h"
+#include "rhi/Device.h"
 #include "scene/BuiltinComponents.h"
 #include "scene/GameObject.h"
 #include "scene/Scene.h"
+#include "scene/components/CameraComponent.h"
+#include "scene/components/FoliageComponent.h"
 #include "scene/components/TerrainComponent.h"
 #include "world/Heightfield.h"
 
@@ -156,5 +161,69 @@ TEST_SUITE("terrain")
             scene.Clear();
         }
         physics.Shutdown();
+    }
+}
+
+TEST_SUITE("gpu terrain")
+{
+    TEST_CASE("foliage draws every part of every instance in range and skips far cells")
+    {
+        auto &app = GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        auto &assets = engine.GetAssetManager();
+        auto *scene = GeniTest::ResetScene();
+        app.sceneToUpdate = scene;
+
+        // Any cooked mesh and material of the test assets will do as a plant.
+        assets.FindBySource(Geni::AssetType::Scene, "models/lod_sphere.gltf"); // reads the manifest
+        Geni::AssetID meshID;
+        Geni::AssetID materialID;
+        for (const auto &entry : assets.GetManifest().GetEntries())
+        {
+            if (!meshID.IsValid() && entry.type == Geni::AssetType::Mesh &&
+                entry.source.find("lod_sphere") != std::string::npos)
+            {
+                meshID = entry.id;
+            }
+            if (!materialID.IsValid() && entry.type == Geni::AssetType::Material &&
+                entry.source.find("lod_sphere") != std::string::npos)
+            {
+                materialID = entry.id;
+            }
+        }
+        REQUIRE(meshID.IsValid());
+        REQUIRE(materialID.IsValid());
+
+        auto *camera = scene->CreateObject("camera");
+        camera->SetPosition(glm::vec3(0.0f, 2.0f, 10.0f));
+        camera->AddComponent(new Geni::CameraComponent());
+        scene->SetMainCamera(camera);
+
+        auto *foliage = new Geni::FoliageComponent();
+        scene->CreateObject("Plants")->AddComponent(foliage);
+        foliage->AddPart(assets.LoadMesh(meshID), assets.LoadMaterial(materialID), glm::mat4(1.0f));
+        foliage->AddPart(
+            assets.LoadMesh(meshID), assets.LoadMaterial(materialID),
+            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.0f, 0.0f))
+        );
+        foliage->SetDrawDistance(100.0f);
+        foliage->SetInstances({
+            {glm::vec3(-3.0f, 0.0f, 0.0f), 0.0f, 1.0f},
+            {glm::vec3(0.0f, 0.0f, 0.0f), 1.0f, 1.0f},
+            {glm::vec3(3.0f, 0.0f, 0.0f), 2.0f, 1.5f},
+            {glm::vec3(900.0f, 0.0f, 0.0f), 0.0f, 1.0f}, // far beyond the draw distance
+        });
+        assets.WaitForAll();
+
+        const auto errorsBefore = Geni::rhi::GetValidationErrorCount();
+        engine.GetRenderQueue().Clear();
+        CHECK(engine.Tick());
+        CHECK(foliage->GetDrawnInstances() == 3);
+        const Geni::RenderStats &stats = engine.GetRenderer().GetRenderStats();
+        CHECK(stats.submitted >= 6); // two parts each
+        CHECK(Geni::rhi::GetValidationErrorCount() == errorsBefore);
+
+        app.sceneToUpdate = nullptr;
+        GeniTest::ResetScene();
     }
 }

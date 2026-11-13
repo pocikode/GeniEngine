@@ -72,6 +72,8 @@
 #include "scene/components/ParticleEmitterComponent.h"
 #include "scene/components/WeatherComponent.h"
 #include "scene/components/TerrainComponent.h"
+#include "scene/components/FoliageComponent.h"
+#include "world/Foliage.h"
 #include "world/Heightfield.h"
 #include "render/Weather.h"
 #include "render/SpriteAtlas.h"

@@ -64,6 +64,27 @@ bool ParseTerrainSource(const nlohmann::json &document, TerrainSource &out, std:
         out.grass = ReadColor(colors, "grass", out.grass);
         out.rock = ReadColor(colors, "rock", out.rock);
         out.snow = ReadColor(colors, "snow", out.snow);
+        for (const auto &item : document.value("scatter", nlohmann::json::array()))
+        {
+            ScatterRule rule;
+            rule.prefab = item.at("prefab").get<std::string>();
+            rule.density = item.value("density", rule.density);
+            rule.maxSlope = item.value("maxSlope", rule.maxSlope);
+            rule.minHeight = item.value("minHeight", rule.minHeight);
+            rule.maxHeight = item.value("maxHeight", rule.maxHeight);
+            if (item.contains("scale"))
+            {
+                rule.scaleMin = item.at("scale").at(0).get<float>();
+                rule.scaleMax = item.at("scale").at(1).get<float>();
+            }
+            rule.seed = item.value("seed", rule.seed);
+            rule.drawDistance = item.value("drawDistance", rule.drawDistance);
+            if (!(rule.density > 0.0f) || rule.density > 1.0f)
+            {
+                return Fail(error, "scatter density must be in (0, 1] per square metre");
+            }
+            out.scatter.push_back(rule);
+        }
     }
     catch (const std::exception &e)
     {
@@ -141,6 +162,41 @@ bool BuildTerrainGrid(
         }
     }
     return true;
+}
+
+std::vector<FoliageInstance> ScatterFoliage(
+    const HeightfieldData &grid, const TerrainSource &source, const ScatterRule &rule
+)
+{
+    std::vector<FoliageInstance> instances;
+    uint32_t state = rule.seed ? rule.seed * 2654435761u : 0x9E3779B9u;
+    auto random = [&state]() {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return static_cast<float>(state >> 8) * (1.0f / 16777216.0f);
+    };
+    const float spacing = 1.0f / std::sqrt(rule.density);
+    const float extent = grid.Extent();
+    const float cosSlope = std::cos(glm::radians(rule.maxSlope));
+    for (float z = 0.5f * spacing; z < extent; z += spacing)
+    {
+        for (float x = 0.5f * spacing; x < extent; x += spacing)
+        {
+            const float px = glm::clamp(x + (random() - 0.5f) * spacing, 0.0f, extent);
+            const float pz = glm::clamp(z + (random() - 0.5f) * spacing, 0.0f, extent);
+            const float yaw = random() * 6.2831853f;
+            const float scale = glm::mix(rule.scaleMin, rule.scaleMax, random());
+            const float h = grid.HeightAt(px, pz);
+            const float relative = source.height > 0.0f ? h / source.height : 0.0f;
+            if (grid.NormalAt(px, pz).y < cosSlope || relative < rule.minHeight || relative > rule.maxHeight)
+            {
+                continue;
+            }
+            instances.push_back({glm::vec3(px, h, pz), yaw, scale});
+        }
+    }
+    return instances;
 }
 
 cooked::CookedMeshData BuildTerrainChunk(
