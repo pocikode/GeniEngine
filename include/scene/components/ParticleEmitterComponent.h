@@ -309,6 +309,15 @@ class ParticleEmitterComponent : public Component
     {
         m_filter = filter;
     }
+    // Lit by the scene's lights (docs/design/0021); off: colours exactly as painted.
+    bool GetLit() const
+    {
+        return m_lit;
+    }
+    void SetLit(bool lit)
+    {
+        m_lit = lit;
+    }
     int GetLayer() const
     {
         return m_layer;
@@ -375,6 +384,7 @@ class ParticleEmitterComponent : public Component
     SpriteBlend m_blend = SpriteBlend::Alpha;
     SpriteFilter m_filter = SpriteFilter::Linear;
     int m_layer = 0;
+    bool m_lit = false;
     bool m_worldSpace = true;
 
     // Runtime state.

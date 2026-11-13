@@ -131,6 +131,7 @@ void SpriteComponent::Update(float deltaTime)
     command.boundsCenter = glm::vec3((m_quad.min + m_quad.max) * 0.5f, 0.0f);
     command.boundsRadius = 0.5f * glm::length(m_size);
     command.layer = m_layer;
+    command.lit = m_lit;
     Engine::GetInstance().GetRenderQueue().SubmitSprites(command);
 }
 
@@ -225,6 +226,7 @@ const bool s_spriteRegistered = RegisterComponentType<SpriteComponent>(
         BoolProperty<SpriteComponent>("flipY", &SpriteComponent::GetFlipY, &SpriteComponent::SetFlipY),
         BoolProperty<SpriteComponent>("visible", &SpriteComponent::IsVisible, &SpriteComponent::SetVisible),
         IntProperty<SpriteComponent>("layer", &SpriteComponent::GetLayer, &SpriteComponent::SetLayer),
+        BoolProperty<SpriteComponent>("lit", &SpriteComponent::GetLit, &SpriteComponent::SetLit),
         EnumProperty<SpriteComponent, SpriteFilter>(
             "filter", &SpriteComponent::GetFilter, &SpriteComponent::SetFilter,
             {{SpriteFilter::Linear, "linear"}, {SpriteFilter::Nearest, "nearest"}}

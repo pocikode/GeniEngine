@@ -66,6 +66,9 @@ struct SpriteCommand
     // Each quad faces the camera at its `center` instead of lying in the object's XY plane
     // (particles). Alpha-blended billboard quads are sorted back to front.
     bool billboard = false;
+    // Lit by the sun, ambient and clustered lights as a flat surface (docs/design/0021);
+    // unlit sprites show their colours exactly.
+    bool lit = false;
 };
 
 // sRGB (as painted) to linear, per channel; alpha unchanged.

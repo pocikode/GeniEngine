@@ -131,6 +131,15 @@ class SpriteComponent : public Component
     {
         m_flipY = flip;
     }
+    // Lit by the scene's lights (docs/design/0021); off: colours exactly as painted.
+    bool GetLit() const
+    {
+        return m_lit;
+    }
+    void SetLit(bool lit)
+    {
+        m_lit = lit;
+    }
     int GetLayer() const
     {
         return m_layer;
@@ -182,6 +191,7 @@ class SpriteComponent : public Component
     bool m_flipY = false;
     bool m_visible = true;
     int m_layer = 0;
+    bool m_lit = false;
     SpriteFilter m_filter = SpriteFilter::Linear;
     SpriteQuad m_quad;
 };

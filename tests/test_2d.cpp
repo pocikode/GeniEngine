@@ -19,6 +19,7 @@
 #include "scene/Scene.h"
 #include "scene/SceneSerializer.h"
 #include "scene/components/CameraComponent.h"
+#include "scene/components/LightComponent.h"
 #include "scene/components/PhysicsComponent.h"
 #include "scene/components/SpriteComponent.h"
 #include "scene/components/TilemapComponent.h"
@@ -527,6 +528,81 @@ TEST_SUITE("gpu 2d")
         const glm::ivec3 shaded = image.At(cx - quarter, cy);
         CHECK(shaded.x > 130);
         CHECK(shaded.x < 160);
+
+        renderer.SetTonemapper(before.tonemapper);
+        renderer.SetExposure(before.exposure);
+        renderer.SetBackground(before.sky, before.clearColor);
+        app.sceneToUpdate = nullptr;
+        GeniTest::ResetScene();
+    }
+
+    TEST_CASE("lit sprites take the scene's lights; unlit ones keep their colours")
+    {
+        auto &app = GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        auto &renderer = engine.GetRenderer();
+        auto *scene = GeniTest::ResetScene();
+        app.sceneToUpdate = scene;
+        const Geni::RendererConfig before = renderer.GetConfig();
+        renderer.SetTonemapper(Geni::Tonemapper::None);
+        renderer.SetExposure(1.0f);
+        renderer.SetBackground(false, glm::vec3(0.0f));
+
+        auto *camera = scene->CreateObject("camera");
+        camera->SetPosition(glm::vec3(0.0f, 0.0f, 10.0f));
+        auto *cameraComponent = new Geni::CameraComponent();
+        cameraComponent->SetProjection(Geni::CameraProjection::Orthographic);
+        cameraComponent->SetOrthoSize(4.0f);
+        camera->AddComponent(cameraComponent);
+        scene->SetMainCamera(camera);
+
+        // Three grey squares: lit near a lamp (left), lit far from it (middle), unlit (right).
+        const float xs[3] = {-2.0f, 0.0f, 2.0f};
+        for (int i = 0; i < 3; ++i)
+        {
+            auto *object = scene->CreateObject("square" + std::to_string(i));
+            object->SetPosition(glm::vec3(xs[i], 0.0f, 0.0f));
+            auto *sprite = new Geni::SpriteComponent();
+            sprite->SetColor(glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+            sprite->SetLit(i < 2);
+            object->AddComponent(sprite);
+        }
+        auto *lamp = scene->CreateObject("lamp");
+        lamp->SetPosition(glm::vec3(-2.0f, 0.0f, 0.5f));
+        auto *light = new Geni::LightComponent();
+        light->SetIntensity(3.0f);
+        light->SetRange(1.5f);
+        lamp->AddComponent(light);
+
+        const auto path = std::filesystem::temp_directory_path() / "geni_test_lit_sprites.ppm";
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        const bool overlayVisible = engine.GetDebugOverlay().IsVisible();
+        engine.GetDebugOverlay().SetVisible(false);
+        const auto errorsBefore = Geni::rhi::GetValidationErrorCount();
+        // No ambient: only the lamp lights the lit squares.
+        Geni::Atmosphere dark;
+        dark.ambientIntensity = 0.0f;
+        renderer.SetAtmosphereOverride(dark);
+        engine.GetRenderQueue().Clear();
+        engine.RequestScreenshot(path.string());
+        CHECK(engine.Tick());
+        engine.GetDebugOverlay().SetVisible(overlayVisible);
+        CHECK(Geni::rhi::GetValidationErrorCount() == errorsBefore);
+        // Lit and unlit squares cannot share a batch.
+        CHECK(renderer.GetRenderStats().spriteBatches == 2);
+
+        Image image;
+        REQUIRE(ReadPpm(path, image));
+        std::filesystem::remove(path, ec);
+        const int cy = image.height / 2;
+        const int unit = image.height / 4;
+        const glm::ivec3 nearLamp = image.At(image.width / 2 - 2 * unit, cy);
+        const glm::ivec3 farFromLamp = image.At(image.width / 2, cy);
+        const glm::ivec3 unlit = image.At(image.width / 2 + 2 * unit, cy);
+        CHECK(nearLamp.x > 40);
+        CHECK(farFromLamp.x < 5);
+        CHECK(NearColor(unlit, glm::ivec3(128, 128, 128), 2));
 
         renderer.SetTonemapper(before.tonemapper);
         renderer.SetExposure(before.exposure);

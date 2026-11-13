@@ -452,6 +452,7 @@ void TilemapComponent::Update(float deltaTime)
     command.filter = m_filter;
     command.modelMatrix = m_owner->GetWorldTransform();
     command.layer = m_layer;
+    command.lit = m_lit;
     auto &queue = Engine::GetInstance().GetRenderQueue();
     for (const auto &chunk : m_chunks)
     {
@@ -484,6 +485,7 @@ const bool s_registered = RegisterComponentType<TilemapComponent>(
         StringProperty<TilemapComponent>("tiles", &TilemapComponent::GetTilesText, &TilemapComponent::SetTilesText),
         Vec4Property<TilemapComponent>("color", &TilemapComponent::GetColor, &TilemapComponent::SetColor),
         IntProperty<TilemapComponent>("layer", &TilemapComponent::GetLayer, &TilemapComponent::SetLayer),
+        BoolProperty<TilemapComponent>("lit", &TilemapComponent::GetLit, &TilemapComponent::SetLit),
         EnumProperty<TilemapComponent, SpriteFilter>(
             "filter", &TilemapComponent::GetFilter, &TilemapComponent::SetFilter,
             {{SpriteFilter::Linear, "linear"}, {SpriteFilter::Nearest, "nearest"}}
