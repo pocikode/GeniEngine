@@ -25,6 +25,7 @@
 #include "io/FileSystem.h"
 #include "io/FileWatcher.h"
 #include "nav/NavigationSystem.h"
+#include "nav/NavMeshBuilder.h"
 #include "physics/CharacterController.h"
 #include "physics/Collider.h"
 #include "physics/PhysicsManager.h"

@@ -132,6 +132,16 @@ const AssetManifestEntry *AssetManager::FindEntry(AssetID id)
     return m_manifest.Find(id);
 }
 
+std::filesystem::path AssetManager::FindCookedFile(AssetID id, AssetType type)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    if (!entry || entry->type != type)
+    {
+        return {};
+    }
+    return Resolve(entry->path);
+}
+
 AssetID AssetManager::FindBySource(AssetType type, const std::string &source)
 {
     FindEntry(AssetID{}); // loads the manifest on first use

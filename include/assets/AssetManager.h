@@ -117,6 +117,10 @@ class AssetManager
     AssetHandle<SceneAsset> LoadPrefab(AssetID id, bool async = false);
     AssetHandle<WorldAsset> LoadWorld(AssetID id, bool async = false);
 
+    // The file of a cooked asset of `type`, for systems that read raw cooked data (a
+    // world's navigation tiles); empty when the manifest has no such asset.
+    std::filesystem::path FindCookedFile(AssetID id, AssetType type);
+
     // Makes a scene or prefab file usable before the next cook lists it: `sourcePath` is
     // relative to the assets folder. Returns the ID the cooker will give the file. The
     // registration survives ReloadManifest.

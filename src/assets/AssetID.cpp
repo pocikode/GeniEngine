@@ -24,6 +24,8 @@ const char *AssetTypeName(AssetType type)
         return "prefab";
     case AssetType::World:
         return "world";
+    case AssetType::NavTile:
+        return "navtile";
     case AssetType::Unknown:
         break;
     }
@@ -46,6 +48,8 @@ AssetType AssetTypeFromName(std::string_view name)
         return AssetType::Prefab;
     if (name == "world")
         return AssetType::World;
+    if (name == "navtile")
+        return AssetType::NavTile;
     return AssetType::Unknown;
 }
 

@@ -23,7 +23,8 @@
 //
 // Cooked, listed in the manifest as a `world` asset: the same grid plus, per cell with
 // content, its scene and HLOD scene IDs, how many objects it creates (prefabs expanded),
-// its height range, the prefabs it uses and the GPU bytes of its HLOD meshes.
+// its height range, the prefabs it uses, the GPU bytes of its HLOD meshes and its cooked
+// navigation tile (with the settings key the tiles were built for).
 namespace Geni
 {
 
@@ -54,6 +55,9 @@ struct WorldCellInfo
     float maxY = 0.0f;
     uint64_t hlodBytes = 0;
     std::vector<AssetID> prefabs;
+    // The cell's navigation tile, built by the cooker (invalid: nothing walkable, or not
+    // cooked; the runtime then builds it when the cell loads).
+    AssetID nav;
 };
 
 struct WorldDescription
@@ -64,6 +68,8 @@ struct WorldDescription
     int cellsX = 1;
     int cellsZ = 1;
     AssetID persistent;
+    // NavMeshSettings::BuildKey of the settings the cells' nav tiles were cooked with.
+    uint64_t navKey = 0;
     // Only cells with content; sorted by (z, x).
     std::vector<WorldCellInfo> cells;
 

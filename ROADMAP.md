@@ -245,8 +245,8 @@ scripted play-through, a screenshot, an editor session and a 10,000-sprite bench
 (8.6 ms per frame, release, 1280×720). All 27 CTest tests pass locally on macOS. CI is
 green on macOS, Windows and Linux and all of this is merged to `main` (2026-11-12).
 Not done: Windows and Linux packages run on a clean machine, anything on Windows hardware
-or the Steam Deck, outside users, per-platform audio compression and cooked navigation
-tiles.
+or the Steam Deck, outside users and per-platform audio compression. Navigation tiles are
+cooked since 2026-11-13.
 
 Before this work: v0.1 passed all 21 CTest tests locally on macOS and Linux, but CI has
 never run green, nothing has been verified on Windows, the M0–M6 work is still on
@@ -287,7 +287,7 @@ Turn v0.1 into something other people can ship a desktop game with.
   bundle, Windows folder or installer, Linux/Steam Deck build) with cooked assets
   (done on macOS; Windows and Linux built by CI, not yet run on a clean machine)
 - Per-platform audio compression and navigation tiles cooked instead of built at load
-  (from the M6 known limits)
+  (from the M6 known limits; navigation tiles done 2026-11-13: docs/design/0014)
 - API stability policy: semantic versioning, what counts as public API, a deprecation
   rule, and `CHANGELOG.md` kept per release (done: `docs/api-policy.md`)
 - 2D: sprites, sprite animation, tilemaps, orthographic cameras and 2D physics, with a 2D

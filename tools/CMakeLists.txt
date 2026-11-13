@@ -44,6 +44,7 @@ add_library(geni_cook STATIC
   asset_cooker/MeshProcessing.cpp
   asset_cooker/WorldCooker.cpp
   ${PROJECT_SOURCE_DIR}/src/world/WorldFormat.cpp
+  ${PROJECT_SOURCE_DIR}/src/nav/NavMeshBuilder.cpp
   asset_cooker/Ktx2Writer.cpp
   asset_cooker/TextureCooker.cpp
   ${PROJECT_SOURCE_DIR}/src/assets/AssetID.cpp
@@ -70,7 +71,8 @@ if(NOT MSVC)
     ${PROJECT_SOURCE_DIR}/thirdparty/bc7enc_rdo/rgbcx.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-strict-aliasing;-w")
 endif()
-target_link_libraries(geni_cook PRIVATE astcenc-${GENI_ASTCENC_ISA}-static meshoptimizer)
+# geni_recast: navigation tiles cooked per world cell (docs/design/0014).
+target_link_libraries(geni_cook PRIVATE astcenc-${GENI_ASTCENC_ISA}-static meshoptimizer geni_recast Threads::Threads)
 target_include_directories(geni_cook PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
 add_executable(geni_asset_cooker asset_cooker/main.cpp)

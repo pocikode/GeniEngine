@@ -58,7 +58,7 @@ class PlayApp : public Geni::Application
         }
         m_scene = engine.GetScene();
         // One navigation tile per loaded cell, built on workers as cells stream in.
-        engine.GetNavigation().AttachToWorld(engine.GetWorldStreamer(), *m_scene);
+        engine.GetNavigation().AttachToWorld(engine.GetWorldStreamer(), *m_scene, &engine.GetAssetManager());
 
         // The loading screen: the cells around the start, their collision and their
         // navigation tiles.

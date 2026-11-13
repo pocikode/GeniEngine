@@ -3,6 +3,7 @@
 #include "TestEngine.h"
 #include "assets/AssetManager.h"
 #include "core/Engine.h"
+#include "nav/NavigationSystem.h"
 #include "physics/Collider.h"
 #include "physics/RigidBody.h"
 #include "render/Material.h"
@@ -23,6 +24,32 @@ using GeniTest::Near;
 
 TEST_SUITE("world format")
 {
+    TEST_CASE("a cooked world keeps its navigation tiles and their settings key")
+    {
+        Geni::WorldDescription world;
+        world.cellSize = 32.0f;
+        world.cellsX = 2;
+        world.cellsZ = 2;
+        world.navKey = 0x1234abcd5678ef00ull;
+        Geni::WorldCellInfo cell;
+        cell.x = 1;
+        cell.z = 0;
+        cell.nav = Geni::AssetID::FromName("navtile:test:1_0");
+        world.cells.push_back(cell);
+        Geni::WorldDescription again;
+        REQUIRE(Geni::ParseCookedWorld(nlohmann::json::parse(Geni::CookedWorldToJson(world).dump()), again));
+        CHECK(again.navKey == world.navKey);
+        REQUIRE(again.FindCell(1, 0));
+        CHECK(again.FindCell(1, 0)->nav == cell.nav);
+        // Settings that change a tile change the key; the crowd's size does not.
+        Geni::NavMeshSettings a;
+        Geni::NavMeshSettings b;
+        b.maxAgents = 12;
+        CHECK(a.BuildKey() == b.BuildKey());
+        b.cellSize = 0.25f;
+        CHECK(a.BuildKey() != b.BuildKey());
+    }
+
     TEST_CASE("a source world is parsed with its defaults and its grid is checked")
     {
         Geni::WorldSource world;
@@ -370,6 +397,57 @@ TEST_SUITE("gpu world")
         CHECK(Geni::rhi::GetValidationErrorCount() == errorsBefore);
         engine.GetRenderQueue().Clear();
         GeniTest::ResetScene();
+    }
+
+    TEST_CASE("navigation tiles are read from the cook, or built when the settings differ")
+    {
+        auto &app = GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        auto &assets = engine.GetAssetManager();
+        GeniTest::ResetScene();
+
+        // The cooked description lists a tile per cell with colliders, for the default settings.
+        const Geni::AssetID worldID = assets.FindBySource(Geni::AssetType::World, "worlds/tiny/tiny.gworld");
+        auto world = assets.LoadWorld(worldID);
+        REQUIRE(world.IsReady());
+        const Geni::WorldCellInfo *cookedCell = world->description.FindCell(1, 1);
+        REQUIRE(cookedCell);
+        CHECK(cookedCell->nav.IsValid());
+        CHECK(!assets.FindCookedFile(cookedCell->nav, Geni::AssetType::NavTile).empty());
+        CHECK(assets.FindCookedFile(cookedCell->nav, Geni::AssetType::Mesh).empty());
+
+        auto run = [&](const Geni::NavMeshSettings &settings) {
+            std::string error;
+            REQUIRE_MESSAGE(engine.OpenWorld(std::string("worlds/tiny/tiny.gworld"), &error), error);
+            app.sceneToUpdate = engine.GetScene();
+            Geni::NavigationSystem navigation;
+            REQUIRE(navigation.Init(settings));
+            REQUIRE(navigation.AttachToWorld(engine.GetWorldStreamer(), *engine.GetScene(), &assets));
+            for (int i = 0; i < 400 && engine.GetWorldStreamer().GetCellState(1, 1) != Geni::CellState::Loaded; ++i)
+            {
+                engine.Tick();
+            }
+            navigation.FinishBuilds();
+            navigation.Update(0.0f);
+            CHECK(navigation.HasTile(1, 1));
+            const Geni::NavStats stats = navigation.GetStats();
+            navigation.DetachFromWorld();
+            engine.CloseWorld();
+            app.sceneToUpdate = nullptr;
+            GeniTest::ResetScene();
+            return stats;
+        };
+
+        const Geni::NavStats cooked = run(Geni::NavMeshSettings{});
+        CHECK(cooked.tilesLoaded > 0);
+        CHECK(cooked.tilesBuilt == 0);
+
+        Geni::NavMeshSettings wider;
+        wider.agentRadius = 0.6f;
+        const Geni::NavStats built = run(wider);
+        CHECK(built.tilesLoaded == 0);
+        CHECK(built.tilesBuilt > 0);
+        engine.GetRenderQueue().Clear();
     }
 
     TEST_CASE("the engine opens a world by path and streams it every frame")

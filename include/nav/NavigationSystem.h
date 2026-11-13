@@ -1,5 +1,7 @@
 #pragma once
 
+#include "nav/NavMeshBuilder.h"
+
 #include <cstdint>
 #include <glm/ext/vector_double3.hpp>
 #include <glm/mat4x4.hpp>
@@ -11,62 +13,11 @@
 namespace Geni
 {
 
+class AssetManager;
 class GameObject;
 class JobSystem;
 class Scene;
 class WorldStreamer;
-
-// Recast build settings and the tile grid (docs/design/0014). Distances in metres.
-struct NavMeshSettings
-{
-    float cellSize = 0.3f;
-    float cellHeight = 0.2f;
-    float agentRadius = 0.4f;
-    float agentHeight = 1.8f;
-    float agentClimb = 0.4f;
-    float agentMaxSlope = 45.0f;
-    float regionMinSize = 8.0f;
-    float regionMergeSize = 20.0f;
-    float edgeMaxLength = 12.0f;
-    float edgeMaxError = 1.3f;
-    float detailSampleDistance = 6.0f;
-    float detailSampleMaxError = 1.0f;
-    // Tiles are squares of this size, starting at `origin` (a streamed world's cells).
-    float tileSize = 64.0f;
-    glm::dvec3 origin{0.0};
-    // Tiles held at once and polygons per tile: Detour packs both into 22 bits.
-    int maxTiles = 256;
-    int maxPolysPerTile = 16384;
-    int maxAgents = 256;
-};
-
-// Triangles in world coordinates: what the navigation mesh is built from.
-struct NavGeometry
-{
-    std::vector<float> vertices; // x, y, z
-    std::vector<int> triangles;  // three vertex indices each
-    glm::vec3 boundsMin{1e30f};
-    glm::vec3 boundsMax{-1e30f};
-
-    // A unit box (-0.5..0.5) transformed by `transform` (world space, scale included).
-    void AddBox(const glm::mat4 &transform);
-    void AddTriangle(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c);
-    bool Empty() const
-    {
-        return triangles.empty();
-    }
-    // The static colliders under `root` (PhysicsComponent), as boxes, in world space.
-    void AddColliders(GameObject &root);
-};
-
-class NavMeshBuilder
-{
-  public:
-    // Builds one tile's Detour data from geometry (any thread, no shared state). Empty
-    // when the tile has nothing walkable.
-    static std::vector<uint8_t> BuildTile(const NavGeometry &geometry, const NavMeshSettings &settings, int tileX,
-                                          int tileZ, std::string *error = nullptr);
-};
 
 struct NavAgentParams
 {
@@ -92,6 +43,8 @@ struct NavStats
     uint32_t tiles = 0;
     uint32_t tilesBuilding = 0;
     uint64_t tilesBuilt = 0;
+    // Tiles read from the cook instead of built (docs/design/0014).
+    uint64_t tilesLoaded = 0;
     uint32_t agents = 0;
     double lastBuildMs = 0.0;
     double peakBuildMs = 0.0;
@@ -138,8 +91,12 @@ class NavigationSystem
     // tools and tests; streamed worlds use AttachToWorld.
     bool BuildForScene(Scene &scene);
     // Follows a streamed world: Init with the world's grid, then one tile per loaded
-    // cell, built when the cell loads and dropped when it unloads.
-    bool AttachToWorld(WorldStreamer &streamer, Scene &scene);
+    // cell, added when the cell loads and dropped when it unloads. With `assets`, a cell's
+    // cooked tile is read on a worker when the world was cooked with the same settings
+    // (NavMeshSettings::BuildKey); otherwise the tile is built from the cell's colliders.
+    bool AttachToWorld(WorldStreamer &streamer, Scene &scene, AssetManager *assets = nullptr);
+    // Reads a cooked tile on the job system (or now without one); Update adds it.
+    void LoadTileAsync(int tileX, int tileZ, std::string path);
     void DetachFromWorld();
     // Waits for tile builds in flight and adds them (tests, loading screens).
     void FinishBuilds();

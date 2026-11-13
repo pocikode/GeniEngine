@@ -107,6 +107,7 @@ bool ParseCookedWorld(const nlohmann::json &document, WorldDescription &out, std
         out.cellsX = document.at("cellsX").get<int>();
         out.cellsZ = document.at("cellsZ").get<int>();
         out.persistent = AssetID::FromHex(document.value("persistent", std::string()));
+        out.navKey = AssetID::FromHex(document.value("navKey", std::string())).value;
         if (!CheckGrid(out.cellSize, out.cellsX, out.cellsZ, error))
         {
             return false;
@@ -128,6 +129,7 @@ bool ParseCookedWorld(const nlohmann::json &document, WorldDescription &out, std
             cell.minY = item.value("minY", 0.0f);
             cell.maxY = item.value("maxY", 0.0f);
             cell.hlodBytes = item.value("hlodBytes", uint64_t(0));
+            cell.nav = AssetID::FromHex(item.value("nav", std::string()));
             if (item.contains("prefabs"))
             {
                 for (const auto &prefab : item.at("prefabs"))
@@ -169,6 +171,7 @@ nlohmann::ordered_json CookedWorldToJson(const WorldDescription &world)
     document["cellsX"] = world.cellsX;
     document["cellsZ"] = world.cellsZ;
     document["persistent"] = world.persistent.IsValid() ? world.persistent.ToHex() : std::string();
+    document["navKey"] = world.navKey ? AssetID{world.navKey}.ToHex() : std::string();
     nlohmann::ordered_json cells = nlohmann::ordered_json::array();
     for (const auto &cell : world.cells)
     {
@@ -187,6 +190,7 @@ nlohmann::ordered_json CookedWorldToJson(const WorldDescription &world)
             prefabs.push_back(prefab.ToHex());
         }
         item["prefabs"] = std::move(prefabs);
+        item["nav"] = cell.nav.IsValid() ? cell.nav.ToHex() : std::string();
         cells.push_back(std::move(item));
     }
     document["cells"] = std::move(cells);
