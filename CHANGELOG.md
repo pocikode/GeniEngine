@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Cooked navigation tiles**: the asset cooker builds each world cell's Detour tile
+  (asset type `navtile`, `WorldCellInfo::nav`, `WorldDescription::navKey`) and
+  `NavigationSystem::AttachToWorld(streamer, scene, assets)` reads it instead of building
+  it when the settings match (`NavMeshSettings::BuildKey`); `NavStats::tilesLoaded`,
+  `AssetManager::FindCookedFile`. The builder moved to `nav/NavMeshBuilder.h`. Geni City
+  loads its 256 cooked tiles.
 - **Weather** (docs/design/0020): `WeatherComponent` (targets `cloudCover`, `fog`,
   `precipitation`, `snow`, `wind`, eased over `transitionSeconds`) greys the sky, dims the
   sun, thickens the fog and draws rain or snow in a box that wraps around the camera.

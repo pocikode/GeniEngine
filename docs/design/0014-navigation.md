@@ -1,6 +1,6 @@
 # 0014: Navigation meshes and AI agents
 
-Milestone: M6 · Status: Done · Last updated: 2026-11-11
+Milestone: M6 · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
@@ -46,11 +46,25 @@ behaviour). It can write its speed to an animator parameter so walk cycles match
 the fixed steps and before `Application::Update`, so components read this frame's
 positions; it is skipped while physics is paused.
 
+## Cooked tiles (added 2026-11-13, M7)
+
+Building at load cost every player the same Recast work on every cell. The tile builder
+now lives in `nav/NavMeshBuilder.{h,cpp}` with no engine dependency and is compiled into
+the cooker too. `WorldCooker` gathers each cell's static colliders from the scene files
+(prefabs expanded, inactive objects included, exactly as `NavGeometry::AddColliders`
+gathers them at run time), builds the tiles on every core with the default
+`NavMeshSettings` on the world's grid, and writes `nav/cell_<x>_<z>.gnav` (raw Detour tile
+data) as `navtile` assets. The cooked world lists each cell's tile and `navKey`, the
+`NavMeshSettings::BuildKey` hash of the settings used. `AttachToWorld(streamer, scene,
+assets)` reads a cell's cooked tile on a worker when the keys match, and builds from the
+colliders as before when they do not (a game with other agent settings) or when no asset
+manager is given. A world edited in the editor is re-cooked on save, so tiles stay in step
+with the cells.
+
 ## Rejected
 
-- **Cooking navigation tiles offline.** The right end state for large handmade worlds, and
-  `BuildTile` is written so the cooker can call it later; but the world is still edited one
-  region at a time (0007), and building at load keeps every edit consistent with no cook.
+- **Building at load only** (the first version). Simple and always consistent with the
+  scene, but every player paid for it; kept as the fallback.
 - **Render geometry as input.** Thousands more triangles than the colliders, with
   details (windows, trees' crowns) that do not affect walking.
 - **DetourTileCache with obstacles.** Needed for doors and parked cars that move; nothing

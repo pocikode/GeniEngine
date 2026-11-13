@@ -1,5 +1,7 @@
 #include "nav/NavigationSystem.h"
 
+#include "assets/AssetManager.h"
+#include "assets/CookedFormats.h"
 #include "core/JobSystem.h"
 #include "core/Log.h"
 #include "core/Profiler.h"
@@ -109,6 +111,8 @@ struct NavigationSystem::Impl
             uint32_t generation;
             std::vector<uint8_t> data;
             double ms;
+            // Read from the cook rather than built.
+            bool loaded = false;
         };
         std::vector<Result> done;
         std::atomic<int> inFlight{0};
@@ -348,6 +352,38 @@ void NavigationSystem::BuildTileAsync(int tileX, int tileZ, NavGeometry geometry
     }
 }
 
+void NavigationSystem::LoadTileAsync(int tileX, int tileZ, std::string path)
+{
+    if (!m_impl)
+    {
+        return;
+    }
+    const uint32_t generation = ++m_impl->tileGeneration[{tileX, tileZ}];
+    std::shared_ptr<Impl::Shared> shared = m_impl->shared;
+    auto load = [shared, tileX, tileZ, generation, path = std::move(path)]() {
+        const auto start = std::chrono::steady_clock::now();
+        std::vector<uint8_t> data;
+        if (!cooked::ReadFile(path, data))
+        {
+            GENI_LOG_ERROR("navigation: cannot read the cooked tile %s", path.c_str());
+            data.clear();
+        }
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        shared->done.push_back({tileX, tileZ, generation, std::move(data), ms, true});
+        shared->inFlight.fetch_sub(1);
+    };
+    shared->inFlight.fetch_add(1);
+    if (m_impl->jobs)
+    {
+        m_impl->jobsInFlight.push_back(m_impl->jobs->Schedule(std::move(load), "NavigationSystem::LoadTile"));
+    }
+    else
+    {
+        load();
+    }
+}
+
 void NavigationSystem::FinishBuilds()
 {
     if (!m_impl)
@@ -411,7 +447,7 @@ bool NavigationSystem::BuildForScene(Scene &scene)
     return any;
 }
 
-bool NavigationSystem::AttachToWorld(WorldStreamer &streamer, Scene &scene)
+bool NavigationSystem::AttachToWorld(WorldStreamer &streamer, Scene &scene, AssetManager *assets)
 {
     (void)scene;
     const WorldDescription *world = streamer.GetDescription();
@@ -427,7 +463,13 @@ bool NavigationSystem::AttachToWorld(WorldStreamer &streamer, Scene &scene)
         return false;
     }
     m_impl->streamer = &streamer;
-    auto onCell = [this](int x, int z, GameObject *root, bool loaded) {
+    // Cooked tiles are only valid for the settings they were built with.
+    const bool cookedUsable = assets && world->navKey != 0 && world->navKey == m_settings.BuildKey();
+    if (assets && world->navKey != 0 && !cookedUsable)
+    {
+        GENI_LOG_INFO("navigation: the world's tiles were cooked with other settings; building them at load");
+    }
+    auto onCell = [this, world, assets, cookedUsable](int x, int z, GameObject *root, bool loaded) {
         if (!m_impl)
         {
             return;
@@ -436,6 +478,23 @@ bool NavigationSystem::AttachToWorld(WorldStreamer &streamer, Scene &scene)
         {
             RemoveTile(x, z);
             return;
+        }
+        if (cookedUsable)
+        {
+            const WorldCellInfo *cell = world->FindCell(x, z);
+            if (cell && cell->nav.IsValid())
+            {
+                const std::filesystem::path path = assets->FindCookedFile(cell->nav, AssetType::NavTile);
+                if (!path.empty())
+                {
+                    LoadTileAsync(x, z, path.string());
+                    return;
+                }
+            }
+            else if (cell)
+            {
+                return; // cooked as having nothing walkable
+            }
         }
         if (!root)
         {
@@ -694,9 +753,16 @@ void NavigationSystem::Update(float deltaTime)
     }
     for (auto &result : done)
     {
-        m_stats.lastBuildMs = result.ms;
-        m_stats.peakBuildMs = std::max(m_stats.peakBuildMs, result.ms);
-        ++m_stats.tilesBuilt;
+        if (result.loaded)
+        {
+            ++m_stats.tilesLoaded;
+        }
+        else
+        {
+            m_stats.lastBuildMs = result.ms;
+            m_stats.peakBuildMs = std::max(m_stats.peakBuildMs, result.ms);
+            ++m_stats.tilesBuilt;
+        }
         // Dropped if the tile was unloaded (or rebuilt) since the build started.
         if (m_impl->tileGeneration[{result.x, result.z}] == result.generation && !result.data.empty())
         {

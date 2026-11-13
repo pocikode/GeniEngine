@@ -2,9 +2,11 @@
 
 #include "MeshProcessing.h"
 #include "assets/CookedFormats.h"
+#include "nav/NavMeshBuilder.h"
 #include "world/WorldFormat.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <exception>
 #include <fstream>
@@ -15,6 +17,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -67,7 +70,35 @@ struct CellContents
     uint32_t nodes = 0;
     std::set<uint64_t> prefabs;
     std::vector<PlacedMesh> meshes;
+    // Static colliders as unit-box transforms (scale and collider size included), relative
+    // to the cell corner: what NavGeometry::AddColliders gathers at run time.
+    std::vector<glm::mat4> colliders;
 };
+
+// A static PhysicsComponent's box, as NavGeometry::AddColliders sizes it.
+bool StaticColliderBox(const Json &properties, glm::vec3 &size)
+{
+    if (properties.value("bodyType", std::string("static")) != "static")
+    {
+        return false;
+    }
+    const std::string type = properties.value("colliderType", std::string("box"));
+    const float radius = properties.value("radius", 0.5f);
+    const float height = properties.value("height", 1.0f);
+    if (type == "sphere")
+    {
+        size = glm::vec3(2.0f * radius);
+    }
+    else if (type == "capsule")
+    {
+        size = glm::vec3(2.0f * radius, height + 2.0f * radius, 2.0f * radius);
+    }
+    else
+    {
+        size = ReadVec3(properties, "size", glm::vec3(1.0f));
+    }
+    return true;
+}
 
 // Walks a scene or prefab document the way SceneSerializer instantiates it: node 0 of a
 // prefab is the instance itself, prefab instances expand recursively, inactive subtrees
@@ -126,13 +157,21 @@ class CellWalker
             }
 
             const auto components = node.find("components");
-            if (components == node.end() || !components->is_array() || !enabled[i])
+            if (components == node.end() || !components->is_array())
             {
                 continue;
             }
             for (const auto &component : *components)
             {
-                if (component.value("type", std::string()) != "MeshComponent")
+                // Navigation counts colliders on inactive objects too, as the runtime does
+                // (a cell's root is inactive while it loads).
+                glm::vec3 size(1.0f);
+                if (component.value("type", std::string()) == "PhysicsComponent" &&
+                    StaticColliderBox(component.value("properties", Json::object()), size))
+                {
+                    out.colliders.push_back(world[i] * glm::scale(glm::mat4(1.0f), size));
+                }
+                if (component.value("type", std::string()) != "MeshComponent" || !enabled[i])
                 {
                     continue;
                 }
@@ -387,6 +426,21 @@ bool CookWorld(WorldCookHost &host, const std::string &relative)
         return &data;
     };
 
+    // Navigation tiles with the engine's default settings on this world's grid; built in
+    // parallel after the walk, then written in cell order.
+    NavMeshSettings navSettings;
+    navSettings.origin = source.origin;
+    navSettings.tileSize = source.cellSize;
+    description.navKey = navSettings.BuildKey();
+    struct NavJob
+    {
+        size_t cell = 0;
+        NavGeometry geometry;
+        std::vector<uint8_t> tile;
+        std::string error;
+    };
+    std::vector<NavJob> navJobs;
+
     CellWalker walker(host);
     for (int z = 0; z < source.cellsZ; ++z)
     {
@@ -424,6 +478,20 @@ bool CookWorld(WorldCookHost &host, const std::string &relative)
             for (uint64_t prefab : contents.prefabs)
             {
                 cell.prefabs.push_back(AssetID{prefab});
+            }
+            if (!contents.colliders.empty())
+            {
+                NavJob job;
+                job.cell = description.cells.size();
+                const glm::dvec3 corner =
+                    source.origin + glm::dvec3(x * double(source.cellSize), 0.0, z * double(source.cellSize));
+                for (const glm::mat4 &box : contents.colliders)
+                {
+                    glm::mat4 world = box;
+                    world[3] = glm::vec4(glm::vec3(glm::dvec3(box[3]) + corner), 1.0f);
+                    job.geometry.AddBox(world);
+                }
+                navJobs.push_back(std::move(job));
             }
 
             // HLOD: everything big enough, merged per material and vertex layout.
@@ -552,6 +620,55 @@ bool CookWorld(WorldCookHost &host, const std::string &relative)
             }
             description.cells.push_back(std::move(cell));
         }
+    }
+
+    // Build the navigation tiles on every core; each build is independent.
+    {
+        std::atomic<size_t> next{0};
+        auto worker = [&]() {
+            for (size_t i = next++; i < navJobs.size(); i = next++)
+            {
+                NavJob &job = navJobs[i];
+                const WorldCellInfo &cell = description.cells[job.cell];
+                job.tile = NavMeshBuilder::BuildTile(job.geometry, navSettings, cell.x, cell.z, &job.error);
+                job.geometry = NavGeometry{}; // free it early
+            }
+        };
+        const unsigned threads = std::max(1u, std::min(std::thread::hardware_concurrency(), 16u));
+        std::vector<std::thread> pool;
+        for (unsigned t = 1; t < threads; ++t)
+        {
+            pool.emplace_back(worker);
+        }
+        worker();
+        for (auto &thread : pool)
+        {
+            thread.join();
+        }
+    }
+    for (NavJob &job : navJobs)
+    {
+        WorldCellInfo &cell = description.cells[job.cell];
+        if (job.tile.empty())
+        {
+            continue; // nothing walkable in this cell
+        }
+        const std::string cellKey = std::to_string(cell.x) + "_" + std::to_string(cell.z);
+        const std::string navPath = outputFolder + "/nav/cell_" + cellKey + ".gnav";
+        if (!cooked::WriteFile(host.OutputRoot() / navPath, job.tile))
+        {
+            return host.Fail("cannot write " + navPath);
+        }
+        WorldCookAsset navAsset;
+        navAsset.id = AssetID::FromName("navtile:" + worldRoot + ":" + cellKey);
+        navAsset.type = AssetType::NavTile;
+        navAsset.source = Normalize(relative) + "#nav" + cellKey;
+        navAsset.path = navPath;
+        if (!host.AddAsset(navAsset))
+        {
+            return false;
+        }
+        cell.nav = navAsset.id;
     }
 
     const std::string worldPath = outputFolder + ".gworld.json";

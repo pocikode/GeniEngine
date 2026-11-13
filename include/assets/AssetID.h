@@ -19,7 +19,9 @@ enum class AssetType
     // A .gprefab: a scene-format subtree that scenes instantiate (docs/design/0006).
     Prefab,
     // A cooked .gworld: the cell table of a streamed world (docs/design/0007).
-    World
+    World,
+    // A world cell's Detour navigation tile, cooked offline (docs/design/0014).
+    NavTile
 };
 
 const char *AssetTypeName(AssetType type);

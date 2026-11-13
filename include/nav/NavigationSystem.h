@@ -13,6 +13,7 @@
 namespace Geni
 {
 
+class AssetManager;
 class GameObject;
 class JobSystem;
 class Scene;
@@ -42,6 +43,8 @@ struct NavStats
     uint32_t tiles = 0;
     uint32_t tilesBuilding = 0;
     uint64_t tilesBuilt = 0;
+    // Tiles read from the cook instead of built (docs/design/0014).
+    uint64_t tilesLoaded = 0;
     uint32_t agents = 0;
     double lastBuildMs = 0.0;
     double peakBuildMs = 0.0;
@@ -88,8 +91,12 @@ class NavigationSystem
     // tools and tests; streamed worlds use AttachToWorld.
     bool BuildForScene(Scene &scene);
     // Follows a streamed world: Init with the world's grid, then one tile per loaded
-    // cell, built when the cell loads and dropped when it unloads.
-    bool AttachToWorld(WorldStreamer &streamer, Scene &scene);
+    // cell, added when the cell loads and dropped when it unloads. With `assets`, a cell's
+    // cooked tile is read on a worker when the world was cooked with the same settings
+    // (NavMeshSettings::BuildKey); otherwise the tile is built from the cell's colliders.
+    bool AttachToWorld(WorldStreamer &streamer, Scene &scene, AssetManager *assets = nullptr);
+    // Reads a cooked tile on the job system (or now without one); Update adds it.
+    void LoadTileAsync(int tileX, int tileZ, std::string path);
     void DetachFromWorld();
     // Waits for tile builds in flight and adds them (tests, loading screens).
     void FinishBuilds();
