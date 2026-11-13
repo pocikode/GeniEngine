@@ -6,10 +6,12 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <memory>
+#include <string>
 
 namespace Geni
 {
 
+class AtlasAsset;
 class Texture;
 
 // A textured rectangle in the object's XY plane (docs/design/0017). The texture can be
@@ -38,6 +40,27 @@ class SpriteComponent : public Component
     }
     // Changing the ID drops the loaded texture; ResolveAssets loads the new one.
     void SetTextureID(AssetID id);
+
+    // A packed atlas (docs/design/0021). With an atlas and a region name, the sprite shows
+    // that region of the atlas's texture (and columns/rows/frame cut the region); the
+    // `texture` property is then not used.
+    AssetID GetAtlasID() const
+    {
+        return m_atlasID;
+    }
+    // Changing the ID drops the loaded atlas; ResolveAssets loads the new one.
+    void SetAtlasID(AssetID id);
+    void SetAtlas(const AssetHandle<AtlasAsset> &atlas, const AssetHandle<Texture> &texture);
+    std::string GetRegion() const
+    {
+        return m_region;
+    }
+    void SetRegion(const std::string &region)
+    {
+        m_region = region;
+    }
+    // True when an atlas is set and loaded and has the region.
+    bool HasAtlasRegion() const;
 
     // Size in world units, and the point of the rectangle at the object's origin
     // ((0, 0) bottom-left, (0.5, 0.5) centre, (0.5, 0) bottom middle).
@@ -145,6 +168,10 @@ class SpriteComponent : public Component
     AssetHandle<Texture> m_textureHandle;
     std::shared_ptr<Texture> m_texture;
     AssetID m_textureID;
+    AssetHandle<AtlasAsset> m_atlasHandle;
+    AssetHandle<Texture> m_atlasTexture;
+    AssetID m_atlasID;
+    std::string m_region;
     glm::vec2 m_size{1.0f};
     glm::vec2 m_pivot{0.5f};
     glm::vec4 m_color{1.0f};

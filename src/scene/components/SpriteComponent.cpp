@@ -12,6 +12,10 @@ namespace Geni
 
 Texture *SpriteComponent::GetTexture() const
 {
+    if (m_atlasID.IsValid())
+    {
+        return m_atlasTexture.IsValid() ? m_atlasTexture.Get() : nullptr;
+    }
     // The handle first: after a hot reload its slot holds the new texture.
     return m_textureHandle.IsValid() ? m_textureHandle.Get() : m_texture.get();
 }
@@ -40,6 +44,30 @@ void SpriteComponent::SetTextureID(AssetID id)
     m_textureID = id;
 }
 
+void SpriteComponent::SetAtlasID(AssetID id)
+{
+    if (id != m_atlasID)
+    {
+        m_atlasHandle.Reset();
+        m_atlasTexture.Reset();
+    }
+    m_atlasID = id;
+}
+
+void SpriteComponent::SetAtlas(const AssetHandle<AtlasAsset> &atlas, const AssetHandle<Texture> &texture)
+{
+    m_atlasHandle = atlas;
+    m_atlasTexture = texture;
+    m_atlasID = atlas.GetID();
+}
+
+bool SpriteComponent::HasAtlasRegion() const
+{
+    glm::vec2 a;
+    glm::vec2 b;
+    return m_atlasHandle.IsReady() && m_atlasHandle->atlas.FindRegion(m_region, a, b);
+}
+
 void SpriteComponent::SetFrame(int frame)
 {
     const int count = GetFrameCount();
@@ -52,9 +80,19 @@ void SpriteComponent::BuildQuad()
     m_quad.min = -m_pivot * m_size;
     m_quad.max = m_quad.min + m_size;
 
+    // The whole texture, or the atlas region; columns and rows cut it into frames.
+    glm::vec2 regionTopLeft(0.0f);
+    glm::vec2 regionBottomRight(1.0f);
+    if (m_atlasID.IsValid() && m_atlasHandle.IsReady())
+    {
+        m_atlasHandle->atlas.FindRegion(m_region, regionTopLeft, regionBottomRight);
+    }
+    const glm::vec2 regionSize = regionBottomRight - regionTopLeft;
     const int frame = m_frame % GetFrameCount();
-    const glm::vec2 cell(1.0f / static_cast<float>(m_columns), 1.0f / static_cast<float>(m_rows));
-    glm::vec2 topLeft(static_cast<float>(frame % m_columns) * cell.x, static_cast<float>(frame / m_columns) * cell.y);
+    const glm::vec2 cell = regionSize / glm::vec2(static_cast<float>(m_columns), static_cast<float>(m_rows));
+    glm::vec2 topLeft =
+        regionTopLeft +
+        glm::vec2(static_cast<float>(frame % m_columns) * cell.x, static_cast<float>(frame / m_columns) * cell.y);
     glm::vec2 bottomRight = topLeft + cell;
     if (m_flipX)
     {
@@ -77,8 +115,8 @@ void SpriteComponent::Update(float deltaTime)
         return;
     }
     Texture *texture = GetTexture();
-    // A texture that is still loading draws nothing (not a white box).
-    if (!texture && (m_textureID.IsValid() || m_textureHandle.IsValid()))
+    // A texture (or atlas) that is still loading draws nothing (not a white box).
+    if (!texture && (m_textureID.IsValid() || m_textureHandle.IsValid() || m_atlasID.IsValid()))
     {
         return;
     }
@@ -98,7 +136,21 @@ void SpriteComponent::Update(float deltaTime)
 
 void SpriteComponent::ResolveAssets(SerializationContext &context)
 {
-    if (context.assets && m_textureID.IsValid() && !m_textureHandle.IsValid())
+    if (!context.assets)
+    {
+        return;
+    }
+    if (m_atlasID.IsValid() && !m_atlasHandle.IsValid())
+    {
+        // The atlas is a few hundred bytes of JSON: read it now; its texture streams in.
+        const AssetHandle<AtlasAsset> atlas = context.assets->LoadAtlas(m_atlasID, false);
+        if (atlas.IsReady())
+        {
+            m_atlasHandle = atlas;
+            m_atlasTexture = context.assets->LoadTexture(atlas->atlas.texture, true);
+        }
+    }
+    else if (!m_atlasID.IsValid() && m_textureID.IsValid() && !m_textureHandle.IsValid())
     {
         SetTexture(context.assets->LoadTexture(m_textureID, true));
     }
@@ -159,6 +211,10 @@ const bool s_spriteRegistered = RegisterComponentType<SpriteComponent>(
         AssetIDProperty<SpriteComponent>(
             "texture", AssetType::Texture, &SpriteComponent::GetTextureID, &SpriteComponent::SetTextureID
         ),
+        AssetIDProperty<SpriteComponent>(
+            "atlas", AssetType::Atlas, &SpriteComponent::GetAtlasID, &SpriteComponent::SetAtlasID
+        ),
+        StringProperty<SpriteComponent>("region", &SpriteComponent::GetRegion, &SpriteComponent::SetRegion),
         Vec2Property<SpriteComponent>("size", &SpriteComponent::GetSize, &SpriteComponent::SetSize),
         Vec2Property<SpriteComponent>("pivot", &SpriteComponent::GetPivot, &SpriteComponent::SetPivot),
         Vec4Property<SpriteComponent>("color", &SpriteComponent::GetColor, &SpriteComponent::SetColor),

@@ -98,6 +98,7 @@ set(SRC_FILES
   src/render/Shader.cpp
   src/render/TimeOfDay.cpp
   src/render/Weather.cpp
+  src/render/SpriteAtlas.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp

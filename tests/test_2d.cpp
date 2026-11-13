@@ -4,8 +4,10 @@
 #include "TestEngine.h"
 #include "TestImage.h"
 
+#include "assets/AssetManager.h"
 #include "core/Engine.h"
 #include "graphics/Texture.h"
+#include "io/FileSystem.h"
 #include "physics/PhysicsManager.h"
 #include "physics/RigidBody.h"
 #include "render/RenderQueue.h"
@@ -100,6 +102,39 @@ TEST_SUITE("2d")
         CHECK(Near(sprite->GetQuad().color.r, 0.214f, 1e-3f));
         CHECK(Near(sprite->GetQuad().color.g, 1.0f));
         CHECK(Near(sprite->GetQuad().color.a, 0.25f));
+    }
+
+    TEST_CASE("a sprite shows its atlas region, cut into frames")
+    {
+        Geni::FileSystem files;
+        files.SetAssetsFolder(GENI_TEST_ASSETS_DIR);
+        Geni::AssetManager assets;
+        assets.Init(&files, nullptr, nullptr);
+        const Geni::AssetID atlasID = assets.FindBySource(Geni::AssetType::Atlas, "textures/test.gatlas");
+        REQUIRE(atlasID.IsValid());
+        auto atlas = assets.LoadAtlas(atlasID);
+        REQUIRE(atlas.IsReady());
+        // checker.png is 16 x 16 with 1 pixel of padding in a 64 x 64 atlas.
+        CHECK(atlas->atlas.width == 64);
+        REQUIRE(atlas->atlas.regions.count("checker") == 1);
+        CHECK(atlas->atlas.regions.at("checker") == glm::ivec4(1, 1, 16, 16));
+
+        Geni::SpriteComponent sprite;
+        sprite.SetAtlasID(atlasID);
+        sprite.SetRegion("checker");
+        Geni::SerializationContext context;
+        context.assets = &assets;
+        sprite.ResolveAssets(context);
+        CHECK(sprite.HasAtlasRegion());
+        sprite.SetColumns(2);
+        sprite.SetFrame(1);
+        sprite.BuildQuad();
+        CHECK(Near2(sprite.GetQuad().uvTopLeft, glm::vec2(9.0f, 1.0f) / 64.0f));
+        CHECK(Near2(sprite.GetQuad().uvBottomRight, glm::vec2(17.0f, 17.0f) / 64.0f));
+
+        sprite.SetRegion("missing");
+        CHECK_FALSE(sprite.HasAtlasRegion());
+        assets.Shutdown();
     }
 
     TEST_CASE("sprites submit one command each, with world bounds and their layer")

@@ -42,6 +42,12 @@ bool DecodeWorld(const std::vector<uint8_t> &bytes, WorldDescription &out, std::
     return DecodeScene(bytes, document, error) && ParseCookedWorld(document, out, error);
 }
 
+bool DecodeAtlas(const std::vector<uint8_t> &bytes, SpriteAtlasData &out, std::string *error)
+{
+    nlohmann::json document;
+    return DecodeScene(bytes, document, error) && ParseSpriteAtlas(document, out, error);
+}
+
 int64_t FileTime(const std::filesystem::path &path)
 {
     std::error_code ec;
@@ -518,6 +524,29 @@ void AssetManager::FinishWorld(
 {
     auto asset = std::make_shared<WorldAsset>();
     asset->description = std::move(world);
+    asset->SetAssetID(slot->id);
+    asset->SetSourcePath(source);
+    slot->asset = std::move(asset);
+    MarkReady(*slot);
+    m_pending.fetch_sub(1, std::memory_order_acq_rel);
+}
+
+AssetHandle<AtlasAsset> AssetManager::LoadAtlas(AssetID id, bool async)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    const bool valid = entry && entry->type == AssetType::Atlas;
+    return StartLoad<AtlasAsset, SpriteAtlasData>(
+        id, AssetType::Atlas, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
+        &DecodeAtlas, &AssetManager::FinishAtlas
+    );
+}
+
+void AssetManager::FinishAtlas(
+    const std::shared_ptr<Detail::AssetSlot<AtlasAsset>> &slot, SpriteAtlasData &atlas, const std::string &source
+)
+{
+    auto asset = std::make_shared<AtlasAsset>();
+    asset->atlas = std::move(atlas);
     asset->SetAssetID(slot->id);
     asset->SetSourcePath(source);
     slot->asset = std::move(asset);

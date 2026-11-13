@@ -3,6 +3,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "AtlasCooker.h"
 #include "AudioCooker.h"
 #include "Cooker.h"
 #include "Ktx2Writer.h"
@@ -641,5 +642,51 @@ TEST_SUITE("cooker")
         CHECK(Geni::cook::ShouldCompress(shortSound, "mobile", AudioCompression::Auto));
         CHECK_FALSE(Geni::cook::ShouldCompress(longSound, "mobile", AudioCompression::Pcm));
         CHECK(Geni::cook::ShouldCompress(shortSound, "desktop", AudioCompression::Adpcm));
+    }
+
+    TEST_CASE("atlas images are packed without overlap and their borders are extruded")
+    {
+        std::vector<Geni::cook::AtlasImage> images;
+        const int sizes[][2] = {{48, 8}, {128, 16}, {16, 16}, {30, 70}, {5, 5}};
+        for (size_t i = 0; i < std::size(sizes); ++i)
+        {
+            Geni::cook::AtlasImage image;
+            image.name = "image" + std::to_string(i);
+            image.width = sizes[i][0];
+            image.height = sizes[i][1];
+            image.rgba.assign(static_cast<size_t>(image.width) * image.height * 4, static_cast<uint8_t>(10 * (i + 1)));
+            images.push_back(image);
+        }
+        int width = 0;
+        int height = 0;
+        REQUIRE(Geni::cook::PackAtlas(images, 1, 4096, width, height));
+        CHECK((width & (width - 1)) == 0);
+        CHECK((height & (height - 1)) == 0);
+        for (size_t a = 0; a < images.size(); ++a)
+        {
+            const auto &i = images[a];
+            CHECK(i.x >= 1);
+            CHECK(i.y >= 1);
+            CHECK(i.x + i.width + 1 <= width);
+            CHECK(i.y + i.height + 1 <= height);
+            for (size_t b = a + 1; b < images.size(); ++b)
+            {
+                const auto &j = images[b];
+                // Padded rectangles do not overlap.
+                const bool apart = i.x + i.width + 1 <= j.x - 1 || j.x + j.width + 1 <= i.x - 1 ||
+                                   i.y + i.height + 1 <= j.y - 1 || j.y + j.height + 1 <= i.y - 1;
+                CHECK(apart);
+            }
+        }
+        const std::vector<uint8_t> pixels = Geni::cook::ComposeAtlas(images, 1, width, height);
+        const auto &first = images[0];
+        // The pixel left of the image (padding) repeats its edge.
+        const size_t edge = (static_cast<size_t>(first.y) * width + first.x - 1) * 4;
+        CHECK(pixels[edge] == 10);
+
+        std::vector<Geni::cook::AtlasImage> tooBig(1);
+        tooBig[0].width = 5000;
+        tooBig[0].height = 10;
+        CHECK_FALSE(Geni::cook::PackAtlas(tooBig, 1, 4096, width, height));
     }
 }

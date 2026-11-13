@@ -23,7 +23,9 @@ enum class AssetType
     // A world cell's Detour navigation tile, cooked offline (docs/design/0014).
     NavTile,
     // One platform's cooked variant of a sound (docs/design/0012); source "<path>#<platform>".
-    Sound
+    Sound,
+    // A packed sprite atlas: its texture and named regions (docs/design/0021).
+    Atlas
 };
 
 const char *AssetTypeName(AssetType type);

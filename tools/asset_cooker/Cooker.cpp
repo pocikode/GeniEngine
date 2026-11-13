@@ -1,4 +1,5 @@
 #include "Cooker.h"
+#include "AtlasCooker.h"
 #include "AudioCooker.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
@@ -1247,6 +1248,119 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    // A .gatlas lists images; they are packed into one sprite texture, and the atlas asset
+    // names each image's rectangle (docs/design/0021).
+    bool CookAtlas(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        std::vector<AtlasImage> images;
+        int padding = 1;
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            if (document.value("format", std::string()) != "geni.atlas" || document.value("version", 0) != 1)
+            {
+                return Fail(relative + ": not a version 1 geni.atlas file");
+            }
+            padding = std::clamp(document.value("padding", 1), 0, 16);
+            const std::filesystem::path folder = std::filesystem::path(relative).parent_path();
+            for (const auto &item : document.at("images"))
+            {
+                const std::string imagePath = Normalize((folder / item.get<std::string>()).generic_string());
+                std::vector<uint8_t> fileBytes;
+                if (!ReadFile(options.sourceRoot / imagePath, fileBytes))
+                {
+                    return Fail(relative + ": cannot read " + imagePath);
+                }
+                AtlasImage image;
+                image.name = std::filesystem::path(imagePath).stem().string();
+                std::string message;
+                if (!DecodeImageRgba(fileBytes, image.rgba, image.width, image.height, &message))
+                {
+                    return Fail(imagePath + ": " + message);
+                }
+                for (const auto &other : images)
+                {
+                    if (other.name == image.name)
+                    {
+                        return Fail(relative + ": two images are named " + image.name);
+                    }
+                }
+                images.push_back(std::move(image));
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        if (images.empty())
+        {
+            return Fail(relative + ": no images");
+        }
+        int width = 0;
+        int height = 0;
+        if (!PackAtlas(images, padding, 4096, width, height))
+        {
+            return Fail(relative + ": the images do not fit in 4096 x 4096");
+        }
+        const std::vector<uint8_t> pixels = ComposeAtlas(images, padding, width, height);
+
+        const std::string normalized = Normalize(relative);
+        const std::string stem = "cooked/" + normalized.substr(0, normalized.size() - 7); // drop ".gatlas"
+        CookedTextureFiles files;
+        std::string message;
+        if (!CookSpriteRgba(pixels, width, height, stem, options.outputRoot, files, &message))
+        {
+            return Fail(relative + ": " + message);
+        }
+        ManifestEntry texture;
+        texture.id = AssetID::FromName("texture:atlas:" + RootName(relative));
+        texture.type = AssetType::Texture;
+        texture.source = normalized + "#texture";
+        texture.path = files.rgba8;
+        if (!AddManifest(std::move(texture)))
+        {
+            return false;
+        }
+
+        nlohmann::ordered_json atlas;
+        atlas["format"] = "geni.atlas.cooked";
+        atlas["version"] = 1;
+        atlas["texture"] = AssetID::FromName("texture:atlas:" + RootName(relative)).ToHex();
+        atlas["width"] = width;
+        atlas["height"] = height;
+        nlohmann::ordered_json regions = nlohmann::ordered_json::object();
+        std::vector<const AtlasImage *> sorted;
+        for (const auto &image : images)
+        {
+            sorted.push_back(&image);
+        }
+        std::sort(sorted.begin(), sorted.end(), [](const AtlasImage *a, const AtlasImage *b) {
+            return a->name < b->name;
+        });
+        for (const AtlasImage *image : sorted)
+        {
+            regions[image->name] = {image->x, image->y, image->width, image->height};
+        }
+        atlas["regions"] = std::move(regions);
+        const std::string text = atlas.dump(1) + "\n";
+        const std::string atlasPath = stem + ".gatlas.json";
+        if (!cooked::WriteFile(options.outputRoot / atlasPath, std::vector<uint8_t>(text.begin(), text.end())))
+        {
+            return Fail("cannot write " + atlasPath);
+        }
+        ManifestEntry entry;
+        entry.id = AssetID::FromName("atlas:" + RootName(relative));
+        entry.type = AssetType::Atlas;
+        entry.source = normalized;
+        entry.path = atlasPath;
+        return AddManifest(std::move(entry));
+    }
+
     // A WAV becomes cooked/audio/<platform>/<path>.gsnd for each platform: the same PCM, or
     // IMA ADPCM (ShouldCompress). Files that are not 16-bit PCM are copied as they are.
     bool CookSound(const std::string &relative)
@@ -1510,7 +1624,7 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
                 extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
-                extension == ".wav")
+                extension == ".wav" || extension == ".gatlas")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1572,6 +1686,19 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Sprite atlases (docs/design/0021).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".gatlas")
+            {
+                report(input);
+                if (!CookAtlas(input))
                 {
                     return false;
                 }
