@@ -34,7 +34,8 @@ set(GENI_WORLD_HITCH_MS 4000 CACHE STRING "Slowest allowed frame while flying th
 add_test(NAME benchmark_world
          COMMAND city --world --route --speed 60 --distance 480 --hidden --width 640 --height 360
                  --hitch-ms ${GENI_WORLD_HITCH_MS})
-set_tests_properties(benchmark_world PROPERTIES LABELS "gpu;perf" TIMEOUT 600)
+# CI's software Vulkan takes about 215 s; a slow runner took over 600 s (ROADMAP M7).
+set_tests_properties(benchmark_world PROPERTIES LABELS "gpu;perf" TIMEOUT 1500)
 
 # The reference game (ROADMAP M6): `city --play --autopilot` plays itself through the
 # input actions (walk to the car, get in, drive, brake, get out, walk on) among
@@ -42,7 +43,8 @@ set_tests_properties(benchmark_world PROPERTIES LABELS "gpu;perf" TIMEOUT 600)
 # a Lua error. Every frame is a 1/60 s step, so it does not depend on the machine's speed.
 add_test(NAME play_city
          COMMAND city --play --autopilot --hidden --width 480 --height 270)
-set_tests_properties(play_city PROPERTIES LABELS "gpu;game" TIMEOUT 900)
+# About 366 s in CI; a slow runner took over 900 s.
+set_tests_properties(play_city PROPERTIES LABELS "gpu;game" TIMEOUT 2000)
 
 # Screenshot comparison: the instanced, cascaded, tonemapped path must look the same
 # every run (see tests/run_screenshot.cmake).
