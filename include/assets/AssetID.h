@@ -21,7 +21,9 @@ enum class AssetType
     // A cooked .gworld: the cell table of a streamed world (docs/design/0007).
     World,
     // A world cell's Detour navigation tile, cooked offline (docs/design/0014).
-    NavTile
+    NavTile,
+    // One platform's cooked variant of a sound (docs/design/0012); source "<path>#<platform>".
+    Sound
 };
 
 const char *AssetTypeName(AssetType type);

@@ -3,6 +3,7 @@
 // game UI (0015). Everything except the "gpu" suites runs without a window.
 
 #include "TestEngine.h"
+#include "assets/AssetManager.h"
 
 #include "animation/AnimationGraph.h"
 #include "audio/AudioSystem.h"
@@ -201,8 +202,8 @@ TEST_SUITE("input actions")
 
         Geni::GamepadState pad;
         pad.connected = true;
-        pad.axes[static_cast<size_t>(Geni::GamepadAxis::LeftX)] = 0.1f;   // inside the dead zone
-        pad.axes[static_cast<size_t>(Geni::GamepadAxis::LeftY)] = -1.0f;  // pushed up
+        pad.axes[static_cast<size_t>(Geni::GamepadAxis::LeftX)] = 0.1f;  // inside the dead zone
+        pad.axes[static_cast<size_t>(Geni::GamepadAxis::LeftY)] = -1.0f; // pushed up
         pad.axes[static_cast<size_t>(Geni::GamepadAxis::RightTrigger)] = 1.0f;
         input.SetGamepadState(0, pad);
         actions.Update(input);
@@ -294,7 +295,10 @@ TEST_SUITE("animation graph")
             instance.Bind(
                 graph,
                 [this](const std::string &name) -> const Geni::AnimationClip * {
-                    return name == "Idle" ? idle.get() : name == "Run" ? run.get() : name == "Jump" ? jump.get() : nullptr;
+                    return name == "Idle"   ? idle.get()
+                           : name == "Run"  ? run.get()
+                           : name == "Jump" ? jump.get()
+                                            : nullptr;
                 },
                 {"Bone"}, rest
             );
@@ -313,9 +317,12 @@ TEST_SUITE("animation graph")
         std::string error;
         CHECK_FALSE(Geni::AnimationGraph::Parse(nlohmann::json::parse(R"({"states": {}})"), &error));
         CHECK_FALSE(error.empty());
-        CHECK_FALSE(Geni::AnimationGraph::Parse(
-            nlohmann::json::parse(R"({"states": {"a": {"clip": "x"}}, "transitions": [{"from": "a", "to": "b"}]})"), &error
-        ));
+        CHECK_FALSE(
+            Geni::AnimationGraph::Parse(
+                nlohmann::json::parse(R"({"states": {"a": {"clip": "x"}}, "transitions": [{"from": "a", "to": "b"}]})"),
+                &error
+            )
+        );
         CHECK(error.find("unknown state") != std::string::npos);
     }
 
@@ -471,8 +478,8 @@ TEST_SUITE("characters and vehicles")
         }
         const float speed = car.GetForwardSpeed();
         MESSAGE("after 4 s: " << speed * 3.6f << " km/h in gear " << car.GetGear() << " at " << car.GetRpm() << " rpm");
-        CHECK(speed > 10.0f);           // over 36 km/h after 4 s
-        CHECK(car.GetGear() >= 2);      // the automatic gearbox shifts (it does not while wheels spin)
+        CHECK(speed > 10.0f);               // over 36 km/h after 4 s
+        CHECK(car.GetGear() >= 2);          // the automatic gearbox shifts (it does not while wheels spin)
         CHECK(car.GetPosition().z < -15.0); // forward is -Z
         CHECK(std::fabs(car.GetPosition().x) < 1.0);
         CHECK(car.GetRpm() > 900.0f);
@@ -512,11 +519,13 @@ TEST_SUITE("characters and vehicles")
         CHECK(hit.userData == 77);
         CHECK(Near(hit.normal, glm::vec3(0, 1, 0), 1e-3f));
 
-        REQUIRE(world.Get().CastRay(glm::dvec3(0.0, 10.0, 0.0), glm::vec3(0, -1, 0), 50.0f, hit,
-                                    Geni::PhysicsLayerStatic));
+        REQUIRE(
+            world.Get().CastRay(glm::dvec3(0.0, 10.0, 0.0), glm::vec3(0, -1, 0), 50.0f, hit, Geni::PhysicsLayerStatic)
+        );
         CHECK(Near(hit.distance, 10.0f, 0.05f)); // straight through to the floor
-        CHECK(world.Get().CastRay(glm::dvec3(0.0, 10.0, 0.0), glm::vec3(0, -1, 0), 50.0f, hit, Geni::PhysicsLayerAll,
-                                  crate->GetBodyId()));
+        CHECK(world.Get().CastRay(
+            glm::dvec3(0.0, 10.0, 0.0), glm::vec3(0, -1, 0), 50.0f, hit, Geni::PhysicsLayerAll, crate->GetBodyId()
+        ));
         CHECK(Near(hit.distance, 10.0f, 0.05f));
 
         REQUIRE(world.Get().CastSphere(glm::dvec3(-10.0, 3.0, 0.0), 0.5f, glm::vec3(1, 0, 0), 20.0f, hit));
@@ -588,8 +597,8 @@ TEST_SUITE("navigation")
             length += glm::length(corners[i] - corners[i - 1]);
             furthestZ = std::max(furthestZ, corners[i].z);
         }
-        CHECK(length > 20.0);    // around the end of the wall, not through it
-        CHECK(furthestZ > 9.5);  // through the gap at z > 10
+        CHECK(length > 20.0);   // around the end of the wall, not through it
+        CHECK(furthestZ > 9.5); // through the gap at z > 10
 
         glm::dvec3 random;
         REQUIRE(navigation.RandomPointNear(glm::dvec3(-8.0, 0.0, -8.0), 3.0f, random));
@@ -638,6 +647,60 @@ TEST_SUITE("navigation")
 
 TEST_SUITE("audio")
 {
+    TEST_CASE("the engine plays a sound's cooked ADPCM variant, as long as the source")
+    {
+        Geni::FileSystem files;
+        files.SetAssetsFolder(GENI_TEST_ASSETS_DIR);
+        Geni::AssetManager assets;
+        assets.Init(&files, nullptr, nullptr);
+        const Geni::AssetID desktop = assets.FindBySource(Geni::AssetType::Sound, "sounds/tone_long.wav#desktop");
+        const Geni::AssetID mobile = assets.FindBySource(Geni::AssetType::Sound, "sounds/tone_long.wav#mobile");
+        REQUIRE(desktop.IsValid());
+        REQUIRE(mobile.IsValid());
+        const auto cookedFile = assets.FindCookedFile(desktop, Geni::AssetType::Sound);
+        REQUIRE_FALSE(cookedFile.empty());
+        CHECK(cookedFile.extension() == ".gsnd");
+        std::error_code ec;
+        CHECK(std::filesystem::file_size(cookedFile, ec) < 132344 / 3); // ADPCM, not PCM
+
+        Geni::AudioSystem audio;
+        Geni::AudioConfig config;
+        config.device = false;
+        config.sampleRate = 22050;
+        config.channels = 1;
+        config.variant = "desktop";
+        REQUIRE(audio.Init(config, &files));
+        std::string resolved;
+        audio.SetCookedResolver([&](const std::string &path) {
+            const Geni::AssetID id = assets.FindBySource(Geni::AssetType::Sound, path + "#" + audio.GetVariant());
+            const auto file = assets.FindCookedFile(id, Geni::AssetType::Sound);
+            resolved = file.string();
+            return file;
+        });
+        const Geni::SoundId id = audio.Play("sounds/tone_long.wav");
+        REQUIRE(id != Geni::InvalidSound);
+        CHECK(resolved.find(".gsnd") != std::string::npos);
+
+        // 3 s at 22050 Hz: still playing after 2.9 s, finished by 3.1 s, and loud throughout.
+        std::vector<float> buffer(2205);
+        float quietest = 1.0f;
+        for (int block = 0; block < 29; ++block)
+        {
+            REQUIRE(audio.ReadFrames(buffer.data(), buffer.size()) == buffer.size());
+            quietest = std::min(quietest, Peak(buffer));
+        }
+        CHECK(quietest > 0.3f);
+        CHECK(audio.IsPlaying(id));
+        for (int block = 0; block < 3; ++block)
+        {
+            audio.ReadFrames(buffer.data(), buffer.size());
+        }
+        audio.Update(0.0f);
+        CHECK_FALSE(audio.IsPlaying(id));
+        audio.Shutdown();
+        assets.Shutdown();
+    }
+
     TEST_CASE("without a device the mixer plays one-shot, 3D and streamed sounds")
     {
         const auto folder = TempFolder("audio");
@@ -817,7 +880,9 @@ return Counter
 
         // A runtime error stops this component, not the game.
         const uint64_t errors = f.engine.GetScripts().GetErrorCount();
-        WriteText(f.folder / "scripts" / "broken.lua", "local B = {}\nfunction B:update() error('boom') end\nreturn B\n");
+        WriteText(
+            f.folder / "scripts" / "broken.lua", "local B = {}\nfunction B:update() error('boom') end\nreturn B\n"
+        );
         Geni::GameObject *broken = f.scene->CreateObject("Broken");
         auto *brokenScript = new Geni::ScriptComponent();
         brokenScript->SetScript("scripts/broken.lua");
@@ -828,7 +893,10 @@ return Counter
         CHECK(f.engine.GetScripts().GetErrorCount() == errors + 1);
 
         // Params set fields before start.
-        WriteText(f.folder / "scripts" / "params.lua", "local P = {}\nfunction P:start() self.object:set_name(self.label .. self.n) end\nreturn P\n");
+        WriteText(
+            f.folder / "scripts" / "params.lua",
+            "local P = {}\nfunction P:start() self.object:set_name(self.label .. self.n) end\nreturn P\n"
+        );
         Geni::GameObject *withParams = f.scene->CreateObject("P");
         auto *paramsScript = new Geni::ScriptComponent();
         paramsScript->SetScript("scripts/params.lua");

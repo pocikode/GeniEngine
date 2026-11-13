@@ -3,6 +3,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "AudioCooker.h"
 #include "Cooker.h"
 #include "Ktx2Writer.h"
 #include "MeshProcessing.h"
@@ -409,7 +410,9 @@ TEST_SUITE("cooker")
             Geni::cooked::CookedMaterialData data;
             REQUIRE_MESSAGE(Geni::cooked::ReadMaterial(bytes, data, &error), error);
             for (const auto &[slot, expected] : std::map<std::string, std::string>{
-                     {"baseColorTexture", "textures/" + name + ".png"}, {"normalTexture", "textures/" + name + ".png#normal"}})
+                     {"baseColorTexture", "textures/" + name + ".png"},
+                     {"normalTexture", "textures/" + name + ".png#normal"}
+                 })
             {
                 const auto texture = data.textures.find(slot);
                 REQUIRE_MESSAGE(texture != data.textures.end(), name << " " << slot);
@@ -571,5 +574,72 @@ TEST_SUITE("cooker")
         Geni::cook::SimplifyInPlace(mesh, 0.1f, 0.5f);
         CHECK(mesh.indices.size() >= 3);
         CHECK(mesh.vertices.size() / 3 <= 6);
+    }
+
+    TEST_CASE("sounds compress to IMA ADPCM at a quarter of the size and decode close to the source")
+    {
+        for (uint32_t channels : {1u, 2u})
+        {
+            Geni::cook::PcmSound tone;
+            tone.sampleRate = 22050;
+            tone.channels = channels;
+            const uint32_t frames = 22050 + 333; // not a whole number of blocks
+            for (uint32_t i = 0; i < frames; ++i)
+            {
+                for (uint32_t c = 0; c < channels; ++c)
+                {
+                    const double hz = c == 0 ? 440.0 : 660.0;
+                    tone.samples.push_back(
+                        static_cast<int16_t>(12000.0 * std::sin(2.0 * 3.14159265358979 * hz * i / 22050.0))
+                    );
+                }
+            }
+            const std::vector<uint8_t> encoded = Geni::cook::EncodeImaAdpcmWav(tone);
+            CHECK(encoded.size() < tone.samples.size() * 2 / 3);
+            CHECK(encoded.size() > tone.samples.size() / 2 - 1);
+
+            Geni::cook::PcmSound decoded;
+            std::string error;
+            REQUIRE_MESSAGE(Geni::cook::DecodeImaAdpcmWav(encoded, decoded, &error), error);
+            CHECK(decoded.channels == channels);
+            CHECK(decoded.sampleRate == 22050);
+            REQUIRE(decoded.Frames() == frames);
+            double signal = 0.0;
+            double noise = 0.0;
+            for (size_t i = 0; i < tone.samples.size(); ++i)
+            {
+                const double a = tone.samples[i];
+                const double d = decoded.samples[i] - a;
+                signal += a * a;
+                noise += d * d;
+            }
+            const double snr = 10.0 * std::log10(signal / std::max(noise, 1.0));
+            CHECK_MESSAGE(snr > 25.0, "SNR " << snr << " dB with " << channels << " channels");
+        }
+    }
+
+    TEST_CASE("only 16-bit PCM WAV is read; short sounds stay PCM on desktop")
+    {
+        // A minimal 8-bit WAV: rejected, so the cooker copies it unchanged.
+        std::vector<uint8_t> wav = {'R', 'I', 'F', 'F', 40,  0,   0,   0,   'W',  'A',  'V', 'E', 'f',  'm',  't', ' ',
+                                    16,  0,   0,   0,   1,   0,   1,   0,   0x22, 0x56, 0,   0,   0x22, 0x56, 0,   0,
+                                    1,   0,   8,   0,   'd', 'a', 't', 'a', 4,    0,    0,   0,   128,  128,  128, 128};
+        Geni::cook::PcmSound sound;
+        std::string error;
+        CHECK_FALSE(Geni::cook::ReadPcmWav(wav, sound, &error));
+        CHECK(error.find("16-bit") != std::string::npos);
+
+        Geni::cook::PcmSound shortSound;
+        shortSound.sampleRate = 22050;
+        shortSound.channels = 1;
+        shortSound.samples.resize(22050); // 1 s
+        Geni::cook::PcmSound longSound = shortSound;
+        longSound.samples.resize(22050 * 3);
+        using Geni::cook::AudioCompression;
+        CHECK_FALSE(Geni::cook::ShouldCompress(shortSound, "desktop", AudioCompression::Auto));
+        CHECK(Geni::cook::ShouldCompress(longSound, "desktop", AudioCompression::Auto));
+        CHECK(Geni::cook::ShouldCompress(shortSound, "mobile", AudioCompression::Auto));
+        CHECK_FALSE(Geni::cook::ShouldCompress(longSound, "mobile", AudioCompression::Pcm));
+        CHECK(Geni::cook::ShouldCompress(shortSound, "desktop", AudioCompression::Adpcm));
     }
 }

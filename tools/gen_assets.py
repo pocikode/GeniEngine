@@ -807,6 +807,16 @@ def checker(x, y):
     return (235, 235, 235) if light else (150, 155, 165)
 
 
+def tone_fixture():
+    """tests/assets/sounds/tone_long.wav: 3 s of 440 Hz at 22050 Hz, long enough for the
+    cooker to compress it on desktop too (docs/design/0012)."""
+    import math
+    import gen_game_assets
+    rate = gen_game_assets.RATE
+    samples = [0.5 * math.sin(2.0 * math.pi * 440.0 * i / rate) for i in range(3 * rate)]
+    gen_game_assets.write_wav(ROOT / "tests/assets/sounds/tone_long.wav", samples)
+
+
 def main():
     write_json(ROOT / "tests/assets/models/hierarchy.gltf", hierarchy_gltf())
     write_json(ROOT / "tests/assets/models/textured_quad.gltf", textured_quad_gltf())
@@ -819,6 +829,7 @@ def main():
     write_json(ROOT / "tests/assets/models/lod_sphere.gltf", lod_sphere_gltf(), compact=True)
     tiny_world()
     metro_world()
+    tone_fixture()
     # M6: the reference game's characters, cars and sounds.
     import gen_game_assets
     gen_game_assets.main()

@@ -1,4 +1,5 @@
 #include "Cooker.h"
+#include "AudioCooker.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
 #include "WorldCooker.h"
@@ -16,8 +17,8 @@
 #include <fstream>
 #include <map>
 #include <memory>
-#include <random>
 #include <nlohmann/json.hpp>
+#include <random>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -520,7 +521,8 @@ struct Cooker::Impl
         else
         {
             source = Normalize(gltfRelative) + "#image" + std::to_string(imageIndex);
-            logical = "texture:" + RootName(gltfRelative) + "#image" + SubKey(data->images, data->images_count, imageIndex);
+            logical =
+                "texture:" + RootName(gltfRelative) + "#image" + SubKey(data->images, data->images_count, imageIndex);
             outputStem = "cooked/textures/" + Sanitize(WithoutExtension(Normalize(gltfRelative))) + "_image" +
                          std::to_string(imageIndex);
         }
@@ -608,9 +610,7 @@ struct Cooker::Impl
                 );
                 metallicRoughness = glm::vec4(pbr.metallic_factor, pbr.roughness_factor, 0.0f, 0.0f);
                 loadTexture(pbr.base_color_texture.texture, "baseColorTexture", TextureUsage::Color);
-                loadTexture(
-                    pbr.metallic_roughness_texture.texture, "metallicRoughnessTexture", TextureUsage::Linear
-                );
+                loadTexture(pbr.metallic_roughness_texture.texture, "metallicRoughnessTexture", TextureUsage::Linear);
             }
             else if (material->has_pbr_specular_glossiness)
             {
@@ -815,9 +815,8 @@ struct Cooker::Impl
         ManifestEntry entry;
         entry.id = id;
         entry.type = AssetType::Mesh;
-        entry.source =
-            Normalize(gltfRelative) + "#mesh" + std::to_string(meshIndex) + ":" + std::to_string(primitiveIndex) +
-            (skinned ? ":skin" + std::to_string(skinIndex) : "");
+        entry.source = Normalize(gltfRelative) + "#mesh" + std::to_string(meshIndex) + ":" +
+                       std::to_string(primitiveIndex) + (skinned ? ":skin" + std::to_string(skinIndex) : "");
         entry.path = path;
         if (!AddManifest(std::move(entry)))
         {
@@ -1227,7 +1226,9 @@ struct Cooker::Impl
 
         const std::string scenePath = OutputPath(OutputStem(relative), ".gscene");
         const std::string sceneText = cooked::FormatSceneText(document);
-        if (!cooked::WriteFile(options.outputRoot / scenePath, std::vector<uint8_t>(sceneText.begin(), sceneText.end())))
+        if (!cooked::WriteFile(
+                options.outputRoot / scenePath, std::vector<uint8_t>(sceneText.begin(), sceneText.end())
+            ))
         {
             cgltf_free(data);
             return Fail("cannot write " + scenePath);
@@ -1246,6 +1247,68 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    // A WAV becomes cooked/audio/<platform>/<path>.gsnd for each platform: the same PCM, or
+    // IMA ADPCM (ShouldCompress). Files that are not 16-bit PCM are copied as they are.
+    bool CookSound(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        AudioCompression setting = AudioCompression::Auto;
+        std::vector<uint8_t> metaBytes;
+        if (ReadFile(MetaPath(relative), metaBytes))
+        {
+            try
+            {
+                const std::string value =
+                    nlohmann::json::parse(metaBytes.begin(), metaBytes.end()).value("compression", std::string("auto"));
+                setting = value == "pcm"     ? AudioCompression::Pcm
+                          : value == "adpcm" ? AudioCompression::Adpcm
+                                             : AudioCompression::Auto;
+            }
+            catch (const std::exception &e)
+            {
+                return Fail(MetaPath(relative).string() + ": " + e.what());
+            }
+        }
+        PcmSound pcm;
+        std::string why;
+        const bool decodable =
+            ReadPcmWav(bytes, pcm, &why) && pcm.channels >= 1 && pcm.channels <= 2 && pcm.Frames() > 0;
+        if (!decodable)
+        {
+            std::printf(
+                "note: %s kept uncompressed (%s)\n", relative.c_str(), why.empty() ? "not mono or stereo" : why.c_str()
+            );
+        }
+
+        const std::string normalized = Normalize(relative);
+        const std::string stem =
+            normalized.substr(0, normalized.size() - std::filesystem::path(normalized).extension().string().size());
+        for (const char *platform : {"desktop", "mobile"})
+        {
+            const bool compress = decodable && ShouldCompress(pcm, platform, setting);
+            const std::vector<uint8_t> cookedBytes = compress ? EncodeImaAdpcmWav(pcm) : bytes;
+            const std::string path = std::string("cooked/audio/") + platform + "/" + stem + ".gsnd";
+            if (!cooked::WriteFile(options.outputRoot / path, cookedBytes))
+            {
+                return Fail("cannot write " + path);
+            }
+            ManifestEntry entry;
+            entry.id = AssetID::FromName("sound:" + RootName(relative) + ":" + platform);
+            entry.type = AssetType::Sound;
+            entry.source = normalized + "#" + platform;
+            entry.path = path;
+            if (!AddManifest(std::move(entry)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool CookSceneFile(const std::string &relative, AssetType type, const char *format)
     {
         std::vector<uint8_t> bytes;
@@ -1446,7 +1509,8 @@ struct Cooker::Impl
                 return static_cast<char>(std::tolower(c));
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
-                extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld")
+                extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
+                extension == ".wav")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1508,6 +1572,23 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Sounds: one variant per platform (docs/design/0012).
+        for (const auto &input : inputs)
+        {
+            std::string extension = std::filesystem::path(input).extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (extension == ".wav")
+            {
+                report(input);
+                if (!CookSound(input))
                 {
                     return false;
                 }

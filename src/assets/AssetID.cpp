@@ -26,6 +26,8 @@ const char *AssetTypeName(AssetType type)
         return "world";
     case AssetType::NavTile:
         return "navtile";
+    case AssetType::Sound:
+        return "sound";
     case AssetType::Unknown:
         break;
     }
@@ -50,6 +52,8 @@ AssetType AssetTypeFromName(std::string_view name)
         return AssetType::World;
     if (name == "navtile")
         return AssetType::NavTile;
+    if (name == "sound")
+        return AssetType::Sound;
     return AssetType::Unknown;
 }
 
