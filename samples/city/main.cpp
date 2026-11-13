@@ -30,6 +30,7 @@
 //   walk, drive and explore the streamed city; see PlayMode.cpp and assets/scripts/.
 
 #include "PlayMode.h"
+#include "TerrainMode.h"
 #include "WorldMode.h"
 
 #include <geni.h>
@@ -394,6 +395,15 @@ int ParsePlayOptions(int argc, char **argv, PlayOptions &options)
 
 int main(int argc, char **argv)
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--terrain") == 0)
+        {
+            TerrainOptions terrainOptions;
+            const int code = ParseTerrainOptions(argc, argv, terrainOptions);
+            return code >= 0 ? code : RunTerrain(terrainOptions);
+        }
+    }
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--play") == 0)
