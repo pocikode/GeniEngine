@@ -199,6 +199,10 @@ class Engine
     {
         return m_viewOverride;
     }
+    // The camera the next frame is rendered from, as a scene-space transform (position and
+    // axes, no scale): the view override, else the current scene's main camera. False when
+    // there is neither. Components that work around the viewer (weather, foliage) use it.
+    bool GetActiveView(glm::mat4 &cameraWorld);
     // A directional light used only while the scene has none of its own, so an unlit
     // scene opened in a tool is still readable (the editor's preview sun). Off by default.
     void SetFallbackSun(const LightData &sun);

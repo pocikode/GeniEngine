@@ -1373,6 +1373,38 @@ struct Cooker::Impl
             }
         }
 
+        // Plants (docs/design/0023): one foliage asset and one FoliageComponent per rule.
+        for (size_t i = 0; i < source.scatter.size(); ++i)
+        {
+            const ScatterRule &rule = source.scatter[i];
+            const std::string prefab =
+                Normalize((std::filesystem::path(relative).parent_path() / rule.prefab).generic_string());
+            std::error_code ec;
+            if (!std::filesystem::exists(options.sourceRoot / prefab, ec))
+            {
+                return Fail(relative + ": scatter prefab " + prefab + " does not exist");
+            }
+            std::vector<uint8_t> foliageBytes;
+            WriteFoliage(ScatterFoliage(grid, source, rule), foliageBytes);
+            const std::string path = stem + "_foliage_" + std::to_string(i) + ".gfoliage";
+            const AssetID foliageID = AssetID::FromName("foliage:" + root + ":" + std::to_string(i));
+            if (!cooked::WriteFile(options.outputRoot / path, foliageBytes) ||
+                !add(foliageID, AssetType::Foliage, normalized + "#foliage" + std::to_string(i), path))
+            {
+                return Fail("cannot write " + path);
+            }
+            auto foliage = node("Foliage " + std::filesystem::path(prefab).stem().string(), 0, glm::vec3(0.0f));
+            nlohmann::ordered_json component;
+            component["type"] = "FoliageComponent";
+            component["properties"] = {
+                {"drawDistance", rule.drawDistance},
+                {"instances", foliageID.ToHex()},
+                {"prefab", AssetID::FromName("prefab:" + RootName(prefab)).ToHex()},
+            };
+            foliage["components"].push_back(component);
+            nodes.push_back(std::move(foliage));
+        }
+
         nlohmann::ordered_json scene;
         scene["format"] = "geni.scene";
         scene["version"] = 1;

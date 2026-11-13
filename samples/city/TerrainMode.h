@@ -17,6 +17,9 @@ struct TerrainOptions
     int width = 1280;
     int height = 720;
     std::string screenshotPath;
+    // With --frames: report the mean frame time after a warm-up and exit with code 4 when
+    // it is over this budget (benchmark_terrain).
+    double budgetMs = 0.0;
 };
 
 int ParseTerrainOptions(int argc, char **argv, TerrainOptions &options);

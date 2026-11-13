@@ -27,7 +27,9 @@ enum class AssetType
     // A packed sprite atlas: its texture and named regions (docs/design/0021).
     Atlas,
     // A terrain's height grid (docs/design/0022).
-    Heightfield
+    Heightfield,
+    // Placed instances of one plant prefab (docs/design/0023).
+    Foliage
 };
 
 const char *AssetTypeName(AssetType type);

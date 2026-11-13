@@ -100,6 +100,7 @@ set(SRC_FILES
   src/render/Weather.cpp
   src/render/SpriteAtlas.cpp
   src/world/Heightfield.cpp
+  src/world/Foliage.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
@@ -130,6 +131,7 @@ set(SRC_FILES
   src/scene/components/ParticleEmitterComponent.cpp
   src/scene/components/WeatherComponent.cpp
   src/scene/components/TerrainComponent.cpp
+  src/scene/components/FoliageComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp

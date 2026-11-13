@@ -531,6 +531,30 @@ void AssetManager::FinishWorld(
     m_pending.fetch_sub(1, std::memory_order_acq_rel);
 }
 
+AssetHandle<FoliageAsset> AssetManager::LoadFoliage(AssetID id, bool async)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    const bool valid = entry && entry->type == AssetType::Foliage;
+    return StartLoad<FoliageAsset, std::vector<FoliageInstance>>(
+        id, AssetType::Foliage, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
+        &ReadFoliage, &AssetManager::FinishFoliage
+    );
+}
+
+void AssetManager::FinishFoliage(
+    const std::shared_ptr<Detail::AssetSlot<FoliageAsset>> &slot, std::vector<FoliageInstance> &instances,
+    const std::string &source
+)
+{
+    auto asset = std::make_shared<FoliageAsset>();
+    asset->instances = std::move(instances);
+    asset->SetAssetID(slot->id);
+    asset->SetSourcePath(source);
+    slot->asset = std::move(asset);
+    MarkReady(*slot);
+    m_pending.fetch_sub(1, std::memory_order_acq_rel);
+}
+
 AssetHandle<HeightfieldAsset> AssetManager::LoadHeightfield(AssetID id, bool async)
 {
     const AssetManifestEntry *entry = FindEntry(id);

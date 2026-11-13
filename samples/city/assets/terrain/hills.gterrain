@@ -25,5 +25,20 @@
       0.95,
       0.98
     ]
-  }
+  },
+  "scatter": [
+    {
+      "prefab": "pine.gprefab",
+      "density": 0.0035,
+      "maxSlope": 24.0,
+      "minHeight": 0.02,
+      "maxHeight": 0.62,
+      "scale": [
+        0.75,
+        1.35
+      ],
+      "seed": 7,
+      "drawDistance": 400.0
+    }
+  ]
 }

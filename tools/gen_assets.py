@@ -877,10 +877,21 @@ def city_terrain():
 
     folder = ROOT / "samples/city/assets/terrain"
     write_png16_grey(folder / "hills.png", size, size, height)
+    # A pine (docs/design/0023): the kit's trunk cube and an elongated crown, scattered
+    # over the lower slopes by the terrain's scatter rule.
+    write_scene_text(folder / "pine.gprefab", {"format": "geni.prefab", "version": 1, "mainCamera": -1, "nodes": [
+        node("Pine", -1),
+        node("Trunk", 0, (0.0, 2.0, 0.0), (0.45, 4.0, 0.45),
+             components=[mesh_component(kit_mesh("Cube7"), kit_material("Palette7"))]),
+        node("Crown", 0, (0.0, 6.0, 0.0), (3.6, 7.5, 3.6),
+             components=[mesh_component(kit_mesh("TreeCrown"), kit_material("Foliage"))]),
+    ]})
     (folder / "hills.gterrain").write_text(json.dumps({
         "format": "geni.terrain", "version": 1, "heightmap": "hills.png", "size": 512.0, "height": 70.0,
         "chunks": 8, "chunkQuads": 32, "rockSlope": 32.0, "snowHeight": 0.78, "uvScale": 0.25,
-        "colors": {"grass": [0.33, 0.47, 0.22], "rock": [0.45, 0.42, 0.38], "snow": [0.93, 0.95, 0.98]}},
+        "colors": {"grass": [0.33, 0.47, 0.22], "rock": [0.45, 0.42, 0.38], "snow": [0.93, 0.95, 0.98]},
+        "scatter": [{"prefab": "pine.gprefab", "density": 0.0035, "maxSlope": 24.0, "minHeight": 0.02,
+                     "maxHeight": 0.62, "scale": [0.75, 1.35], "seed": 7, "drawDistance": 400.0}]},
         indent=2) + "\n")
 
 
