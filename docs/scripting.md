@@ -99,6 +99,10 @@ add methods:
 | `TilemapComponent` | `tile(column, row)` (-1 when empty), `set_tile(column, row, tile)`, `solid(column, row)`, `cell_at(position)` → column, row, `cell_center(column, row)` → vec3 |
 | `ScriptComponent` | `instance()`: the other script's instance table |
 
+`TimeOfDayComponent` ([0018](design/0018-time-of-day.md)) has no methods; its properties
+are the clock: `scene.find("Sun"):get("TimeOfDayComponent").time = 21.5` jumps to 21:30,
+`dayLengthMinutes = 0` stops it.
+
 ## Libraries
 
 **scene**: `find(name)`, `get(id)`, `create(name, parent)`, `spawn(path, position, yaw)`

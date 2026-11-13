@@ -20,6 +20,8 @@ local Game = {}
 local PLAYER_START = vec3(798.0, 0.05, 827.0)
 local CAR_START = vec3(802.4, 0.9, 820.0)
 local ENTER_DISTANCE = 3.2
+local START_HOUR = 16.0 -- the game starts in the late afternoon
+local DAY_MINUTES = 24.0 -- real minutes per game day
 
 local function flat_distance(a, b)
   return vec3.distance(vec3(a.x, 0, a.z), vec3(b.x, 0, b.z))
@@ -70,6 +72,11 @@ function Game:start()
   self.camera:set_target(self.player)
   self.camera:snap()
 
+  -- The day runs while playing (docs/design/0018). pathYaw 180 sends the afternoon sun
+  -- down the north-south streets, so the start is not in a building's shadow.
+  local sun = scene.find("Sun")
+  self.clock = sun and sun:add("TimeOfDayComponent", { time = START_HOUR, dayLengthMinutes = 0.0, pathYaw = 180.0 })
+
   self.crowd = Crowd.new(self.options.crowd and 24 or 0, 70.0)
   self.traffic = Traffic.new(self.options.traffic and 10 or 0, 140.0)
 
@@ -95,6 +102,9 @@ function Game:set_state(state)
   input.set_group("ui", not playing)
   input.capture_cursor(playing and not self.options.autopilot)
   game.set_paused(state == "paused" or state == "settings_pause")
+  if self.clock then
+    self.clock.dayLengthMinutes = playing and DAY_MINUTES or 0.0
+  end
   self.camera.playerInput = playing
 end
 
@@ -329,6 +339,10 @@ function Game:hud()
   local people, _ = self.crowd:stats()
   local cars, _ = self.traffic:stats()
   ui.text(string.format("%d pedestrians · %d cars nearby", people, cars), "top_right", 32, 24, 24, dim)
+  if self.clock then
+    local minutes = math.floor(self.clock.time * 60.0)
+    ui.text(string.format("%02d:%02d", minutes // 60, minutes % 60), "top_right", 32, 58, 34)
+  end
 
   if self.driving then
     local kmh = math.abs(self.vehicle:speed()) * 3.6

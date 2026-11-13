@@ -49,6 +49,19 @@ class WorldApp : public Geni::Application
             return false;
         }
         m_scene = engine.GetScene();
+        if (m_options.timeOfDay >= 0.0)
+        {
+            Geni::GameObject *sun = m_scene->FindObject("Sun");
+            if (!sun)
+            {
+                GENI_LOG_ERROR("--time: the world has no object named Sun");
+                return false;
+            }
+            auto *clock = new Geni::TimeOfDayComponent();
+            clock->SetTime(static_cast<float>(m_options.timeOfDay));
+            clock->SetDayLengthMinutes(0.0f);
+            sun->AddComponent(clock);
+        }
 
         auto &streamer = engine.GetWorldStreamer();
         const Geni::WorldDescription &world = *streamer.GetDescription();

@@ -23,6 +23,9 @@ struct WorldOptions
     std::string screenshotPath;
     // Streaming budget preset: desktop, mobile or web.
     std::string platform;
+    // Hours (0..24): a stopped TimeOfDayComponent on the sun (docs/design/0018). Negative:
+    // the world's authored sun.
+    double timeOfDay = -1.0;
 };
 
 int RunWorld(const WorldOptions &options);

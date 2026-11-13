@@ -21,8 +21,8 @@
 //   --screenshot F   save the last frame as PNG (.png) or PPM
 //
 // World mode (ROADMAP M5): city --world [FILE] [--route] [--speed M/S] [--distance M]
-//             [--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--frames N]
-//             [--hidden] [--width W] [--height H] [--screenshot FILE]
+//             [--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--time HOURS]
+//             [--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]
 //   streams worlds/metro/metro.gworld (or FILE) around a flying camera; see WorldMode.cpp.
 //
 // The game (ROADMAP M6): city --play [--autopilot] [--no-crowd] [--no-traffic]
@@ -290,6 +290,10 @@ int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
         {
             options.platform = argv[++i];
         }
+        else if (std::strcmp(arg, "--time") == 0 && hasValue)
+        {
+            options.timeOfDay = std::strtod(argv[++i], nullptr);
+        }
         else if (std::strcmp(arg, "--frames") == 0 && hasValue)
         {
             options.frames = std::strtol(argv[++i], nullptr, 10);
@@ -314,7 +318,7 @@ int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
         {
             GENI_LOG_ERROR(
                 "Unknown argument '%s'. Usage: city --world [FILE] [--route] [--speed M/S] [--distance M] "
-                "[--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--frames N] [--hidden] "
+                "[--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--time HOURS] [--frames N] [--hidden] "
                 "[--width W] [--height H] [--screenshot FILE]",
                 arg
             );
