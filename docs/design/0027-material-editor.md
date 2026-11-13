@@ -1,6 +1,6 @@
 # 0027: Material editor
 
-Milestone: After v0.1 (visual tools) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (visual tools) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 

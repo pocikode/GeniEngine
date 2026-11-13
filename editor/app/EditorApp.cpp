@@ -111,6 +111,8 @@ void EditorApp::Update(float deltaTime)
     DrawDockSpace();
     DrawWorldPanel();
     DrawTimelinePanel();
+    DrawMaterialPanel();
+    UpdatePendingMaterial();
     DrawHierarchy();
     DrawInspector();
     // Console before Assets: of two panels docked together, the one submitted last
@@ -280,6 +282,7 @@ void EditorApp::DrawDockSpace()
             ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("Console", bottom);
             ImGui::DockBuilderDockWindow("Timeline", bottom);
+            ImGui::DockBuilderDockWindow("Material", right);
             ImGui::DockBuilderFinish(dockSpace);
             // Which of two docked tabs starts in front is otherwise up to submission and
             // focus order, which differs between platforms: choose Assets explicitly.
@@ -466,6 +469,7 @@ void EditorApp::DrawMenuBar()
         ImGui::MenuItem("Console", nullptr, &m_showConsole);
         ImGui::MenuItem("World", nullptr, &m_showWorld, m_document->IsWorldDocument());
         ImGui::MenuItem("Timeline", nullptr, &m_showTimeline);
+        ImGui::MenuItem("Material", nullptr, &m_showMaterial, !m_materialPath.empty());
         ImGui::Separator();
         bool stats = Engine::GetInstance().GetDebugOverlay().IsVisible();
         if (ImGui::MenuItem("Engine Stats", "F1", &stats))
@@ -1298,6 +1302,39 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
         }
         return m_document->SetProperty(*primary, component, property, value) || fail("the property did not change");
     }
+    if (command == "make-material")
+    {
+        // make-material: an editable .mat for the selection's first MeshComponent.
+        if (!primary)
+        {
+            return fail("nothing selected");
+        }
+        const auto &components = primary->GetComponents();
+        for (size_t i = 0; i < components.size(); ++i)
+        {
+            if (components[i]->GetTypeID() == MeshComponent::TypeID())
+            {
+                return MakeEditableMaterial(*primary, static_cast<int>(i)) || fail("could not make the material editable");
+            }
+        }
+        return fail("the selection has no MeshComponent");
+    }
+    if (command == "wait-material")
+    {
+        // Until the project has cooked the new material and it is assigned (at most ~60 s).
+        if (!m_pendingMaterials.empty())
+        {
+            if (++m_scriptRetries > 3600)
+            {
+                return fail("the material was not cooked");
+            }
+            --m_scriptCursor;
+            m_scriptWait = 1;
+            return true;
+        }
+        m_scriptRetries = 0;
+        return true;
+    }
     if (command == "add")
     {
         // add <component type>: on the selection.
@@ -1441,6 +1478,15 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
     {
         std::string what;
         stream >> what;
+        if (what == "material")
+        {
+            // expect material <source path>: the selection's first mesh uses that material.
+            const std::string expected = rest();
+            MeshComponent *mesh = primary ? primary->GetComponent<MeshComponent>() : nullptr;
+            const AssetManifestEntry *entry = mesh ? assets.GetManifest().Find(mesh->GetMaterialID()) : nullptr;
+            const std::string actual = entry ? entry->source : std::string("(none)");
+            return actual == expected || fail("expected material " + expected + ", found " + actual);
+        }
         if (what == "keys")
         {
             // expect keys <object> <count>: keys of the object's track on the first timeline.

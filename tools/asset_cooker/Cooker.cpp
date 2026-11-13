@@ -269,8 +269,44 @@ struct Cooker::Impl
         return stem + suffix;
     }
 
+    // A partial cook keeps what the previous manifest lists for the files it did not cook,
+    // so cooking one new file (the editor's Make Material Editable) does not hide the rest.
+    void KeepPreviousEntries()
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.outputRoot / "cooked_manifest.json", bytes))
+        {
+            return;
+        }
+        const Json previous = Json::parse(bytes.begin(), bytes.end(), nullptr, false);
+        if (previous.is_discarded() || !previous.contains("assets"))
+        {
+            return;
+        }
+        for (const auto &item : previous["assets"])
+        {
+            ManifestEntry entry;
+            entry.id = AssetID::FromHex(item.value("id", std::string()));
+            if (!entry.id.IsValid() || ids.count(entry.id.value))
+            {
+                continue;
+            }
+            entry.type = AssetTypeFromName(item.value("type", std::string()));
+            entry.source = item.value("source", std::string());
+            entry.path = item.value("path", std::string());
+            entry.bc = item.value("bc", std::string());
+            entry.astc = item.value("astc", std::string());
+            ids.insert(entry.id.value);
+            manifest.push_back(std::move(entry));
+        }
+    }
+
     bool WriteManifest()
     {
+        if (!fullCook)
+        {
+            KeepPreviousEntries();
+        }
         std::sort(manifest.begin(), manifest.end(), [](const ManifestEntry &a, const ManifestEntry &b) {
             return a.id.value < b.id.value;
         });

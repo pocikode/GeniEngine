@@ -87,6 +87,9 @@ class Project
 
     // Cooks everything, blocking. False (with the cooker's output) when it failed.
     bool Cook(std::string *output = nullptr);
+    // Cooks only these source files (paths relative to the assets folder) into the existing
+    // cook, then reloads the manifest. For a file the editor just wrote.
+    bool CookFiles(const std::vector<std::string> &inputs, std::string *output = nullptr);
     // Compiles one .slang file's entry points to SPIR-V in the cooked folder, blocking.
     // A file without entry points is a module and compiles to nothing.
     bool CompileShader(const std::string &assetPath, std::string *output = nullptr);

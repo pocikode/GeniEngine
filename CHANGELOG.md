@@ -6,6 +6,10 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Material editor** (docs/design/0027): `.mat` files cook into materials meshes can
+  use; the editor's Material panel edits them with live preview, saves and undoes;
+  "Make Material Editable" copies a glTF material into a `.mat`, cooks just that file and
+  assigns it (undoable). Partial cooks (`--input`) now keep the rest of the manifest.
 - **Timeline** (docs/design/0026): `TimelineComponent` plays transform tracks (Catmull-Rom
   positions, slerped rotations), camera cuts, sound cues and events (`scene/Timeline.h`:
   `TimelineData`, `ParseTimeline`, `SampleTrack`); `EditUpdate` previews poses only. Lua

@@ -264,6 +264,9 @@ TEST_SUITE("cooker")
         partial.inputs = {"textures/checker.png"};
         REQUIRE_MESSAGE(Geni::cook::Cooker().Run(partial, &error), error);
         CHECK(std::filesystem::exists(output / "cooked" / "models" / "hierarchy.gscene"));
+        // ...nor drop them from the manifest: more than the one image's entries remain.
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        CHECK(nlohmann::json::parse(manifestFile)["assets"].size() > 10);
     }
     TEST_CASE("scenes and prefabs saved by the editor are listed in the manifest as they are")
     {
