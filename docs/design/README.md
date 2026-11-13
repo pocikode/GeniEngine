@@ -30,6 +30,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0022 | [Terrain](0022-terrain.md) | After v0.1 | Done |
 | 0023 | [Vegetation](0023-vegetation.md) | After v0.1 | Done |
 | 0024 | [Missions and saved games](0024-missions-and-saves.md) | After v0.1 | Done |
+| 0025 | [Traffic and pedestrians](0025-traffic-and-pedestrians.md) | After v0.1 | Accepted |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 
