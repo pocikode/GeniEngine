@@ -1162,41 +1162,12 @@ int SceneSpawn(lua_State *L)
     const std::string path = luaL_checkstring(L, 1);
     const glm::vec3 position = OptVec3(L, 2, glm::vec3(0.0f));
     const float yaw = glm::radians(static_cast<float>(luaL_optnumber(L, 3, 0.0)));
-    AssetManager &assets = E().GetAssetManager();
-    SerializationContext context{&scene, &assets};
-    GameObject *root = nullptr;
-    const bool prefab = path.size() > 8 && path.compare(path.size() - 8, 8, ".gprefab") == 0;
-    if (prefab)
-    {
-        root = SceneSerializer::InstantiatePrefab(scene, assets.FindBySource(AssetType::Prefab, path), context, nullptr);
-    }
-    else
-    {
-        auto document = assets.LoadScene(assets.FindBySource(AssetType::Scene, path), false);
-        if (!document.IsReady())
-        {
-            return luaL_error(L, "scene.spawn: '%s' is not a cooked scene or model", path.c_str());
-        }
-        std::vector<GameObject *> roots;
-        std::string error;
-        if (!SceneSerializer::InstantiateSubtree(scene, document->document, context, nullptr, &roots, &error) ||
-            roots.empty())
-        {
-            return luaL_error(L, "scene.spawn: %s", error.c_str());
-        }
-        root = roots.front();
-        // Several roots: keep them under the first so the caller gets one object.
-        for (size_t i = 1; i < roots.size(); ++i)
-        {
-            roots[i]->SetParent(root);
-        }
-    }
+    std::string error;
+    GameObject *root = SceneSerializer::Spawn(scene, path, position, yaw, &error);
     if (!root)
     {
-        return luaL_error(L, "scene.spawn: could not instantiate '%s'", path.c_str());
+        return luaL_error(L, "scene.spawn: %s", error.c_str());
     }
-    root->SetPosition(position);
-    root->SetRotation(glm::angleAxis(yaw, glm::vec3(0.0f, 1.0f, 0.0f)));
     PushObject(L, root);
     return 1;
 }
@@ -2002,6 +1973,111 @@ int SaveDelete(lua_State *L)
     return 1;
 }
 
+// Traffic (docs/design/0025).
+double FieldNumber(lua_State *L, int table, const char *name, double fallback)
+{
+    lua_getfield(L, table, name);
+    const double value = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : fallback;
+    lua_pop(L, 1);
+    return value;
+}
+
+// traffic.start{models = {...}, count, radius, cruise_min, cruise_max, seed,
+//               grid = {origin_x, origin_z, columns, rows, spacing, half_width, lane_offset,
+//                       height, speed} or roads = "path.groads"}
+int TrafficStart(lua_State *L)
+{
+    luaL_checktype(L, 1, LUA_TTABLE);
+    TrafficConfig config;
+    lua_getfield(L, 1, "models");
+    if (lua_istable(L, -1))
+    {
+        const lua_Integer count = luaL_len(L, -1);
+        for (lua_Integer i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            if (lua_isstring(L, -1))
+            {
+                config.models.push_back(lua_tostring(L, -1));
+            }
+            lua_pop(L, 1);
+        }
+    }
+    lua_pop(L, 1);
+    config.count = static_cast<int>(FieldNumber(L, 1, "count", config.count));
+    config.radius = static_cast<float>(FieldNumber(L, 1, "radius", config.radius));
+    config.cruiseMin = static_cast<float>(FieldNumber(L, 1, "cruise_min", config.cruiseMin));
+    config.cruiseMax = static_cast<float>(FieldNumber(L, 1, "cruise_max", config.cruiseMax));
+    config.seed = static_cast<uint32_t>(FieldNumber(L, 1, "seed", config.seed));
+
+    RoadNetwork network;
+    lua_getfield(L, 1, "grid");
+    if (lua_istable(L, -1))
+    {
+        const int grid = lua_gettop(L);
+        RoadGridDesc desc;
+        desc.originX = FieldNumber(L, grid, "origin_x", desc.originX);
+        desc.originZ = FieldNumber(L, grid, "origin_z", desc.originZ);
+        desc.columns = static_cast<int>(FieldNumber(L, grid, "columns", desc.columns));
+        desc.rows = static_cast<int>(FieldNumber(L, grid, "rows", desc.rows));
+        desc.spacing = FieldNumber(L, grid, "spacing", desc.spacing);
+        desc.halfWidth = FieldNumber(L, grid, "half_width", desc.halfWidth);
+        desc.laneOffset = FieldNumber(L, grid, "lane_offset", desc.laneOffset);
+        desc.height = FieldNumber(L, grid, "height", desc.height);
+        desc.speed = static_cast<float>(FieldNumber(L, grid, "speed", desc.speed));
+        network = RoadNetwork::Grid(desc);
+    }
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "roads");
+    if (lua_isstring(L, -1))
+    {
+        const std::string text = E().GetFileSystem().LoadAssetFileText(lua_tostring(L, -1));
+        std::string error;
+        if (text.empty() || !network.LoadJson(nlohmann::json::parse(text, nullptr, false), &error))
+        {
+            return luaL_error(L, "traffic.start: %s", text.empty() ? "cannot read the road network" : error.c_str());
+        }
+    }
+    lua_pop(L, 1);
+    E().GetTraffic().Start(std::move(network), config);
+    lua_pushboolean(L, E().GetTraffic().IsRunning());
+    return 1;
+}
+
+int TrafficStop(lua_State *L)
+{
+    (void)L;
+    E().GetTraffic().Stop();
+    return 0;
+}
+
+int TrafficStats(lua_State *L)
+{
+    const Geni::TrafficStats stats = E().GetTraffic().GetStats();
+    lua_pushinteger(L, stats.cars);
+    lua_pushnumber(L, stats.driven);
+    return 2;
+}
+
+int TrafficKeepClear(lua_State *L)
+{
+    E().GetTraffic().KeepClear(CheckDVec3(L, 1), static_cast<float>(luaL_checknumber(L, 2)));
+    return 0;
+}
+
+int TrafficSetFocus(lua_State *L)
+{
+    GameObject *object = lua_isnoneornil(L, 1) ? nullptr : CheckObject(L, 1);
+    E().GetTraffic().SetFocus(object ? object->GetID() : 0);
+    return 0;
+}
+
+int TrafficRunning(lua_State *L)
+{
+    lua_pushboolean(L, E().GetTraffic().IsRunning());
+    return 1;
+}
+
 void Register(lua_State *L, ScriptSystem &system)
 {
     (void)system;
@@ -2176,6 +2252,12 @@ void Register(lua_State *L, ScriptSystem &system)
         {"write", SaveWrite}, {"read", SaveRead}, {"exists", SaveExists}, {"delete", SaveDelete}, {nullptr, nullptr}
     };
     NewLibrary(L, "save", save);
+    const luaL_Reg traffic[] = {
+        {"start", TrafficStart},          {"stop", TrafficStop},         {"stats", TrafficStats},
+        {"keep_clear", TrafficKeepClear}, {"set_focus", TrafficSetFocus}, {"running", TrafficRunning},
+        {nullptr, nullptr},
+    };
+    NewLibrary(L, "traffic", traffic);
 }
 
 } // namespace ScriptBindings

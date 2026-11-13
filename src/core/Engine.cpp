@@ -371,6 +371,8 @@ void Engine::Simulate(double frameSeconds)
     if (!m_physicsPaused)
     {
         m_missions.Update(static_cast<float>(frameSeconds), m_currentScene.get());
+        // Cars after the game moved the player (docs/design/0025).
+        m_traffic.Update(static_cast<float>(frameSeconds), m_currentScene.get());
     }
 
     // The listener is the camera the frame renders with.
@@ -542,6 +544,7 @@ void Engine::Destroy()
     m_currentScene.reset();
     m_scripts.Shutdown();
     m_missions.Clear();
+    m_traffic.Stop();
     m_audio.Shutdown();
     m_gameUI.Shutdown();
     m_renderQueue.Clear();

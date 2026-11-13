@@ -1,8 +1,8 @@
 -- Pedestrians around the player (ROADMAP M6, docs/design/0014).
 --
 -- Keeps up to `count` people within `radius` metres of the focus: each is a mannequin
--- with an animation graph and a navigation agent that wanders the navigation mesh, so
--- they walk the streets and squares and avoid buildings and each other. People who end
+-- with an animation graph, a navigation agent that wanders the navigation mesh (so they
+-- walk the streets and squares and avoid buildings and each other) and a kinematic capsule. People who end
 -- up far away are removed and new ones appear out of sight.
 
 local Crowd = {}
@@ -30,6 +30,9 @@ function Crowd:spawn(focus)
   person:set_name("Pedestrian" .. self.spawned)
   local clips = person:get("AnimationComponent")
   person:add("AnimatorComponent", { animation = clips.animation, graph = "animations/pedestrian.animgraph" })
+  -- A body, so traffic stops for people and the player's car bumps into them
+  -- (docs/design/0025). Kinematic: it follows the object the agent moves.
+  person:add("PhysicsComponent", { bodyType = "kinematic", colliderType = "capsule", radius = 0.3, height = 1.2 })
   person:add("NavAgentComponent", {
     wanderRadius = 30.0,
     maxSpeed = 1.15 + math.random() * 0.45,

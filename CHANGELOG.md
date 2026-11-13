@@ -6,6 +6,14 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Traffic** (docs/design/0025): `RoadNetwork` (`world/RoadNetwork.h`): a lane graph
+  with curved lanes and intersections, `geni.roads` JSON and `RoadNetwork::Grid` for
+  street grids; lanes of one crossing that come within 2.5 m conflict. `TrafficSystem`
+  (`Engine::GetTraffic`) spawns kinematic cars around the focus, follows the car ahead,
+  claims crossings so conflicting turns wait, stops for anything else on the moving layer
+  and despawns out of range. `SceneSerializer::Spawn` (what `scene.spawn` does). Lua
+  `traffic` library. Geni City's traffic runs on it (a 125 x 125 grid); pedestrians have
+  kinematic capsules, so cars stop for them and the player's car bumps into them.
 - **Missions and saved games** (docs/design/0024): `MissionSystem` (`Engine::GetMissions`)
   loads `.gmission` JSON with ordered `reach`, `count` and `custom` objectives,
   requirements, time limits, events and `SaveState`/`RestoreState`; reach checks use world

@@ -324,7 +324,8 @@ Done when: a cut-down reference scene runs in Chrome and Safari.
 
 Chosen by what users ask for, not planned in detail now:
 
-- Open-world layers: traffic and pedestrian simulation, time of day (first version done:
+- Open-world layers: traffic and pedestrian simulation (first version done:
+  docs/design/0025), time of day (first version done:
   docs/design/0018, with night lights), weather (first version done: docs/design/0020),
   mission system (first version done: docs/design/0024, with saved games)
 - Rendering: global illumination, GPU-driven culling, terrain (first version done:
