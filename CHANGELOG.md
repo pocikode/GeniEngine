@@ -6,6 +6,16 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Particles** (docs/design/0019): `ParticleEmitterComponent` emits and simulates
+  camera-facing particles on the CPU (rate, bursts, duration and loop, point/sphere/box
+  shapes, a cone of directions, gravity, drag, floor bounce, size, sRGB colour and atlas
+  frame over life, world or local space, a seed so runs repeat) and draws each emitter as
+  one sprite command. `SpriteCommand::billboard` with `SpriteQuad::center`/`rotation`
+  draws quads facing the camera (alpha-blended ones sorted back to front);
+  `SpriteCommand::blend` and `SpriteBlend::Additive`; `rhi::BlendMode::Additive`. Lua:
+  `emit`, `clear`, `restart`, `count`. Geni Plains has coin sparkles and landing dust, and
+  `platformer --particles N` with the `benchmark_particles` test (20,000 particles at
+  8.6 ms per frame on an Apple M4, release, 1280x720).
 - **Time of day** (docs/design/0018): `TimeOfDayComponent` on the object with the
   directional light runs a clock (`time` in hours, `dayLengthMinutes`, 0 stops it) and
   drives the sun, a moon at night, and the sky, fog and ambient colours, keyed on sun

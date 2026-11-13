@@ -20,6 +20,15 @@ add_test(NAME benchmark_sprites
                  --budget-ms ${GENI_SPRITE_BUDGET_MS})
 set_tests_properties(benchmark_sprites PROPERTIES LABELS "gpu;perf" TIMEOUT 300)
 
+# 20,000 live particles in 16 emitters, half additive, half alpha-blended and sorted
+# (docs/design/0019). Loose by default for software Vulkan; -DGENI_PARTICLE_BUDGET_MS=16.6
+# on real hardware.
+set(GENI_PARTICLE_BUDGET_MS 2000 CACHE STRING "Frame-time budget for the 20,000-particle benchmark, in milliseconds")
+add_test(NAME benchmark_particles
+         COMMAND platformer --particles 20000 --frames 90 --hidden --width 640 --height 360
+                 --budget-ms ${GENI_PARTICLE_BUDGET_MS})
+set_tests_properties(benchmark_particles PROPERTIES LABELS "gpu;perf" TIMEOUT 300)
+
 if(GENI_BUILD_TESTS)
   # The start of the level: tiles, parallax, the hero, a crate, coins and the HUD.
   add_test(NAME screenshot_platformer

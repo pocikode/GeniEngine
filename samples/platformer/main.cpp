@@ -4,15 +4,18 @@
 // the editor (cmake --build build/dev --target edit_platformer): a tilemap that collides,
 // the player on the character controller, crates on 2D physics, animated coins and
 // parallax backgrounds. This file is the game's rules: input, the hero's animation, the
-// camera, coins and the HUD.
+// camera, coins, particle effects (coin sparkles, landing dust; docs/design/0019) and the
+// HUD.
 //
 // Usage: platformer [--hidden] [--width W] [--height H] [--frames N] [--screenshot FILE]
-//                   [--autopilot] [--benchmark N] [--budget-ms MS]
+//                   [--autopilot] [--benchmark N] [--particles N] [--budget-ms MS]
 //   --autopilot     plays the level through the input actions and exits with code 9 if
 //                   it does not reach the end or collects fewer than a quarter of the
 //                   coins (it only runs and jumps; most coins are on platforms)
 //   --benchmark N   adds N moving, animated sprites and reports the mean frame time;
 //                   exits with code 4 when it is over --budget-ms
+//   --particles N   keeps about N particles alive in emitters around the camera and
+//                   reports the mean frame time; exits with code 4 over --budget-ms
 //   --frames N      quits after N frames (--screenshot saves the last one)
 
 #include <geni.h>
@@ -40,7 +43,13 @@ struct Options
     std::string screenshotPath;
     bool autopilot = false;
     int benchmarkSprites = 0;
+    int benchmarkParticles = 0;
     double budgetMs = 0.0;
+
+    bool Benchmarking() const
+    {
+        return benchmarkSprites > 0 || benchmarkParticles > 0;
+    }
 };
 
 constexpr float kStep = 1.0f / 60.0f;
@@ -126,9 +135,14 @@ class PlatformerApp : public Geni::Application
 
         Collect(m_scene->FindObject("Level"));
         m_startX = m_player->GetWorldPosition().x;
+        AddEffects();
         if (m_options.benchmarkSprites > 0)
         {
             AddBenchmarkSprites(m_options.benchmarkSprites);
+        }
+        if (m_options.benchmarkParticles > 0)
+        {
+            AddBenchmarkParticles(m_options.benchmarkParticles);
         }
         m_lastTime = std::chrono::steady_clock::now();
         GENI_LOG_INFO("Geni Plains: %zu coins, %zu crates", m_coins.size(), m_crates);
@@ -163,6 +177,7 @@ class PlatformerApp : public Geni::Application
 
         AnimateHero(move);
         CollectCoins();
+        LandingDust();
         UpdateBenchmark();
 
         m_scene->Update(deltaTime);
@@ -181,7 +196,7 @@ class PlatformerApp : public Geni::Application
             ++m_falls;
         }
 
-        if (m_options.benchmarkSprites > 0 && m_frame > kBenchmarkWarmup)
+        if (m_options.Benchmarking() && m_frame > kBenchmarkWarmup)
         {
             m_totalMs += frameMs;
             ++m_measured;
@@ -317,7 +332,75 @@ class PlatformerApp : public Geni::Application
             {
                 coin->SetActive(false);
                 ++m_collected;
+                m_sparkles->GetOwner()->SetPosition(coin->GetWorldPosition());
+                m_sparkles->Emit(14);
             }
+        }
+    }
+
+    // Two emitters the game moves to where something happens; both are world space, so
+    // what they emitted stays put when they move.
+    void AddEffects()
+    {
+        auto *effects = m_scene->CreateObject("Effects");
+
+        m_sparkles = new Geni::ParticleEmitterComponent();
+        m_sparkles->SetRate(0.0f);
+        m_sparkles->SetSpread(180.0f);
+        m_sparkles->SetSpeedMin(1.5f);
+        m_sparkles->SetSpeedMax(3.5f);
+        m_sparkles->SetLifetimeMin(0.35f);
+        m_sparkles->SetLifetimeMax(0.6f);
+        m_sparkles->SetGravity(glm::vec3(0.0f, -4.0f, 0.0f));
+        m_sparkles->SetDrag(2.0f);
+        m_sparkles->SetStartSize(0.16f);
+        m_sparkles->SetEndSize(0.04f);
+        m_sparkles->SetStartColor(glm::vec4(1.0f, 0.93f, 0.45f, 1.0f));
+        m_sparkles->SetEndColor(glm::vec4(1.0f, 0.6f, 0.1f, 0.0f));
+        m_sparkles->SetBlend(Geni::SpriteBlend::Additive);
+        m_sparkles->SetFilter(Geni::SpriteFilter::Nearest);
+        m_sparkles->SetLayer(30);
+        m_sparkles->SetMaxParticles(256);
+        m_scene->CreateObject("Coin Sparkles", effects)->AddComponent(m_sparkles);
+
+        m_dust = new Geni::ParticleEmitterComponent();
+        m_dust->SetRate(0.0f);
+        m_dust->SetShape(Geni::EmitterShape::Box);
+        m_dust->SetBoxSize(glm::vec3(0.5f, 0.05f, 0.0f));
+        m_dust->SetSpread(70.0f);
+        m_dust->SetSpeedMin(0.4f);
+        m_dust->SetSpeedMax(1.2f);
+        m_dust->SetLifetimeMin(0.3f);
+        m_dust->SetLifetimeMax(0.5f);
+        m_dust->SetDrag(3.0f);
+        m_dust->SetStartSize(0.12f);
+        m_dust->SetEndSize(0.3f);
+        m_dust->SetStartColor(glm::vec4(0.87f, 0.80f, 0.66f, 0.8f));
+        m_dust->SetEndColor(glm::vec4(0.87f, 0.80f, 0.66f, 0.0f));
+        m_dust->SetFilter(Geni::SpriteFilter::Nearest);
+        m_dust->SetLayer(15);
+        m_dust->SetMaxParticles(128);
+        m_scene->CreateObject("Landing Dust", effects)->AddComponent(m_dust);
+    }
+
+    // A puff at the hero's feet after a real fall (not on every small step).
+    void LandingDust()
+    {
+        const bool grounded = m_character->IsGrounded();
+        if (!grounded)
+        {
+            m_airTime += kStep;
+            m_fallSpeed = std::min(m_fallSpeed, m_character->GetVelocity().y);
+        }
+        else
+        {
+            if (m_airTime > 0.25f && m_fallSpeed < -4.0f)
+            {
+                m_dust->GetOwner()->SetPosition(m_player->GetWorldPosition());
+                m_dust->Emit(10);
+            }
+            m_airTime = 0.0f;
+            m_fallSpeed = 0.0f;
         }
     }
 
@@ -404,8 +487,60 @@ class PlatformerApp : public Geni::Application
         }
     }
 
+    // Emitters spread across the view, each keeping count / 16 particles alive.
+    void AddBenchmarkParticles(int count)
+    {
+        constexpr int kEmitters = 16;
+        const float lifetime = 2.0f;
+        auto *group = m_scene->CreateObject("Particle Benchmark");
+        for (int i = 0; i < kEmitters; ++i)
+        {
+            auto *emitter = new Geni::ParticleEmitterComponent();
+            const int each = count / kEmitters;
+            // A steady stream with room to spare, so the pool never drops a particle.
+            emitter->SetMaxParticles(each + each / 4);
+            emitter->SetRate(static_cast<float>(each) / lifetime);
+            emitter->SetLifetimeMin(lifetime);
+            emitter->SetLifetimeMax(lifetime);
+            emitter->SetSpread(180.0f);
+            emitter->SetSpeedMin(0.2f);
+            emitter->SetSpeedMax(1.5f);
+            emitter->SetSpinMin(-90.0f);
+            emitter->SetSpinMax(90.0f);
+            emitter->SetStartSize(0.15f);
+            emitter->SetEndSize(0.05f);
+            emitter->SetStartColor(glm::vec4(1.0f, 0.8f, 0.4f, 1.0f));
+            emitter->SetEndColor(glm::vec4(1.0f, 0.3f, 0.1f, 0.0f));
+            emitter->SetBlend(i % 2 == 0 ? Geni::SpriteBlend::Additive : Geni::SpriteBlend::Alpha);
+            emitter->SetSeed(i + 1);
+            emitter->SetLayer(25);
+            auto *object = m_scene->CreateObject("Emitter", group);
+            object->AddComponent(emitter);
+            m_benchEmitters.push_back(object);
+        }
+        // Run one lifetime up front so the measured frames start at the full count.
+        UpdateBenchmark();
+        for (auto *object : m_benchEmitters)
+        {
+            auto *emitter = object->GetComponent<Geni::ParticleEmitterComponent>();
+            for (int step = 0; step < 2 * 60; ++step)
+            {
+                emitter->Simulate(1.0f / 60.0f);
+            }
+        }
+    }
+
     void UpdateBenchmark()
     {
+        // The particle emitters move with the camera, in a 4 x 4 grid across the view.
+        const glm::vec3 cameraPosition = m_camera->GetPosition();
+        for (size_t i = 0; i < m_benchEmitters.size(); ++i)
+        {
+            const float x = (static_cast<float>(i % 4) - 1.5f) * 5.0f;
+            const float y = (static_cast<float>(i / 4) - 1.5f) * 2.5f;
+            m_benchEmitters[i]->SetPosition(glm::vec3(cameraPosition.x + x, cameraPosition.y + y, 0.0f));
+        }
+
         if (m_bench.empty())
         {
             return;
@@ -436,6 +571,11 @@ class PlatformerApp : public Geni::Application
     std::vector<Geni::GameObject *> m_coins;
     std::vector<Parallax> m_parallax;
     std::vector<BenchSprite> m_bench;
+    std::vector<Geni::GameObject *> m_benchEmitters;
+    Geni::ParticleEmitterComponent *m_sparkles = nullptr;
+    Geni::ParticleEmitterComponent *m_dust = nullptr;
+    float m_airTime = 0.0f;
+    float m_fallSpeed = 0.0f;
     size_t m_crates = 0;
     int m_collected = 0;
     int m_falls = 0;
@@ -482,6 +622,10 @@ bool ParseOptions(int argc, char **argv, Options &options)
         {
             options.benchmarkSprites = std::atoi(next());
         }
+        else if (std::strcmp(arg, "--particles") == 0)
+        {
+            options.benchmarkParticles = std::atoi(next());
+        }
         else if (std::strcmp(arg, "--budget-ms") == 0)
         {
             options.budgetMs = std::atof(next());
@@ -490,7 +634,7 @@ bool ParseOptions(int argc, char **argv, Options &options)
         {
             GENI_LOG_ERROR(
                 "Unknown argument '%s'. Usage: platformer [--hidden] [--width W] [--height H] [--frames N] "
-                "[--screenshot FILE] [--autopilot] [--benchmark N] [--budget-ms MS]",
+                "[--screenshot FILE] [--autopilot] [--benchmark N] [--particles N] [--budget-ms MS]",
                 arg
             );
             return false;
@@ -514,13 +658,13 @@ int main(int argc, char **argv)
     config.width = options.width;
     config.height = options.height;
     config.visible = !options.hidden;
-    config.vsync = !options.hidden && options.benchmarkSprites == 0;
+    config.vsync = !options.hidden && !options.Benchmarking();
     // The game UI draws through Dear ImGui; the stats window stays hidden (F1).
     config.debugOverlay = true;
     config.debugOverlayVisible = false;
     // 2D needs no shadows; MSAA keeps rotating crates smooth.
     config.renderer.shadows = false;
-    if (options.hidden && options.benchmarkSprites == 0)
+    if (options.hidden && !options.Benchmarking())
     {
         // Captures and the autopilot: every frame is one 1/60 s step, on any machine.
         config.deterministicFrameTime = kStep;
@@ -560,11 +704,11 @@ int main(int argc, char **argv)
             return 9;
         }
     }
-    if (options.benchmarkSprites > 0)
+    if (options.Benchmarking())
     {
         std::printf(
-            "platformer: %.2f ms/frame (%.1f fps) with %u sprites in %u batches; budget %.2f ms\n", meanMs,
-            meanMs > 0.0 ? 1000.0 / meanMs : 0.0, stats.sprites, stats.spriteBatches, options.budgetMs
+            "platformer: %.2f ms/frame (%.1f fps) with %u sprites and particles in %u batches; budget %.2f ms\n",
+            meanMs, meanMs > 0.0 ? 1000.0 / meanMs : 0.0, stats.sprites, stats.spriteBatches, options.budgetMs
         );
         if (options.budgetMs > 0.0 && meanMs > options.budgetMs)
         {

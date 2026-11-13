@@ -35,6 +35,16 @@
 namespace Geni
 {
 
+// One sprite corner (docs/design/0017): camera-relative position with the sRGB-decode
+// flag in w, texture coordinate, linear colour.
+struct SpriteVertex
+{
+    glm::vec4 position;
+    glm::vec2 uv;
+    glm::vec4 color;
+};
+static_assert(sizeof(SpriteVertex) == 40, "sprite vertex stride");
+
 using namespace ShaderInterface;
 
 namespace
@@ -52,15 +62,6 @@ constexpr uint64_t kInitialDrawCapacity = 1u << 20;
 constexpr uint64_t kInstanceStride = sizeof(glm::mat4);          // 64
 constexpr uint64_t kShadowInstanceStride = kInstanceStride + 16; // matrix + cascade index + padding
 
-// One sprite corner (docs/design/0017): camera-relative position with the sRGB-decode
-// flag in w, texture coordinate, linear colour.
-struct SpriteVertex
-{
-    glm::vec4 position;
-    glm::vec2 uv;
-    glm::vec4 color;
-};
-static_assert(sizeof(SpriteVertex) == 40, "sprite vertex stride");
 constexpr uint64_t kSpriteQuadBytes = 4 * sizeof(SpriteVertex);
 // Bind groups for sprite textures not drawn for this many frames are released.
 constexpr uint64_t kSpriteGroupLifetime = 240;
@@ -292,7 +293,8 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
         }
     }
 
-    if (!GetSkyPipeline().IsValid() || !GetTonemapPipeline().IsValid() || !GetSpritePipeline().IsValid())
+    if (!GetSkyPipeline().IsValid() || !GetTonemapPipeline().IsValid() || !GetSpritePipeline().IsValid() ||
+        !GetSpritePipeline(SpriteBlend::Additive).IsValid())
     {
         return false;
     }
@@ -322,9 +324,11 @@ void Renderer::Shutdown()
     m_device->DestroyPipeline(m_skyPipeline);
     m_device->DestroyPipeline(m_tonemapPipeline);
     m_device->DestroyPipeline(m_spritePipeline);
+    m_device->DestroyPipeline(m_spriteAdditivePipeline);
     m_skyPipeline = {};
     m_tonemapPipeline = {};
     m_spritePipeline = {};
+    m_spriteAdditivePipeline = {};
     for (auto &entry : m_spriteGroups)
     {
         m_device->DestroyBindGroup(entry.second.group);
@@ -987,11 +991,12 @@ rhi::PipelineHandle Renderer::GetSkyPipeline()
     return m_skyPipeline;
 }
 
-rhi::PipelineHandle Renderer::GetSpritePipeline()
+rhi::PipelineHandle Renderer::GetSpritePipeline(SpriteBlend blend)
 {
-    if (m_spritePipeline.IsValid())
+    rhi::PipelineHandle &pipeline = blend == SpriteBlend::Additive ? m_spriteAdditivePipeline : m_spritePipeline;
+    if (pipeline.IsValid())
     {
-        return m_spritePipeline;
+        return pipeline;
     }
     rhi::PipelineDesc desc;
     desc.vertexShader = m_spriteVertexModule;
@@ -1005,16 +1010,16 @@ rhi::PipelineHandle Renderer::GetSpritePipeline()
     desc.depthTest = true;
     desc.depthWrite = false;
     desc.depthCompare = rhi::CompareOp::LessOrEqual;
-    desc.blend = rhi::BlendMode::Alpha;
+    desc.blend = blend == SpriteBlend::Additive ? rhi::BlendMode::Additive : rhi::BlendMode::Alpha;
     desc.cullMode = rhi::CullMode::None;
     desc.targets.backbuffer = false;
     desc.targets.colorFormats = {rhi::Format::RGBA16Float};
     desc.targets.depthFormat = m_device->GetDepthFormat();
     desc.targets.sampleCount = m_config.msaaSamples;
     desc.bindGroupLayouts = {m_frameLayout, m_tonemapLayout};
-    desc.debugName = "sprite";
-    m_spritePipeline = m_device->CreatePipeline(desc);
-    return m_spritePipeline;
+    desc.debugName = blend == SpriteBlend::Additive ? "sprite additive" : "sprite";
+    pipeline = m_device->CreatePipeline(desc);
+    return pipeline;
 }
 
 rhi::PipelineHandle Renderer::GetTonemapPipeline()
@@ -1666,9 +1671,18 @@ bool Renderer::PrepareSprites(
         {
             continue;
         }
-        if (m_spriteBatches.empty() || m_spriteBatches.back().group != group)
+        if (m_spriteBatches.empty() || m_spriteBatches.back().group != group ||
+            m_spriteBatches.back().blend != command.blend)
         {
-            m_spriteBatches.push_back({group, written, 0});
+            m_spriteBatches.push_back({group, command.blend, written, 0});
+        }
+
+        if (command.billboard)
+        {
+            WriteBillboards(command, model, camera, decode, vertices + static_cast<uint64_t>(written) * 4);
+            written += command.quadCount;
+            m_spriteBatches.back().quadCount = written - m_spriteBatches.back().firstQuad;
+            continue;
         }
 
         for (uint32_t q = 0; q < command.quadCount; ++q)
@@ -1692,6 +1706,53 @@ bool Renderer::PrepareSprites(
     return true;
 }
 
+void Renderer::WriteBillboards(
+    const SpriteCommand &command, const glm::mat4 &relativeModel, const CameraData &camera, float decode,
+    SpriteVertex *out
+)
+{
+    // The camera's right and up axes in world space: the first two rows of the view
+    // rotation.
+    const glm::mat4 &view = camera.viewMatrix;
+    const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
+    const glm::vec3 up(view[0][1], view[1][1], view[2][1]);
+
+    const bool sort = command.blend == SpriteBlend::Alpha && command.quadCount > 1;
+    if (sort)
+    {
+        m_billboardOrder.resize(command.quadCount);
+        const glm::mat4 viewModel = view * command.modelMatrix;
+        for (uint32_t q = 0; q < command.quadCount; ++q)
+        {
+            const float depth = (viewModel * glm::vec4(command.quads[q].center, 1.0f)).z;
+            m_billboardOrder[q] = {depth, q};
+        }
+        // View space looks down -Z: the most negative depth is the farthest, drawn first.
+        std::sort(m_billboardOrder.begin(), m_billboardOrder.end(), [](const auto &a, const auto &b) {
+            return a.first < b.first;
+        });
+    }
+
+    for (uint32_t i = 0; i < command.quadCount; ++i)
+    {
+        const SpriteQuad &quad = command.quads[sort ? m_billboardOrder[i].second : i];
+        const glm::vec3 center = glm::vec3(relativeModel * glm::vec4(quad.center, 1.0f));
+        const float c = std::cos(quad.rotation);
+        const float s = std::sin(quad.rotation);
+        const glm::vec3 axisX = right * c + up * s;
+        const glm::vec3 axisY = up * c - right * s;
+        const glm::vec3 x0 = center + axisX * quad.min.x;
+        const glm::vec3 x1 = center + axisX * quad.max.x;
+        const glm::vec3 y0 = axisY * quad.min.y;
+        const glm::vec3 y1 = axisY * quad.max.y;
+        SpriteVertex *v = out + static_cast<uint64_t>(i) * 4;
+        v[0] = {glm::vec4(x0 + y0, decode), {quad.uvTopLeft.x, quad.uvBottomRight.y}, quad.color};
+        v[1] = {glm::vec4(x1 + y0, decode), quad.uvBottomRight, quad.color};
+        v[2] = {glm::vec4(x1 + y1, decode), {quad.uvBottomRight.x, quad.uvTopLeft.y}, quad.color};
+        v[3] = {glm::vec4(x0 + y1, decode), quad.uvTopLeft, quad.color};
+    }
+}
+
 void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
 {
     if (m_spriteBatches.empty() || !m_spritePipeline.IsValid() || !frame.spriteVertexBuffer.IsValid() ||
@@ -1699,6 +1760,7 @@ void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
     {
         return;
     }
+    SpriteBlend bound = SpriteBlend::Alpha;
     cmd.SetPipeline(m_spritePipeline);
     cmd.SetBindGroup(FrameSet, frame.frameGroup);
     cmd.SetVertexBuffer(0, frame.spriteVertexBuffer);
@@ -1708,6 +1770,13 @@ void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
         if (batch.quadCount == 0)
         {
             continue;
+        }
+        if (batch.blend != bound)
+        {
+            bound = batch.blend;
+            cmd.SetPipeline(bound == SpriteBlend::Additive ? m_spriteAdditivePipeline : m_spritePipeline);
+            // A new pipeline may disturb earlier bindings on some backends; bind them again.
+            cmd.SetBindGroup(FrameSet, frame.frameGroup);
         }
         cmd.SetBindGroup(1, batch.group);
         cmd.DrawIndexed(batch.quadCount * 6, batch.firstQuad * 6, 0);

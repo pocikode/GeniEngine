@@ -2,6 +2,7 @@
 // plane and the orthographic camera. The "gpu 2d" suite draws them.
 
 #include "TestEngine.h"
+#include "TestImage.h"
 
 #include "core/Engine.h"
 #include "graphics/Texture.h"
@@ -30,7 +31,10 @@
 #include <string>
 #include <vector>
 
+using GeniTest::Image;
 using GeniTest::Near;
+using GeniTest::NearColor;
+using GeniTest::ReadPpm;
 
 namespace
 {
@@ -54,41 +58,6 @@ struct PhysicsWorld
 bool Near2(const glm::vec2 &a, const glm::vec2 &b, float epsilon = 1e-5f)
 {
     return Near(a.x, b.x, epsilon) && Near(a.y, b.y, epsilon);
-}
-
-// A binary PPM written by Engine::RequestScreenshot.
-struct Image
-{
-    int width = 0;
-    int height = 0;
-    std::vector<unsigned char> rgb;
-
-    glm::ivec3 At(int x, int y) const
-    {
-        const size_t i = (static_cast<size_t>(y) * width + x) * 3;
-        return glm::ivec3(rgb[i], rgb[i + 1], rgb[i + 2]);
-    }
-};
-
-bool ReadPpm(const std::filesystem::path &path, Image &image)
-{
-    std::ifstream file(path, std::ios::binary);
-    std::string magic;
-    int maxValue = 0;
-    file >> magic >> image.width >> image.height >> maxValue;
-    file.get();
-    if (magic != "P6" || image.width <= 0 || image.height <= 0)
-    {
-        return false;
-    }
-    image.rgb.resize(static_cast<size_t>(image.width) * image.height * 3);
-    file.read(reinterpret_cast<char *>(image.rgb.data()), static_cast<std::streamsize>(image.rgb.size()));
-    return static_cast<bool>(file);
-}
-
-bool NearColor(const glm::ivec3 &a, const glm::ivec3 &b, int tolerance)
-{
-    return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.z - b.z) <= tolerance;
 }
 
 } // namespace
