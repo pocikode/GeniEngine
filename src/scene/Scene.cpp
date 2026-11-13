@@ -521,6 +521,7 @@ std::vector<LightData> Scene::CollectLights()
         data.range = light.GetRange();
         data.innerConeAngle = light.GetInnerConeAngle();
         data.outerConeAngle = light.GetOuterConeAngle();
+        data.nightOnly = light.IsNightOnly();
         lights.push_back(data);
     });
 

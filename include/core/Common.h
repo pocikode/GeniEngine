@@ -40,6 +40,8 @@ struct LightData
     // Spot cone angles in radians (outer is the half-angle).
     float innerConeAngle = 0.0f;
     float outerConeAngle = 0.785398f;
+    // Scaled by the frame's darkness (Atmosphere::darkness, docs/design/0018): off by day.
+    bool nightOnly = false;
 };
 
 } // namespace Geni

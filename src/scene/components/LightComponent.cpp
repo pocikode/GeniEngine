@@ -27,6 +27,7 @@ const bool s_registered = RegisterComponentType<LightComponent>(
         FloatProperty<LightComponent>(
             "outerConeAngle", &LightComponent::GetOuterConeAngle, &LightComponent::SetOuterConeAngle
         ),
+        BoolProperty<LightComponent>("nightOnly", &LightComponent::IsNightOnly, &LightComponent::SetNightOnly),
     }
 );
 } // namespace

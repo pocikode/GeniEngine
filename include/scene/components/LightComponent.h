@@ -62,6 +62,17 @@ class LightComponent : public Component
         return m_outerConeAngle;
     }
 
+    // Lit only in the dark: the renderer scales the light by the time of day's darkness
+    // (docs/design/0018), so without a clock it stays off.
+    bool IsNightOnly() const
+    {
+        return m_nightOnly;
+    }
+    void SetNightOnly(bool nightOnly)
+    {
+        m_nightOnly = nightOnly;
+    }
+
     // The owner's local -Z axis in world space. Directional and spot lights use it.
     glm::vec3 GetDirection() const;
 
@@ -72,6 +83,7 @@ class LightComponent : public Component
     float m_range = 10.0f;
     float m_innerConeAngle = 0.0f;
     float m_outerConeAngle = 0.785398f;
+    bool m_nightOnly = false;
 };
 
 } // namespace Geni

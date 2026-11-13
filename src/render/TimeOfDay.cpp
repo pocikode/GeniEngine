@@ -145,6 +145,8 @@ TimeOfDayState EvaluateTimeOfDay(float hours, const TimeOfDaySettings &settings)
     state.atmosphere.fogColor = glm::mix(a.fog, b.fog, t);
     state.atmosphere.ambientIntensity = glm::mix(a.ambient, b.ambient, t);
     state.atmosphere.fogDensity = settings.fogDensity;
+    // Lamps come on while the sun sets and are fully on in the blue hour.
+    state.atmosphere.darkness = Smoothstep(6.0f, -4.0f, elevation);
     return state;
 }
 

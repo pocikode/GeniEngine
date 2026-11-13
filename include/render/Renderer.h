@@ -415,6 +415,8 @@ class Renderer
     Atmosphere m_atmosphereOverride;
     bool m_hasAtmosphereOverride = false;
     Atmosphere m_frameAtmosphere;
+    // This frame's lights with night-only ones scaled by the darkness (reused).
+    std::vector<LightData> m_frameLights;
     CascadeSetup m_cascades;
     std::vector<ShaderInterface::GpuLight> m_clusteredLights;
     std::vector<ShaderInterface::ClusterRange> m_clusters;
