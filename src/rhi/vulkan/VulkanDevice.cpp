@@ -2033,6 +2033,16 @@ PipelineHandle VulkanDevice::CreatePipeline(const PipelineDesc &desc)
         blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
     }
+    else if (desc.blend == BlendMode::Additive)
+    {
+        blendAttachment.blendEnable = VK_TRUE;
+        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    }
     VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     // A depth-only pipeline has no colour attachment to blend into.
     const bool hasColorTarget = desc.targets.backbuffer || !desc.targets.colorFormats.empty();

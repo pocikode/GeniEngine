@@ -327,6 +327,8 @@ enum class BlendMode : uint8_t
     Opaque,
     // Straight alpha: src * a + dst * (1 - a).
     Alpha,
+    // src * a + dst; destination alpha is kept.
+    Additive,
 };
 
 // The attachments a pipeline is created for. Vulkan pipelines are tied to a render-pass

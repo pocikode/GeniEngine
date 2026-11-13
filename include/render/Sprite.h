@@ -18,6 +18,15 @@ enum class SpriteFilter : uint8_t
     Nearest
 };
 
+// How a sprite's colour combines with what is behind it.
+enum class SpriteBlend : uint8_t
+{
+    // Straight alpha: src * a + dst * (1 - a).
+    Alpha,
+    // src * a + dst: light that only brightens (fire, sparks, glows); needs no sorting.
+    Additive
+};
+
 // One textured rectangle in its object's XY plane.
 struct SpriteQuad
 {
@@ -30,6 +39,11 @@ struct SpriteQuad
     glm::vec2 uvBottomRight{1.0f, 1.0f};
     // Linear colour and alpha the texel is multiplied by.
     glm::vec4 color{1.0f};
+    // Billboard commands only (docs/design/0019): the quad's centre in the command's model
+    // space, and its rotation in radians about the view direction. min/max are then
+    // offsets along the camera's right and up axes, in world units.
+    glm::vec3 center{0.0f};
+    float rotation = 0.0f;
 };
 
 // Quads that share a texture, a transform and a sort layer, submitted with
@@ -48,6 +62,10 @@ struct SpriteCommand
     // Lower layers draw first (behind). Within a layer, farther sprites draw first, then
     // in submission order.
     int32_t layer = 0;
+    SpriteBlend blend = SpriteBlend::Alpha;
+    // Each quad faces the camera at its `center` instead of lying in the object's XY plane
+    // (particles). Alpha-blended billboard quads are sorted back to front.
+    bool billboard = false;
 };
 
 // sRGB (as painted) to linear, per channel; alpha unchanged.

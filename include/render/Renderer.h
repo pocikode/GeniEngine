@@ -28,6 +28,7 @@ class CommandList;
 
 class Material;
 class Renderer;
+struct SpriteVertex;
 class Shader;
 class Texture;
 
@@ -269,6 +270,7 @@ class Renderer
     struct SpriteBatch
     {
         rhi::BindGroupHandle group;
+        SpriteBlend blend = SpriteBlend::Alpha;
         uint32_t firstQuad = 0;
         uint32_t quadCount = 0;
     };
@@ -334,6 +336,12 @@ class Renderer
     // Culls, sorts and writes this frame's sprite vertices; fills m_spriteBatches.
     bool PrepareSprites(FrameResources &frame, const std::vector<SpriteCommand> &sprites, const CameraData &camera);
     void RenderSprites(rhi::CommandList &cmd, FrameResources &frame);
+    // Writes a billboard command's quads facing the camera (sorted back to front when
+    // alpha-blended) at `out`, four vertices each.
+    void WriteBillboards(
+        const SpriteCommand &command, const glm::mat4 &relativeModel, const CameraData &camera, float decode,
+        SpriteVertex *out
+    );
     rhi::BindGroupHandle GetSpriteGroup(const Texture *texture, SpriteFilter filter);
     bool EnsureSpriteCapacity(FrameResources &frame, uint64_t quads);
     // Always opens the backbuffer pass; draws the HDR image only when `sceneDrawn`.
@@ -343,7 +351,7 @@ class Renderer
     rhi::PipelineHandle GetShadowPipeline(const Mesh &mesh, bool skinned);
     rhi::PipelineHandle GetSkyPipeline();
     rhi::PipelineHandle GetTonemapPipeline();
-    rhi::PipelineHandle GetSpritePipeline();
+    rhi::PipelineHandle GetSpritePipeline(SpriteBlend blend = SpriteBlend::Alpha);
 
     void BuildVertexInput(
         const Mesh &mesh, rhi::VertexLayoutDesc &layout, const std::vector<uint32_t> *shaderInputs
@@ -380,6 +388,9 @@ class Renderer
     rhi::ShaderModuleHandle m_spriteVertexModule;
     rhi::ShaderModuleHandle m_spriteFragmentModule;
     rhi::PipelineHandle m_spritePipeline;
+    rhi::PipelineHandle m_spriteAdditivePipeline;
+    // Back-to-front order of one alpha-blended billboard command's quads (reused).
+    std::vector<std::pair<float, uint32_t>> m_billboardOrder;
     rhi::SamplerHandle m_spriteLinearSampler;
     rhi::SamplerHandle m_spriteNearestSampler;
     rhi::TextureHandle m_spriteWhiteTexture;
