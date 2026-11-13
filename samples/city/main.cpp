@@ -61,6 +61,8 @@ struct Options
     int width = 1280;
     int height = 720;
     std::string screenshotPath;
+    // Camera culling in a compute pass with indirect draws (docs/design/0029).
+    bool gpuCulling = false;
 };
 
 // Scene nodes instantiated per frame while loading. Two passes over 10,001 nodes take
@@ -438,6 +440,10 @@ int main(int argc, char **argv)
         {
             options.budgetMs = std::strtod(argv[++i], nullptr);
         }
+        else if (std::strcmp(argv[i], "--gpu-culling") == 0)
+        {
+            options.gpuCulling = true;
+        }
         else if (std::strcmp(argv[i], "--load-budget-ms") == 0 && i + 1 < argc)
         {
             options.loadBudgetMs = std::strtod(argv[++i], nullptr);
@@ -477,6 +483,7 @@ int main(int argc, char **argv)
 
     Geni::EngineConfig config;
     config.title = "GeniEngine City Block";
+    config.renderer.gpuCulling = options.gpuCulling;
     config.width = options.width;
     config.height = options.height;
     config.visible = !options.hidden;
@@ -503,6 +510,7 @@ int main(int argc, char **argv)
     const double slowestLoadingMs = app->SlowestLoadingFrameMs();
     const size_t objectCount = app->ObjectCount();
     const size_t lightCount = app->LightCount();
+    const Geni::RenderStats stats = engine.GetRenderer().GetRenderStats();
     engine.Destroy();
 
     if (const auto errors = Geni::rhi::GetValidationErrorCount())
@@ -517,6 +525,10 @@ int main(int argc, char **argv)
         std::printf(
             "city: %.2f ms/frame (%.1f fps) over %ld measured frames; %zu objects, %zu lights; budget %.2f ms\n",
             meanMs, fps, std::max(0L, options.frames - options.warmup), objectCount, lightCount, options.budgetMs
+        );
+        std::printf(
+            "city: last frame %u visible of %u submitted, %u culled on the CPU, %u tested on the GPU, %u draws\n",
+            stats.visible, stats.submitted, stats.culled, stats.gpuCullCandidates, stats.mainDraws
         );
         if (options.budgetMs > 0.0 && meanMs > options.budgetMs)
         {

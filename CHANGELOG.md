@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **GPU-driven culling** (docs/design/0029): the RHI gets compute pipelines
+  (`CreateComputePipeline`, `Dispatch`, `ComputeToDrawBarrier`), read-write storage
+  buffers, indirect buffers and `DrawIndexedIndirect`; shaders may have a `computeMain`.
+  `RendererConfig::gpuCulling` (`Renderer::SetGpuCulling`) culls non-skinned indexed
+  meshes in a compute pass and draws them indirectly (`RenderStats::gpuCullCandidates`).
+  `city --gpu-culling` and `screenshot_city_gpu_culling`.
 - **Animation graph editor** (docs/design/0028): an Animation Graph panel opens `.animgraph`
   files from the Assets browser: states as boxes (dragged; positions kept under
   `"editor"`), transitions as arrows, the selection edited on the side (clip, loop, speed,

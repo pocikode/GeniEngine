@@ -197,6 +197,10 @@ VkShaderStageFlags ToVk(ShaderStage stages)
     {
         flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
     }
+    if (HasFlag(stages, ShaderStage::Compute))
+    {
+        flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
     return flags;
 }
 
@@ -209,6 +213,7 @@ VkDescriptorType ToVk(BindingType type)
     case BindingType::DynamicUniformBuffer:
         return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     case BindingType::StorageBuffer:
+    case BindingType::StorageBufferReadWrite:
         return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     case BindingType::SampledTexture:
         return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1303,6 +1308,10 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc, const void *init
     {
         info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     }
+    if (HasFlag(desc.usage, BufferUsage::Indirect))
+    {
+        info.usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
 
     VmaAllocationCreateInfo allocInfo{};
     if (desc.memory == MemoryUsage::CpuToGpu)
@@ -2085,6 +2094,53 @@ PipelineHandle VulkanDevice::CreatePipeline(const PipelineDesc &desc)
     return m_pipelines.Add(record);
 }
 
+PipelineHandle VulkanDevice::CreateComputePipeline(const ComputePipelineDesc &desc)
+{
+    ShaderModuleRecord *cs = m_shaderModules.Get(desc.shader);
+    if (!cs)
+    {
+        return {};
+    }
+    std::vector<VkDescriptorSetLayout> setLayouts;
+    for (BindGroupLayoutHandle handle : desc.bindGroupLayouts)
+    {
+        BindGroupLayoutRecord *layout = m_bindGroupLayouts.Get(handle);
+        if (!layout)
+        {
+            return {};
+        }
+        setLayouts.push_back(layout->layout);
+    }
+    PipelineRecord record;
+    record.bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+    VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    layoutInfo.pSetLayouts = setLayouts.data();
+    VkResult vr = vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &record.layout);
+    if (vr != VK_SUCCESS)
+    {
+        GENI_LOG_ERROR("vkCreatePipelineLayout failed: %s", ResultString(vr));
+        return {};
+    }
+    VkComputePipelineCreateInfo info{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    info.stage.module = cs->module;
+    info.stage.pName = "main";
+    info.layout = record.layout;
+    vr = vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &info, nullptr, &record.pipeline);
+    if (vr != VK_SUCCESS)
+    {
+        GENI_LOG_ERROR(
+            "vkCreateComputePipelines failed for '%s': %s", desc.debugName ? desc.debugName : "", ResultString(vr)
+        );
+        vkDestroyPipelineLayout(m_device, record.layout, nullptr);
+        return {};
+    }
+    SetDebugName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(record.pipeline), desc.debugName);
+    return m_pipelines.Add(record);
+}
+
 void VulkanDevice::DestroyPipeline(PipelineHandle pipeline)
 {
     PipelineRecord record;
@@ -2578,8 +2634,9 @@ void VulkanCommandList::SetPipeline(PipelineHandle pipeline)
     {
         return;
     }
-    vkCmdBindPipeline(m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, record->pipeline);
+    vkCmdBindPipeline(m_cmd, record->bindPoint, record->pipeline);
     m_layout = record->layout;
+    m_bindPoint = record->bindPoint;
 }
 
 void VulkanCommandList::SetBindGroup(
@@ -2592,9 +2649,7 @@ void VulkanCommandList::SetBindGroup(
     {
         return;
     }
-    vkCmdBindDescriptorSets(
-        m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, set, 1, &record->set, dynamicOffsetCount, dynamicOffsets
-    );
+    vkCmdBindDescriptorSets(m_cmd, m_bindPoint, m_layout, set, 1, &record->set, dynamicOffsetCount, dynamicOffsets);
 }
 
 void VulkanCommandList::SetVertexBuffer(uint32_t binding, BufferHandle buffer, uint64_t offset)
@@ -2640,6 +2695,36 @@ void VulkanCommandList::DrawIndexedInstanced(
 void VulkanCommandList::DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstInstance)
 {
     vkCmdDraw(m_cmd, vertexCount, instanceCount, 0, firstInstance);
+}
+
+void VulkanCommandList::Dispatch(uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    GENI_ASSERT_MSG(!IsInRenderPass(), "Dispatch inside a render pass");
+    vkCmdDispatch(m_cmd, groupsX, groupsY, groupsZ);
+}
+
+void VulkanCommandList::ComputeToDrawBarrier()
+{
+    VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask =
+        VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(
+        m_cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 1, &barrier, 0, nullptr, 0, nullptr
+    );
+}
+
+void VulkanCommandList::DrawIndexedIndirect(BufferHandle buffer, uint64_t offset)
+{
+    BufferRecord *record = m_device->m_buffers.Get(buffer);
+    if (!record)
+    {
+        return;
+    }
+    vkCmdDrawIndexedIndirect(m_cmd, record->buffer, offset, 1, sizeof(DrawIndexedIndirectArgs));
 }
 
 } // namespace vulkan

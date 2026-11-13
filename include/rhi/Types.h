@@ -105,8 +105,11 @@ enum class BufferUsage : uint32_t
     Vertex = 1u << 0,
     Index = 1u << 1,
     Uniform = 1u << 2,
-    // Read-only in shaders (clustered light grid, light list).
+    // Read-only in shaders (clustered light grid, light list), or read-write in compute
+    // shaders (BindingType::StorageBufferReadWrite).
     Storage = 1u << 3,
+    // Arguments of DrawIndexedIndirect (docs/design/0029).
+    Indirect = 1u << 4,
 };
 
 inline BufferUsage operator|(BufferUsage a, BufferUsage b)
@@ -200,6 +203,7 @@ enum class ShaderStage : uint8_t
 {
     Vertex = 1u << 0,
     Fragment = 1u << 1,
+    Compute = 1u << 2,
 };
 
 inline ShaderStage operator|(ShaderStage a, ShaderStage b)
@@ -228,6 +232,8 @@ enum class BindingType : uint8_t
     StorageBuffer,
     // A texture and a sampler bound together (Slang `Sampler2D`).
     SampledTexture,
+    // Structured data a compute shader writes (Slang `RWStructuredBuffer`).
+    StorageBufferReadWrite,
 };
 
 struct BindGroupLayoutEntry
@@ -365,6 +371,25 @@ struct PipelineDesc
     // Bind group layouts for set 0, 1, 2, ...
     std::vector<BindGroupLayoutHandle> bindGroupLayouts;
     const char *debugName = nullptr;
+};
+
+// A compute pipeline (docs/design/0029): one compute shader and its bind group layouts.
+struct ComputePipelineDesc
+{
+    ShaderModuleHandle shader;
+    std::vector<BindGroupLayoutHandle> bindGroupLayouts;
+    const char *debugName = nullptr;
+};
+
+// The arguments DrawIndexedIndirect reads, five 32-bit values per draw (Vulkan's and
+// WebGPU's layout).
+struct DrawIndexedIndirectArgs
+{
+    uint32_t indexCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t firstIndex = 0;
+    int32_t vertexOffset = 0;
+    uint32_t firstInstance = 0;
 };
 
 enum class LoadOp : uint8_t

@@ -43,6 +43,17 @@ class CommandList
         uint32_t firstInstance = 0
     ) = 0;
     virtual void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstInstance = 0) = 0;
+
+    // Compute (docs/design/0029), outside render passes. SetPipeline with a compute
+    // pipeline binds it (and SetBindGroup then binds for compute).
+    virtual void Dispatch(uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) = 0;
+    // Makes compute writes visible to the draws that follow (vertex attributes, indirect
+    // arguments, shader reads).
+    virtual void ComputeToDrawBarrier() = 0;
+    // One draw whose DrawIndexedIndirectArgs are at `offset` in `buffer`. Keep
+    // firstInstance 0 (a non-zero one needs an optional Vulkan feature); bind the instance
+    // buffer at an offset instead.
+    virtual void DrawIndexedIndirect(BufferHandle buffer, uint64_t offset) = 0;
 };
 
 struct DeviceConfig
@@ -104,6 +115,8 @@ class Device
 
     // Pipelines draw into the backbuffer (color + depth).
     virtual PipelineHandle CreatePipeline(const PipelineDesc &desc) = 0;
+    // Destroyed with DestroyPipeline.
+    virtual PipelineHandle CreateComputePipeline(const ComputePipelineDesc &desc) = 0;
     virtual void DestroyPipeline(PipelineHandle pipeline) = 0;
 
     // Waits until the previous use of this frame slot has finished on the GPU and the

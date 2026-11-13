@@ -97,7 +97,7 @@ set(GENI_SLANG_FLAGS
 )
 
 # Entry points of a .slang file, as "<function>:<stage>" pairs. Every shader file names
-# its entry points vertexMain and fragmentMain; a file with neither is a module.
+# its entry points vertexMain, fragmentMain or computeMain; a file with none is a module.
 function(_geni_slang_entry_points file out)
   file(READ "${file}" text)
   set(entries "")
@@ -107,14 +107,19 @@ function(_geni_slang_entry_points file out)
   if(text MATCHES "[ \t\n]fragmentMain[ \t]*\\(")
     list(APPEND entries "fragmentMain:fragment")
   endif()
+  if(text MATCHES "[ \t\n]computeMain[ \t]*\\(")
+    list(APPEND entries "computeMain:compute")
+  endif()
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${file}")
   set(${out} "${entries}" PARENT_SCOPE)
 endfunction()
 
-# Short stage suffix used in output names: vert, frag.
+# Short stage suffix used in output names: vert, frag, comp.
 function(_geni_stage_suffix stage out)
   if(stage STREQUAL "vertex")
     set(${out} vert PARENT_SCOPE)
+  elseif(stage STREQUAL "compute")
+    set(${out} comp PARENT_SCOPE)
   else()
     set(${out} frag PARENT_SCOPE)
   endif()
@@ -181,7 +186,7 @@ function(geni_embed_shaders target)
     get_filename_component(name "${in}" NAME_WE)
     _geni_slang_entry_points("${in}" entries)
     if(NOT entries)
-      message(FATAL_ERROR "${in} has no vertexMain or fragmentMain entry point")
+      message(FATAL_ERROR "${in} has no vertexMain, fragmentMain or computeMain entry point")
     endif()
     foreach(pair IN LISTS entries)
       string(REPLACE ":" ";" pair "${pair}")

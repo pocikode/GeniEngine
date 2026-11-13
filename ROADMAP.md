@@ -328,7 +328,8 @@ Chosen by what users ask for, not planned in detail now:
   docs/design/0025), time of day (first version done:
   docs/design/0018, with night lights), weather (first version done: docs/design/0020),
   mission system (first version done: docs/design/0024, with saved games)
-- Rendering: global illumination, GPU-driven culling, terrain (first version done:
+- Rendering: global illumination, GPU-driven culling (first version done:
+  docs/design/0029, frustum culling; occlusion culling next), terrain (first version done:
   docs/design/0022), vegetation (first version done: docs/design/0023), particles (first version done: docs/design/0019,
   CPU-simulated billboards)
 - 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; lit

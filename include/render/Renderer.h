@@ -51,6 +51,9 @@ struct RendererConfig
     uint32_t msaaSamples = 4;
     // Cascaded shadow maps.
     bool shadows = true;
+    // Camera culling of non-skinned, indexed meshes in a compute pass, drawn with indirect
+    // draws (docs/design/0029). Shadow passes still cull on the CPU.
+    bool gpuCulling = false;
     uint32_t cascadeCount = 4;
     uint32_t shadowMapSize = 2048;
     // Only this near part of the camera frustum casts and receives shadows.
@@ -107,6 +110,9 @@ struct RenderStats
     uint32_t sprites = 0;
     uint32_t spritesCulled = 0;
     uint32_t spriteBatches = 0;
+    // Instances the GPU culling pass tested (docs/design/0029); their visibility is only
+    // known on the GPU, so `visible` counts them all.
+    uint32_t gpuCullCandidates = 0;
     // Visible instances drawn at each LOD (index 0 is the full mesh).
     std::array<uint32_t, MaxMeshLods> lodInstances{};
 };
@@ -137,6 +143,10 @@ class Renderer
     void SetTonemapper(Tonemapper tonemapper)
     {
         m_config.tonemapper = tonemapper;
+    }
+    void SetGpuCulling(bool enabled)
+    {
+        m_config.gpuCulling = enabled;
     }
     void SetExposure(float exposure)
     {
@@ -242,6 +252,15 @@ class Renderer
         // Per-instance transforms (binding 1), one mat4 per instance.
         rhi::BufferHandle instanceBuffer;
         uint64_t instanceCapacity = 0;
+        // GPU culling (docs/design/0029): candidates in, visible matrices and per-group
+        // indirect arguments out.
+        rhi::BufferHandle cullParams;
+        rhi::BufferHandle cullInput;
+        rhi::BufferHandle cullVisible;
+        rhi::BufferHandle cullArgs;
+        rhi::BindGroupHandle cullGroup;
+        uint64_t cullCapacity = 0;
+        uint64_t cullGroupCapacity = 0;
 
         // Bones and per-draw uniforms addressed by dynamic offset.
         rhi::BufferHandle drawBuffer;
@@ -272,6 +291,8 @@ class Renderer
         const Material *material = nullptr;
         const Mesh *mesh = nullptr;
         bool skinned = false;
+        // GPU culling: the indirect draw group this item belongs to (-1: drawn directly).
+        int32_t cullGroup = -1;
         // LOD and the index range it draws (indexCount 0: non-indexed mesh).
         uint32_t lod = 0;
         uint32_t firstIndex = 0;
@@ -355,6 +376,11 @@ class Renderer
     // Culls, sorts and writes this frame's sprite vertices; fills m_spriteBatches.
     bool PrepareSprites(FrameResources &frame, const std::vector<SpriteCommand> &sprites, const CameraData &camera);
     void RenderSprites(rhi::CommandList &cmd, FrameResources &frame);
+    // Groups the sorted items for indirect draws, uploads the candidates and records the
+    // cull dispatch (docs/design/0029). False when it could not, so the CPU path is used.
+    bool PrepareGpuCulling(
+        rhi::CommandList &cmd, FrameResources &frame, std::vector<DrawItem> &items, const CameraData &camera
+    );
     // Writes a billboard command's quads facing the camera (sorted back to front when
     // alpha-blended) at `out`, four vertices each.
     void WriteBillboards(
@@ -407,6 +433,9 @@ class Renderer
     // 2D (docs/design/0017).
     rhi::ShaderModuleHandle m_spriteVertexModule;
     rhi::ShaderModuleHandle m_spriteFragmentModule;
+    rhi::ShaderModuleHandle m_cullModule;
+    rhi::BindGroupLayoutHandle m_cullLayout;
+    rhi::PipelineHandle m_cullPipeline;
     rhi::ShaderModuleHandle m_spriteLitVertexModule;
     rhi::ShaderModuleHandle m_spriteLitFragmentModule;
     // [blend][lit] (docs/design/0019, 0021).
