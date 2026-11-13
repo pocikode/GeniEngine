@@ -583,10 +583,15 @@ def static_box():
         "radius": 0.0, "height": 0.0, "mass": 0.0, "plane2D": False, "friction": 0.8}}
 
 
-def point_light(color, intensity, light_range):
-    return {"type": "LightComponent", "properties": {
+def point_light(color, intensity, light_range, night_only=False):
+    properties = {
         "color": list(color), "innerConeAngle": 0.0, "intensity": intensity,
-        "outerConeAngle": 0.785398, "range": light_range, "type": "point"}}
+        "outerConeAngle": 0.785398, "range": light_range, "type": "point"}
+    if night_only:
+        # Off by day; lit by the time of day's darkness (docs/design/0018).
+        properties["nightOnly"] = True
+    # Key order as SceneSerializer writes it (sorted), so an editor save changes nothing.
+    return {"type": "LightComponent", "properties": dict(sorted(properties.items()))}
 
 
 # District prefabs: 128 m squares (origin at the centre) of 4 x 4 blocks on a 32 m street
@@ -643,7 +648,7 @@ def district_prefab(kind, variant):
     for lx, lz in ((-16.0, -16.0), (16.0, -16.0), (-16.0, 16.0), (16.0, 16.0)):
         warm = rng.range(0.0, 1.0)
         nodes.append(node("StreetLight", 0, (lx, 7.0, lz),
-                          components=[point_light((1.0, 0.85 + 0.1 * warm, 0.6 + 0.2 * warm), 4.0, 30.0)]))
+                          components=[point_light((1.0, 0.85 + 0.1 * warm, 0.6 + 0.2 * warm), 4.0, 30.0, night_only=True)]))
     return {"format": "geni.prefab", "version": 1, "mainCamera": -1, "nodes": nodes}
 
 

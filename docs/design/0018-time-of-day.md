@@ -61,6 +61,23 @@ afternoon and shows the time on its HUD; a screenshot test covers dusk in the me
 Order of work: `TimeOfDay` and its unit tests; the renderer override; the component and
 its tests; `--time` and the dusk screenshot; Geni City and docs.
 
+## Night lights (added 2026-11-13)
+
+Street lights burned all day. `Atmosphere` gets `darkness` (0 by day, 1 at night: a
+smoothstep from 6 degrees of sun elevation down to -4, so lamps come on during sunset; 0
+in `RendererConfig`'s atmosphere, so a scene without a clock is in daylight).
+`LightComponent` gets a reflected `nightOnly` flag, copied into `LightData`. The renderer
+multiplies a night-only light by the frame's darkness in `PrepareFrame` and leaves it out
+of the cluster grid when the result is zero, so daytime pays nothing for the lamps. Like
+the rest of the atmosphere this lasts one frame: removing the clock turns night-only lights
+off again without cleanup. The metro world's street lights are night-only; Geni City's
+block keeps its lights on (it has no clock and its benchmark measures 100 clustered
+lights), and `game.lua` marks them night-only when play starts.
+
+Rejected: a component per lamp that reads the clock (one more component on hundreds of
+objects in every cell, and it needs to find the clock); emissive windows (the city kit has
+no emissive masks; later, with a material that has them).
+
 ## Rejected
 
 - **Atmospheric scattering (Preetham, Hosek-Wilkie, Bruneton).** Physically based skies

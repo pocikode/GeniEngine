@@ -6,8 +6,11 @@
 #include "scene/GameObject.h"
 #include "scene/Reflection.h"
 #include "scene/Scene.h"
+#include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
 #include "scene/components/TimeOfDayComponent.h"
+#include "render/RenderQueue.h"
+#include "rhi/Device.h"
 #include <doctest/doctest.h>
 #include <glm/geometric.hpp>
 #include <cmath>
@@ -179,5 +182,90 @@ TEST_SUITE("time of day")
         CHECK(restored.GetTime() == doctest::Approx(22.0f));
         CHECK(restored.GetMaxElevation() == doctest::Approx(90.0f));
         CHECK(restored.GetDayLengthMinutes() == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("darkness is 0 by day, 1 at night, and rises through the sunset")
+    {
+        CHECK(Geni::EvaluateTimeOfDay(12.0f).atmosphere.darkness == doctest::Approx(0.0f));
+        CHECK(Geni::EvaluateTimeOfDay(0.0f).atmosphere.darkness == doctest::Approx(1.0f));
+        CHECK(Geni::RendererConfig{}.ambientIntensity > 0.0f); // config atmosphere: daylight
+        CHECK(Geni::Atmosphere{}.darkness == doctest::Approx(0.0f));
+        float previous = 0.0f;
+        for (int minute = 16 * 60; minute <= 20 * 60; ++minute)
+        {
+            const float darkness = Geni::EvaluateTimeOfDay(minute / 60.0f).atmosphere.darkness;
+            CHECK(darkness >= previous - 1e-6f);
+            previous = darkness;
+        }
+        // Half-lit around sunset.
+        const float atSunset = Geni::EvaluateTimeOfDay(18.0f).atmosphere.darkness;
+        CHECK(atSunset > 0.2f);
+        CHECK(atSunset < 0.8f);
+    }
+
+    TEST_CASE("night-only lights are reflected and reach the collected light data")
+    {
+        Geni::RegisterBuiltinComponents();
+        Geni::Scene scene;
+        Geni::GameObject *lamp = scene.CreateObject("Lamp");
+        auto *light = new Geni::LightComponent();
+        light->SetNightOnly(true);
+        lamp->AddComponent(light);
+        const auto properties = Geni::TypeRegistry::Get().Serialize("LightComponent", *light);
+        CHECK(properties["nightOnly"] == true);
+        Geni::LightComponent restored;
+        Geni::SerializationContext context;
+        REQUIRE(Geni::TypeRegistry::Get().Deserialize("LightComponent", restored, properties, context));
+        CHECK(restored.IsNightOnly());
+        const auto lights = scene.CollectLights();
+        REQUIRE(lights.size() == 1);
+        CHECK(lights[0].nightOnly);
+    }
+}
+
+TEST_SUITE("gpu time of day")
+{
+    TEST_CASE("night-only lights are off in daylight and scaled by the darkness")
+    {
+        auto &app = GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        auto &renderer = engine.GetRenderer();
+        auto *scene = GeniTest::ResetScene();
+        app.sceneToUpdate = scene;
+
+        auto *camera = scene->CreateObject("camera");
+        camera->SetPosition(glm::vec3(0.0f, 2.0f, 10.0f));
+        camera->AddComponent(new Geni::CameraComponent());
+        scene->SetMainCamera(camera);
+        for (int i = 0; i < 3; ++i)
+        {
+            auto *lamp = scene->CreateObject("Lamp");
+            lamp->SetPosition(glm::vec3(static_cast<float>(i) * 2.0f - 2.0f, 1.0f, 0.0f));
+            auto *light = new Geni::LightComponent();
+            light->SetNightOnly(i > 0);
+            lamp->AddComponent(light);
+        }
+
+        const auto errorsBefore = Geni::rhi::GetValidationErrorCount();
+        engine.GetRenderQueue().Clear();
+        // An earlier test may have left an override for the next frame; use it up.
+        CHECK(engine.Tick());
+        CHECK(engine.Tick());
+        CHECK(renderer.GetRenderStats().clusteredLights == 1);
+
+        Geni::Atmosphere night;
+        night.darkness = 0.5f;
+        renderer.SetAtmosphereOverride(night);
+        CHECK(engine.Tick());
+        CHECK(renderer.GetRenderStats().clusteredLights == 3);
+        CHECK(renderer.GetFrameAtmosphere().darkness == doctest::Approx(0.5f));
+
+        // The override lasted one frame: daylight again.
+        CHECK(engine.Tick());
+        CHECK(renderer.GetRenderStats().clusteredLights == 1);
+        CHECK(Geni::rhi::GetValidationErrorCount() == errorsBefore);
+
+        app.sceneToUpdate = nullptr;
+        GeniTest::ResetScene();
     }
 }

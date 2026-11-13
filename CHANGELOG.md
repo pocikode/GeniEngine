@@ -23,7 +23,10 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
   is the same mapping as a pure function. `Renderer::SetAtmosphereOverride` replaces the
   config's sky, fog and ambient for one frame (`GetConfigAtmosphere`, `GetFrameAtmosphere`).
   Geni City starts at 15:00 with a 24-minute day and a clock on the HUD; `city --world
-  --time HOURS` and the `screenshot_world_dusk` test.
+  --time HOURS` and the `screenshot_world_dusk` test. **Night lights**: `LightComponent`
+  property `nightOnly` and `Atmosphere::darkness`; the renderer scales night-only lights by
+  the darkness and skips them by day (the metro world's 240 street lights, and the city
+  block's in play mode).
 - **2D** (docs/design/0017): `SpriteComponent` (texture, size, pivot, sRGB tint, atlas
   frames, flips, sort layer, linear or nearest filtering), `SpriteAnimatorComponent`
   (frame clips at a rate, looping or one-shot) and `TilemapComponent` (a tileset grid,

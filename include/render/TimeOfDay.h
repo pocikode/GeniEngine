@@ -15,6 +15,8 @@ struct Atmosphere
     glm::vec3 fogColor{0.44f, 0.55f, 0.70f};
     float fogDensity = 0.0018f;
     float ambientIntensity = 0.15f;
+    // 0 by day, 1 at night: night-only lights (LightComponent::nightOnly) are scaled by it.
+    float darkness = 0.0f;
 };
 
 // How the clock maps to the sky (docs/design/0018). Sunrise is at 06:00 due +X, sunset at

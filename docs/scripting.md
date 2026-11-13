@@ -102,7 +102,8 @@ add methods:
 
 `TimeOfDayComponent` ([0018](design/0018-time-of-day.md)) has no methods; its properties
 are the clock: `scene.find("Sun"):get("TimeOfDayComponent").time = 21.5` jumps to 21:30,
-`dayLengthMinutes = 0` stops it.
+`dayLengthMinutes = 0` stops it. A light with `nightOnly = true` is off by day and fades in
+with the clock's darkness.
 
 ## Libraries
 

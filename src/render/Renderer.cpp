@@ -713,9 +713,31 @@ uint64_t Renderer::Align(uint64_t size) const
     return (size + m_alignment - 1) / m_alignment * m_alignment;
 }
 
-void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, const std::vector<LightData> &lights)
+void Renderer::PrepareFrame(
+    FrameResources &frame, const CameraData &camera, const std::vector<LightData> &sceneLights
+)
 {
     m_renderOrigin = camera.position;
+    m_frameAtmosphere = m_hasAtmosphereOverride ? m_atmosphereOverride : GetConfigAtmosphere();
+    m_hasAtmosphereOverride = false;
+
+    // Night-only lights follow the darkness; at zero they are left out of the cluster grid.
+    const float darkness = glm::clamp(m_frameAtmosphere.darkness, 0.0f, 1.0f);
+    m_frameLights.clear();
+    m_frameLights.reserve(sceneLights.size());
+    for (const LightData &light : sceneLights)
+    {
+        if (!light.nightOnly)
+        {
+            m_frameLights.push_back(light);
+        }
+        else if (darkness > 0.0f)
+        {
+            m_frameLights.push_back(light);
+            m_frameLights.back().color *= darkness;
+        }
+    }
+    const std::vector<LightData> &lights = m_frameLights;
 
     m_hasSun = false;
     for (const auto &light : lights)
@@ -831,8 +853,6 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
         uniforms.sunDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         uniforms.sunColor = glm::vec4(0.0f);
     }
-    m_frameAtmosphere = m_hasAtmosphereOverride ? m_atmosphereOverride : GetConfigAtmosphere();
-    m_hasAtmosphereOverride = false;
     const Atmosphere &atmosphere = m_frameAtmosphere;
     uniforms.skyZenith = glm::vec4(atmosphere.skyZenith, atmosphere.ambientIntensity);
     uniforms.skyHorizon = glm::vec4(atmosphere.skyHorizon, atmosphere.fogDensity);
