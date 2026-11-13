@@ -56,8 +56,11 @@ file(COPY "${EXECUTABLE}" DESTINATION "${exe_dir}" FILE_PERMISSIONS
 set(packaged_exe "${exe_dir}/${exe_name}")
 
 # Assets: everything the build put next to the game except what only the cooker reads.
+# Sounds ship as their cooked desktop variants (docs/design/0012), not the source WAVs.
 if(EXISTS "${build_dir}/assets")
   file(COPY "${build_dir}/assets/" DESTINATION "${resources_dir}/assets"
+       PATTERN "*.wav" EXCLUDE
+       REGEX "/cooked/audio/(mobile|web)$" EXCLUDE
        PATTERN "*.gltf" EXCLUDE
        PATTERN "*.glb" EXCLUDE
        PATTERN "*.bin" EXCLUDE

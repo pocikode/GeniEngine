@@ -70,6 +70,15 @@ bool AudioSystem::Init(const AudioConfig &config, FileSystem *fileSystem)
     }
     auto impl = std::make_unique<Impl>();
     impl->fileSystem = fileSystem;
+    m_variant = config.variant;
+    if (m_variant.empty())
+    {
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__) || (defined(__APPLE__) && defined(GENI_PLATFORM_IOS))
+        m_variant = "mobile";
+#else
+        m_variant = "desktop";
+#endif
+    }
 
     ma_engine_config engineConfig = ma_engine_config_init();
     engineConfig.channels = config.channels;
@@ -98,8 +107,8 @@ bool AudioSystem::Init(const AudioConfig &config, FileSystem *fileSystem)
     ma_sound_group_init(&impl->engine, 0, nullptr, &impl->effects);
     m_impl = std::move(impl);
     GENI_LOG_INFO(
-        "Audio: %u Hz, %u channels, %s", ma_engine_get_sample_rate(&m_impl->engine), ma_engine_get_channels(&m_impl->engine),
-        m_impl->hasDevice ? "output device open" : "no device"
+        "Audio: %u Hz, %u channels, %s", ma_engine_get_sample_rate(&m_impl->engine),
+        ma_engine_get_channels(&m_impl->engine), m_impl->hasDevice ? "output device open" : "no device"
     );
     return true;
 }
@@ -152,8 +161,8 @@ void AudioSystem::Update(float deltaTime)
     for (auto it = m_impl->sounds.begin(); it != m_impl->sounds.end();)
     {
         ma_sound *sound = it->second.sound.get();
-        const bool finished = (!it->second.loop && ma_sound_at_end(sound)) ||
-                              (it->second.stopping && !ma_sound_is_playing(sound));
+        const bool finished =
+            (!it->second.loop && ma_sound_at_end(sound)) || (it->second.stopping && !ma_sound_is_playing(sound));
         if (finished)
         {
             ma_sound_uninit(sound);
@@ -171,14 +180,26 @@ void AudioSystem::Update(float deltaTime)
     }
 }
 
+void AudioSystem::SetCookedResolver(std::function<std::filesystem::path(const std::string &)> resolver)
+{
+    m_resolver = std::move(resolver);
+}
+
 SoundId AudioSystem::Play(const std::string &path, const SoundParams &params)
 {
     if (!m_impl || path.empty())
     {
         return InvalidSound;
     }
-    const std::string file =
-        m_impl->fileSystem ? m_impl->fileSystem->ResolveAssetPath(path).string() : path;
+    std::string file;
+    if (m_resolver)
+    {
+        file = m_resolver(path).string();
+    }
+    if (file.empty())
+    {
+        file = m_impl->fileSystem ? m_impl->fileSystem->ResolveAssetPath(path).string() : path;
+    }
     auto sound = std::make_unique<ma_sound>();
     ma_uint32 flags = params.stream ? MA_SOUND_FLAG_STREAM : MA_SOUND_FLAG_DECODE;
     if (!params.spatial)
@@ -230,9 +251,7 @@ void AudioSystem::Stop(SoundId id, float fadeSeconds)
     it->second.stopping = true;
     if (fadeSeconds > 0.0f)
     {
-        ma_sound_stop_with_fade_in_milliseconds(
-            it->second.sound.get(), static_cast<ma_uint64>(fadeSeconds * 1000.0f)
-        );
+        ma_sound_stop_with_fade_in_milliseconds(it->second.sound.get(), static_cast<ma_uint64>(fadeSeconds * 1000.0f));
     }
     else
     {
@@ -311,9 +330,7 @@ void AudioSystem::PlayMusic(const std::string &path, float fadeSeconds, float vo
     }
     if (fadeSeconds > 0.0f)
     {
-        ma_sound_set_fade_in_milliseconds(
-            m_impl->Find(id), 0.0f, 1.0f, static_cast<ma_uint64>(fadeSeconds * 1000.0f)
-        );
+        ma_sound_set_fade_in_milliseconds(m_impl->Find(id), 0.0f, 1.0f, static_cast<ma_uint64>(fadeSeconds * 1000.0f));
     }
     m_impl->musicId = id;
     m_impl->musicPath = path;

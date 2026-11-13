@@ -43,6 +43,7 @@ add_library(geni_cook STATIC
   asset_cooker/Cooker.cpp
   asset_cooker/MeshProcessing.cpp
   asset_cooker/WorldCooker.cpp
+  asset_cooker/AudioCooker.cpp
   ${PROJECT_SOURCE_DIR}/src/world/WorldFormat.cpp
   ${PROJECT_SOURCE_DIR}/src/nav/NavMeshBuilder.cpp
   asset_cooker/Ktx2Writer.cpp
@@ -79,14 +80,15 @@ add_executable(geni_asset_cooker asset_cooker/main.cpp)
 target_link_libraries(geni_asset_cooker PRIVATE geni_cook)
 
 # geni_cook_assets(<target> <source_dir> <output_dir>)
-# Copies the source assets into the output folder, then cooks every glTF and image in
+# Copies the source assets into the output folder, then cooks every glTF, image and sound in
 # place. Runs before the target is linked and again only when a source asset changes.
 function(geni_cook_assets target source_dir output_dir)
   file(GLOB_RECURSE cook_inputs CONFIGURE_DEPENDS
     "${source_dir}/*.gltf" "${source_dir}/*.glb"
     "${source_dir}/*.png" "${source_dir}/*.jpg" "${source_dir}/*.jpeg"
     "${source_dir}/*.bin" "${source_dir}/*.meta"
-    "${source_dir}/*.gscene" "${source_dir}/*.gprefab" "${source_dir}/*.gworld")
+    "${source_dir}/*.gscene" "${source_dir}/*.gprefab" "${source_dir}/*.gworld"
+    "${source_dir}/*.wav")
   set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}_assets.stamp")
   add_custom_command(OUTPUT "${stamp}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${source_dir}" "${output_dir}"

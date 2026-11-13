@@ -1,6 +1,6 @@
 # 0012: Audio
 
-Milestone: M6 · Status: Done · Last updated: 2026-11-11
+Milestone: M6 · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
@@ -37,8 +37,19 @@ unit. Only `src/audio/` includes it.
 moves it with its object each frame, and is the engine sound of the car (the game sets
 pitch from RPM) and the music source in the editor.
 
-**Files are not cooked yet.** Audio is read from the assets folder by path, like
-materials' shaders. Per-platform compression (Vorbis or Opus) belongs to the cooker later.
+**Cooked audio (added 2026-11-13, M7).** Game code still names sounds by their source
+path. The cooker turns every `.wav` into one variant per platform,
+`cooked/audio/<desktop|mobile>/<path>.gsnd` (asset type `sound`, source
+`"<path>#<platform>"`): the same 16-bit PCM, or **IMA ADPCM** in a WAV container (4 bits per
+sample, a quarter of the size; miniaudio decodes it, by content, whatever the extension).
+Desktop compresses sounds of 2 s or more (music, ambience) and keeps short effects as PCM;
+mobile (and web) compress everything. A `.meta` `"compression": "pcm"` or `"adpcm"`
+overrides the rule; files that are not 16-bit PCM are copied unchanged. `AudioSystem::Play`
+asks a resolver for the cooked file first (`Engine` sets one that looks up the manifest for
+`AudioConfig::variant`, this platform's by default) and falls back to the source file.
+Packages leave out the source WAVs and the other platforms' variants. The last ADPCM block
+is cut short, so a sound decodes at its source length plus at most 7 frames, which keeps
+loops tight.
 
 ## Rejected
 
@@ -47,6 +58,9 @@ materials' shaders. Per-platform compression (Vorbis or Opus) belongs to the coo
   files with a public-domain licence.
 - **Cooking audio in M6.** The reference game ships a few small WAV files; compression
   matters on mobile (M7).
+- **Vorbis or Opus for cooked audio.** Better quality per byte, but encoding needs libvorbis
+  or libopus in the cooker (and a decoder build at run time); IMA ADPCM needs about 150
+  lines and nothing new. Revisit if package size on mobile demands it.
 
 ## To verify
 

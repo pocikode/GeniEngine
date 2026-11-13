@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Cooked audio**: the asset cooker writes every WAV as a desktop and a mobile variant
+  (`cooked/audio/<platform>/<path>.gsnd`, asset type `sound`): 16-bit PCM or IMA ADPCM (a
+  quarter of the size; desktop compresses sounds of 2 s or more, mobile everything; `.meta`
+  `"compression"` overrides). `AudioSystem::Play` plays the cooked variant for
+  `AudioConfig::variant` through `SetCookedResolver` and falls back to the source file;
+  packages ship only the desktop variants. Geni City's music goes from 689 KB to 177 KB.
 - **Cooked navigation tiles**: the asset cooker builds each world cell's Detour tile
   (asset type `navtile`, `WorldCellInfo::nav`, `WorldDescription::navKey`) and
   `NavigationSystem::AttachToWorld(streamer, scene, assets)` reads it instead of building

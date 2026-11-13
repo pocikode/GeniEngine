@@ -183,6 +183,11 @@ bool Engine::Init(const EngineConfig &config)
         audioConfig.device = false;
     }
     m_audio.Init(audioConfig, &m_fileSystem);
+    // Sounds play their cooked variant for this platform when the cook has one.
+    m_audio.SetCookedResolver([this](const std::string &path) {
+        const AssetID id = m_assetManager.FindBySource(AssetType::Sound, path + "#" + m_audio.GetVariant());
+        return id.IsValid() ? m_assetManager.FindCookedFile(id, AssetType::Sound) : std::filesystem::path();
+    });
     m_scripts.Init(config.scripting, &m_fileSystem);
 
     m_fixedTimestep = FixedTimestep(config.fixedTimestep, config.maxFixedStepsPerFrame);

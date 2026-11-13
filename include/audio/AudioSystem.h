@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
+#include <functional>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <string>
@@ -19,6 +21,9 @@ struct AudioConfig
     bool device = true;
     uint32_t sampleRate = 48000;
     uint32_t channels = 2;
+    // Which cooked variant of a sound to play (docs/design/0012): "desktop" or "mobile";
+    // empty picks this platform's (web uses mobile's).
+    std::string variant;
 };
 
 enum class AudioBus
@@ -67,7 +72,17 @@ class AudioSystem
     // per frame.
     void Update(float deltaTime);
 
+    // `path` is the source file relative to the assets folder ("sounds/door.wav"); the
+    // cooked variant is played when the resolver finds one.
     SoundId Play(const std::string &path, const SoundParams &params = SoundParams());
+    // Maps a source path to its cooked file (empty: play the source file). Engine sets one
+    // that asks the asset manifest for the configured variant.
+    void SetCookedResolver(std::function<std::filesystem::path(const std::string &)> resolver);
+    // The variant this system asks for: the config's, else this platform's.
+    const std::string &GetVariant() const
+    {
+        return m_variant;
+    }
     void Stop(SoundId sound, float fadeSeconds = 0.0f);
     bool IsPlaying(SoundId sound) const;
     void SetPosition(SoundId sound, const glm::vec3 &position);
@@ -93,6 +108,8 @@ class AudioSystem
     size_t GetActiveSoundCount() const;
 
   private:
+    std::function<std::filesystem::path(const std::string &)> m_resolver;
+    std::string m_variant;
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 };
