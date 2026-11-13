@@ -31,6 +31,7 @@ void LinkParticleEmitterComponent();
 void LinkWeatherComponent();
 void LinkTerrainComponent();
 void LinkFoliageComponent();
+void LinkTimelineComponent();
 
 inline void RegisterBuiltinComponents()
 {
@@ -57,6 +58,7 @@ inline void RegisterBuiltinComponents()
     LinkWeatherComponent();
     LinkTerrainComponent();
     LinkFoliageComponent();
+    LinkTimelineComponent();
 }
 
 } // namespace Geni

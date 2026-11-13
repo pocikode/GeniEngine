@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Timeline** (docs/design/0026): `TimelineComponent` plays transform tracks (Catmull-Rom
+  positions, slerped rotations), camera cuts, sound cues and events (`scene/Timeline.h`:
+  `TimelineData`, `ParseTimeline`, `SampleTrack`); `EditUpdate` previews poses only. Lua
+  `play`, `pause`, `stop`, `seek`, `playing`, `time`, `events`. Editor: a Timeline panel
+  (scrub, preview, key the selection, drag and delete keys, all undoable) and script
+  commands `add TYPE`, `timeline-key OBJECT TIME`, `expect keys OBJECT N`.
 - **Traffic** (docs/design/0025): `RoadNetwork` (`world/RoadNetwork.h`): a lane graph
   with curved lanes and intersections, `geni.roads` JSON and `RoadNetwork::Grid` for
   street grids; lanes of one crossing that come within 2.5 m conflict. `TrafficSystem`

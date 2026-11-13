@@ -27,6 +27,7 @@ add_executable(geni_tests
   test_terrain.cpp
   test_missions.cpp
   test_traffic.cpp
+  test_timeline.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders

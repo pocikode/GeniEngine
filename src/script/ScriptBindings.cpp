@@ -18,6 +18,7 @@
 #include "scene/components/TilemapComponent.h"
 #include "scene/components/ParticleEmitterComponent.h"
 #include "scene/components/WeatherComponent.h"
+#include "scene/components/TimelineComponent.h"
 #include "scene/components/VehicleComponent.h"
 #include "script/ScriptSystem.h"
 #include "ui/GameUI.h"
@@ -731,6 +732,57 @@ int EmitterRestart(lua_State *L)
 int EmitterCount(lua_State *L)
 {
     lua_pushinteger(L, CheckTyped<ParticleEmitterComponent>(L, 1)->GetParticleCount());
+    return 1;
+}
+
+// Timelines (docs/design/0026).
+int TimelinePlay(lua_State *L)
+{
+    CheckTyped<TimelineComponent>(L, 1)->Play();
+    return 0;
+}
+
+int TimelinePause(lua_State *L)
+{
+    CheckTyped<TimelineComponent>(L, 1)->Pause();
+    return 0;
+}
+
+int TimelineStop(lua_State *L)
+{
+    CheckTyped<TimelineComponent>(L, 1)->Stop();
+    return 0;
+}
+
+int TimelineSeek(lua_State *L)
+{
+    auto *timeline = CheckTyped<TimelineComponent>(L, 1);
+    timeline->SetTime(static_cast<float>(luaL_checknumber(L, 2)));
+    timeline->ApplyAt(timeline->GetTime());
+    return 0;
+}
+
+int TimelinePlaying(lua_State *L)
+{
+    lua_pushboolean(L, CheckTyped<TimelineComponent>(L, 1)->IsPlaying());
+    return 1;
+}
+
+int TimelineTime(lua_State *L)
+{
+    lua_pushnumber(L, CheckTyped<TimelineComponent>(L, 1)->GetTime());
+    return 1;
+}
+
+int TimelineEvents(lua_State *L)
+{
+    const std::vector<std::string> events = CheckTyped<TimelineComponent>(L, 1)->TakeEvents();
+    lua_createtable(L, static_cast<int>(events.size()), 0);
+    for (size_t i = 0; i < events.size(); ++i)
+    {
+        lua_pushstring(L, events[i].c_str());
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
     return 1;
 }
 
@@ -2185,6 +2237,11 @@ void Register(lua_State *L, ScriptSystem &system)
     AddMethods(L, "ParticleEmitterComponent", emitter);
     const luaL_Reg weather[] = {{"snap", WeatherSnap}, {nullptr, nullptr}};
     AddMethods(L, "WeatherComponent", weather);
+    const luaL_Reg timeline[] = {
+        {"play", TimelinePlay},       {"pause", TimelinePause}, {"stop", TimelineStop},     {"seek", TimelineSeek},
+        {"playing", TimelinePlaying}, {"time", TimelineTime},   {"events", TimelineEvents}, {nullptr, nullptr},
+    };
+    AddMethods(L, "TimelineComponent", timeline);
 
     const luaL_Reg log[] = {{"info", LogInfo}, {"warn", LogWarn}, {"error", LogError}, {nullptr, nullptr}};
     NewLibrary(L, "log", log);

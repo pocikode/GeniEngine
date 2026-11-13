@@ -136,6 +136,8 @@ set(SRC_FILES
   src/scene/components/WeatherComponent.cpp
   src/scene/components/TerrainComponent.cpp
   src/scene/components/FoliageComponent.cpp
+  src/scene/Timeline.cpp
+  src/scene/components/TimelineComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp

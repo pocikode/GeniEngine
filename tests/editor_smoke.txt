@@ -65,6 +65,23 @@ undo
 expect objects 10104
 expect dirty 0
 
+# A timeline (docs/design/0026): key the sun twice, undo the second key.
+create Cutscene
+add TimelineComponent
+timeline-key Sun 0
+select Sun
+move 0 5 0
+timeline-key Sun 2
+expect keys Sun 2
+undo
+expect keys Sun 1
+undo
+undo
+undo
+undo
+expect objects 10104
+expect dirty 0
+
 # Play in editor: the scene simulates, then comes back as it was.
 select Ground
 play
