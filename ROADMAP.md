@@ -326,7 +326,7 @@ Chosen by what users ask for, not planned in detail now:
 
 - Open-world layers: traffic and pedestrian simulation, time of day (first version done:
   docs/design/0018, with night lights), weather (first version done: docs/design/0020),
-  mission system
+  mission system (first version done: docs/design/0024, with saved games)
 - Rendering: global illumination, GPU-driven culling, terrain (first version done:
   docs/design/0022), vegetation (first version done: docs/design/0023), particles (first version done: docs/design/0019,
   CPU-simulated billboards)

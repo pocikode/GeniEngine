@@ -1,6 +1,6 @@
 # 0024: Missions and saved games
 
-Milestone: After v0.1 (open-world layers) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (open-world layers) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
