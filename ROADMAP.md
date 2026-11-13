@@ -329,8 +329,8 @@ Chosen by what users ask for, not planned in detail now:
   mission system
 - Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles (first
   version done: docs/design/0019, CPU-simulated billboards)
-- 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; still
-  open: lit sprites, a Tiled importer, sprite atlases packed by the cooker)
+- 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; lit
+  sprites, a Tiled importer and cooker-packed atlases done: docs/design/0021)
 - Networking and multiplayer
 - Plugin system and package distribution
 - Visual tools: material editor, animation graph editor, timeline for cutscenes

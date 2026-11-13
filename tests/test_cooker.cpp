@@ -9,6 +9,7 @@
 #include "Ktx2Writer.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
+#include "TiledImporter.h"
 #include "assets/CookedFormats.h"
 #include "assets/Ktx2.h"
 #include "world/WorldFormat.h"
@@ -688,5 +689,40 @@ TEST_SUITE("cooker")
         tooBig[0].width = 5000;
         tooBig[0].height = 10;
         CHECK_FALSE(Geni::cook::PackAtlas(tooBig, 1, 4096, width, height));
+    }
+
+    TEST_CASE("Tiled maps that the importer cannot represent are refused with a reason")
+    {
+        auto none = [](const std::string &, nlohmann::json &) { return false; };
+        Geni::cook::TiledMap map;
+        std::string error;
+        CHECK_FALSE(
+            Geni::cook::ImportTiledMap(
+                nlohmann::json::parse(
+                    R"({"orientation":"isometric","width":1,"height":1,"tilewidth":8,"tileheight":8,"layers":[],"tilesets":[]})"
+                ),
+                "m.tmj", none, map, &error
+            )
+        );
+        CHECK(error.find("orthogonal") != std::string::npos);
+        CHECK_FALSE(
+            Geni::cook::ImportTiledMap(
+                nlohmann::json::parse(
+                    R"({"orientation":"orthogonal","infinite":true,"width":1,"height":1,"tilewidth":8,"tileheight":8,"layers":[],"tilesets":[]})"
+                ),
+                "m.tmj", none, map, &error
+            )
+        );
+        CHECK(error.find("infinite") != std::string::npos);
+        CHECK_FALSE(
+            Geni::cook::ImportTiledMap(
+                nlohmann::json::parse(
+                    R"({"orientation":"orthogonal","width":1,"height":1,"tilewidth":8,"tileheight":8,"layers":[],"tilesets":[{"firstgid":1,"source":"missing.tsj"}]})"
+                ),
+                "maps/m.tmj", none, map, &error
+            )
+        );
+        CHECK(error.find("maps/missing.tsj") != std::string::npos);
+        CHECK(Geni::cook::FormatTileList({5, 1, 2, 3, 9, 2}) == "1-3,5,9");
     }
 }

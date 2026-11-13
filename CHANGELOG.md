@@ -6,6 +6,15 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Sprite atlases, Tiled maps and lit sprites** (docs/design/0021). A `.gatlas` lists
+  images that the cooker packs into one sprite texture (asset type `atlas`,
+  `AssetManager::LoadAtlas`, `SpriteAtlasData`); `SpriteComponent` properties `atlas` and
+  `region` show a named region, cut into frames as before. Tiled JSON maps (`.tmj`, with
+  embedded or `.tsj` tilesets) cook into scenes: a `TilemapComponent` per tile layer
+  (`solid` tile property, `collision` layer property, visibility and opacity) and an empty
+  object per Tiled object. `lit` on `SpriteComponent`, `TilemapComponent` and
+  `ParticleEmitterComponent` (`SpriteCommand::lit`) lights sprites with the sun, ambient
+  and clustered lights. Geni Plains packs its hero, coins and crates into one atlas.
 - **Cooked audio**: the asset cooker writes every WAV as a desktop and a mobile variant
   (`cooked/audio/<platform>/<path>.gsnd`, asset type `sound`): 16-bit PCM or IMA ADPCM (a
   quarter of the size; desktop compresses sounds of 2 s or more, mobile everything; `.meta`

@@ -138,6 +138,51 @@ TEST_SUITE("2d")
         assets.Shutdown();
     }
 
+    TEST_CASE("a Tiled map cooks into tilemaps with colliders and named objects")
+    {
+        PhysicsWorld physics;
+        Geni::FileSystem files;
+        files.SetAssetsFolder(GENI_TEST_ASSETS_DIR);
+        Geni::AssetManager assets;
+        assets.Init(&files, nullptr, nullptr);
+        const Geni::AssetID id = assets.FindBySource(Geni::AssetType::Scene, "maps/test.tmj");
+        REQUIRE(id.IsValid());
+        auto cooked = assets.LoadScene(id);
+        REQUIRE(cooked.IsReady());
+
+        Geni::Scene scene;
+        Geni::SerializationContext context{&scene, &assets};
+        std::string error;
+        REQUIRE_MESSAGE(Geni::SceneSerializer::Instantiate(scene, *cooked.Get(), context, &error), error);
+        Geni::GameObject *ground = scene.FindObject("Ground");
+        REQUIRE(ground);
+        auto *map = ground->GetComponent<Geni::TilemapComponent>();
+        REQUIRE(map);
+        CHECK(map->GetWidth() == 4);
+        CHECK(map->GetHeight() == 3);
+        CHECK(map->GetTilesetColumns() == 2);
+        CHECK(map->GetTile(1, 1) == 2);
+        CHECK(map->GetTile(0, 2) == 1);
+        CHECK(map->GetTile(3, 2) == 1); // a flipped tile, drawn unflipped
+        CHECK(map->GetTile(0, 0) == Geni::TilemapComponent::EmptyTile);
+        CHECK(map->GetCollision());
+        CHECK(map->IsSolid(0, 2));
+        CHECK_FALSE(map->IsSolid(1, 1));
+        CHECK(map->GetTilesetID().IsValid());
+
+        Geni::GameObject *decor = scene.FindObject("Decor");
+        REQUIRE(decor);
+        CHECK_FALSE(decor->IsActive());
+        CHECK(decor->GetComponent<Geni::TilemapComponent>()->GetColor().a == doctest::Approx(0.5f));
+
+        // (16, 8) pixels on an 8-pixel grid: two tiles right, one down.
+        Geni::GameObject *spawn = scene.FindObject("Spawn");
+        REQUIRE(spawn);
+        CHECK(Near(spawn->GetPosition(), glm::vec3(2.0f, -1.0f, 0.0f)));
+        scene.Clear();
+        assets.Shutdown();
+    }
+
     TEST_CASE("sprites submit one command each, with world bounds and their layer")
     {
         auto &queue = Geni::Engine::GetInstance().GetRenderQueue();

@@ -1,6 +1,6 @@
 # 0021: Sprite atlases, Tiled maps and lit sprites
 
-Milestone: After v0.1 (2D, following 0017) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (2D, following 0017) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 

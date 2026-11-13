@@ -3,6 +3,7 @@
 #include "AudioCooker.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
+#include "TiledImporter.h"
 #include "WorldCooker.h"
 
 #include "assets/AssetID.h"
@@ -1248,6 +1249,133 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    // A Tiled JSON map becomes a scene: one tilemap per tile layer, one empty object per
+    // Tiled object (docs/design/0021). Listed like a glTF's scene, under the .tmj's path.
+    bool CookTiledMap(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        TiledMap map;
+        std::string message;
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            auto readJson = [this](const std::string &path, nlohmann::json &out) {
+                std::vector<uint8_t> fileBytes;
+                if (!ReadFile(options.sourceRoot / path, fileBytes))
+                {
+                    return false;
+                }
+                out = nlohmann::json::parse(fileBytes.begin(), fileBytes.end(), nullptr, false);
+                return !out.is_discarded();
+            };
+            if (!ImportTiledMap(document, Normalize(relative), readJson, map, &message))
+            {
+                return Fail(relative + ": " + message);
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        for (const auto &warning : map.warnings)
+        {
+            std::printf("note: %s: %s\n", relative.c_str(), warning.c_str());
+        }
+
+        auto node = [](const std::string &name, int parent, float x, float y, bool active) {
+            nlohmann::ordered_json n;
+            n["name"] = name;
+            n["parent"] = parent;
+            n["position"] = {x, y, 0.0f};
+            n["rotation"] = {0.0f, 0.0f, 0.0f, 1.0f};
+            n["scale"] = {1.0f, 1.0f, 1.0f};
+            n["active"] = active;
+            n["components"] = nlohmann::ordered_json::array();
+            return n;
+        };
+        nlohmann::ordered_json nodes = nlohmann::ordered_json::array();
+        nodes.push_back(node(std::filesystem::path(relative).stem().string(), -1, 0.0f, 0.0f, true));
+        for (size_t i = 0; i < map.layers.size(); ++i)
+        {
+            const TiledTileLayer &layer = map.layers[i];
+            AssetID tileset;
+            if (!layer.image.empty())
+            {
+                std::vector<uint8_t> imageBytes;
+                if (!ReadFile(options.sourceRoot / layer.image, imageBytes))
+                {
+                    return Fail(relative + ": cannot read the tileset image " + layer.image);
+                }
+                const std::string logical = "texture:" + RootName(layer.image) + UsageSuffix(TextureUsage::Sprite);
+                if (!CookImageBytes(
+                        imageBytes, logical, Normalize(layer.image) + UsageSuffix(TextureUsage::Sprite),
+                        OutputStem(layer.image) + "_sprite", TextureUsage::Sprite
+                    ))
+                {
+                    return false;
+                }
+                tileset = AssetID::FromName(logical);
+            }
+            std::string tiles;
+            for (int row = 0; row < layer.height; ++row)
+            {
+                for (int column = 0; column < layer.width; ++column)
+                {
+                    const size_t index = static_cast<size_t>(row) * layer.width + column;
+                    tiles += (column ? "," : "") + std::to_string(index < layer.tiles.size() ? layer.tiles[index] : -1);
+                }
+                tiles += row + 1 < layer.height ? "\n" : "";
+            }
+            nlohmann::ordered_json properties;
+            properties["collision"] = layer.collision;
+            properties["color"] = {1.0f, 1.0f, 1.0f, layer.opacity};
+            properties["filter"] = "nearest";
+            properties["height"] = layer.height;
+            properties["layer"] = static_cast<int>(i);
+            properties["lit"] = false;
+            properties["solidTiles"] = FormatTileList(layer.solidTiles);
+            properties["tileSize"] = {1.0f, 1.0f};
+            properties["tiles"] = tiles;
+            properties["tileset"] = tileset.IsValid() ? tileset.ToHex() : std::string();
+            properties["tilesetColumns"] = layer.columns;
+            properties["tilesetRows"] = layer.rows;
+            properties["width"] = layer.width;
+            nlohmann::ordered_json component;
+            component["type"] = "TilemapComponent";
+            component["properties"] = std::move(properties);
+            auto layerNode = node(layer.name, 0, 0.0f, 0.0f, layer.visible);
+            layerNode["components"].push_back(std::move(component));
+            nodes.push_back(std::move(layerNode));
+        }
+        // Objects at their bottom-left corner; Tiled's Y points down, the map's up.
+        for (const TiledObject &object : map.objects)
+        {
+            nodes.push_back(node(object.name, 0, object.x, -object.y, true));
+        }
+
+        nlohmann::ordered_json scene;
+        scene["format"] = "geni.scene";
+        scene["version"] = 1;
+        scene["mainCamera"] = -1;
+        scene["nodes"] = std::move(nodes);
+        const std::string text = cooked::FormatSceneText(scene);
+        const std::string path = OutputStem(relative) + ".gscene";
+        if (!cooked::WriteFile(options.outputRoot / path, std::vector<uint8_t>(text.begin(), text.end())))
+        {
+            return Fail("cannot write " + path);
+        }
+        ManifestEntry entry;
+        entry.id = AssetID::FromName("scene:" + RootName(relative));
+        entry.type = AssetType::Scene;
+        entry.source = Normalize(relative);
+        entry.path = path;
+        return AddManifest(std::move(entry));
+    }
+
     // A .gatlas lists images; they are packed into one sprite texture, and the atlas asset
     // names each image's rectangle (docs/design/0021).
     bool CookAtlas(const std::string &relative)
@@ -1624,7 +1752,7 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
                 extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
-                extension == ".wav" || extension == ".gatlas")
+                extension == ".wav" || extension == ".gatlas" || extension == ".tmj")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1686,6 +1814,19 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Tiled maps become scenes (docs/design/0021).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".tmj")
+            {
+                report(input);
+                if (!CookTiledMap(input))
                 {
                     return false;
                 }
