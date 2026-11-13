@@ -1,6 +1,6 @@
 # 0019: Particles
 
-Milestone: After v0.1 (rendering) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (rendering) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 

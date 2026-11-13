@@ -97,6 +97,7 @@ add methods:
 | `PhysicsComponent` | `velocity()`, `set_velocity(v)`, `impulse(v)` |
 | `SpriteAnimatorComponent` | `play(first, count, fps, loop)` (the same clip again keeps its place, so call it every frame), `stop()`, `finished()` |
 | `TilemapComponent` | `tile(column, row)` (-1 when empty), `set_tile(column, row, tile)`, `solid(column, row)`, `cell_at(position)` → column, row, `cell_center(column, row)` → vec3 |
+| `ParticleEmitterComponent` | `emit(n)` (spawn n now), `clear()`, `restart()` (clear, rewind, burst again), `count()` |
 | `ScriptComponent` | `instance()`: the other script's instance table |
 
 `TimeOfDayComponent` ([0018](design/0018-time-of-day.md)) has no methods; its properties

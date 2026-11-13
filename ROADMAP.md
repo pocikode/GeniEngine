@@ -326,7 +326,8 @@ Chosen by what users ask for, not planned in detail now:
 
 - Open-world layers: traffic and pedestrian simulation, time of day (first version done:
   docs/design/0018), weather, mission system
-- Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles
+- Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles (first
+  version done: docs/design/0019, CPU-simulated billboards)
 - 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; still
   open: lit sprites, a Tiled importer, sprite atlases packed by the cooker)
 - Networking and multiplayer
