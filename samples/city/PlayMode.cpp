@@ -148,6 +148,7 @@ int RunPlay(const PlayOptions &options)
 {
     Geni::EngineConfig config;
     config.title = "Geni City";
+    config.gameName = "GeniCity";
     config.width = options.width;
     config.height = options.height;
     config.visible = !options.hidden;

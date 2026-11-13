@@ -6,6 +6,13 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Missions and saved games** (docs/design/0024): `MissionSystem` (`Engine::GetMissions`)
+  loads `.gmission` JSON with ordered `reach`, `count` and `custom` objectives,
+  requirements, time limits, events and `SaveState`/`RestoreState`; reach checks use world
+  coordinates. `SaveGame` (`Engine::GetSaveGame`, `EngineConfig::gameName`, `saveFolder`)
+  writes JSON documents atomically to the user's data folder. Lua `missions` and `save`
+  libraries. Geni City's first mission (a test drive) with an objective HUD and a beam of
+  particles at the waypoint; the autopilot checks it completes.
 - **Vegetation** (docs/design/0023): `.gterrain` scatter rules (prefab, density, slope and
   height limits, scale range, seed, draw distance) cook into `foliage` assets
   (`world/Foliage.h`); `FoliageComponent` draws every instance of a prefab's meshes

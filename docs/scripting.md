@@ -154,3 +154,18 @@ for `"master"`, `"music"` and `"effects"`.
 **game**: `quit()`, `screenshot(path)`, `set_paused(b)` (stops physics, fixed updates and
 the crowd).
 **log**: `info(...)`, `warn(...)`, `error(...)`; `print` is `log.info`.
+
+**missions** ([0024](design/0024-missions-and-saves.md)): `load(path)` (a `.gmission`
+file), `list()`, `active()`, `status(id)` (`"locked"`, `"available"`, `"active"`,
+`"completed"`, `"failed"`), `info(id)` (`title`, `description`, `state`, `elapsed`,
+`time_limit`, `objectives` with `id`, `text`, `kind`, `progress`, `count`, `done` and, for
+reach objectives at a place, `position` (world) and `radius`), `current(id)` (the current
+objective), `start(id)`, `fail(id, reason)`, `abandon(id)`, `progress(id, objective, n)`,
+`complete(id, objective)`, `events()` (since the last call: `type` is `"unlocked"`,
+`"started"`, `"objective"`, `"completed"` or `"failed"`, with `mission`, `objective`,
+`reason`), `set_player(object)` (what reach objectives check), `state()` and
+`restore(table)`.
+
+**save**: `write(name, table)`, `read(name)` (a table or `nil`), `exists(name)`,
+`delete(name)`. Files are JSON in the user's data folder under `EngineConfig::gameName`;
+names are letters, digits, `-`, `_` and `.`.

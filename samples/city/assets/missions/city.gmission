@@ -1,0 +1,28 @@
+{
+  "format": "geni.mission",
+  "version": 1,
+  "missions": [
+    {
+      "id": "test_drive",
+      "title": "Test drive",
+      "description": "Take the red car down the street.",
+      "objectives": [
+        { "id": "car", "text": "Get in the red car", "kind": "custom" },
+        { "id": "crossing", "text": "Drive to the next crossing", "kind": "reach",
+          "position": [802.0, 0.0, 792.0], "radius": 10.0 },
+        { "id": "park", "text": "Stop and get out", "kind": "custom" }
+      ]
+    },
+    {
+      "id": "east_side",
+      "title": "The east side",
+      "description": "See what is past the park.",
+      "requires": ["test_drive"],
+      "timeLimit": 180,
+      "objectives": [
+        { "id": "east", "text": "Reach the east side", "kind": "reach",
+          "position": [960.0, 0.0, 700.0], "radius": 15.0 }
+      ]
+    }
+  ]
+}

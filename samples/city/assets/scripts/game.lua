@@ -90,6 +90,8 @@ function Game:start()
     end
   end
 
+  self:start_missions()
+
   self.crowd = Crowd.new(self.options.crowd and 24 or 0, 70.0)
   self.traffic = Traffic.new(self.options.traffic and 10 or 0, 140.0)
 
@@ -141,6 +143,9 @@ function Game:near_car()
 end
 
 function Game:enter_car()
+  missions.complete("test_drive", "car")
+  -- Reach objectives follow whatever the player controls.
+  missions.set_player(self.car)
   self.driving = true
   self.character:set_enabled(false)
   self.player:set_active(false)
@@ -185,6 +190,75 @@ function Game:exit_car()
   self.camera.distance = 4.6
   self.camera.height = 1.55
   audio.play("sounds/door.wav", { position = self.car:world_position(), volume = 0.9 })
+  missions.set_player(self.player)
+  missions.complete("test_drive", "park")
+end
+
+-- Missions (docs/design/0024) -----------------------------------------------------------
+
+-- Progress is saved in normal play only: test runs and captures always start fresh.
+function Game:saving()
+  return not self.options.autopilot and not self.options.title_only
+end
+
+function Game:start_missions()
+  local ok, err = missions.load("missions/city.gmission")
+  if not ok then
+    log.error("missions: " .. tostring(err))
+    return
+  end
+  missions.set_player(self.player)
+  local saved = self:saving() and save.read("city")
+  if saved and saved.missions then
+    missions.restore(saved.missions)
+  end
+  missions.events()
+  for _, id in ipairs(missions.list()) do
+    if missions.status(id) == "available" then
+      missions.start(id)
+      break
+    end
+  end
+  -- A column of light over the current objective's place.
+  self.marker = scene.create("Objective Marker")
+  self.beam = self.marker:add("ParticleEmitterComponent", {
+    rate = 40, spread = 4, speedMin = 6, speedMax = 9, lifetimeMin = 1.2, lifetimeMax = 1.6,
+    startSize = 0.6, endSize = 0.2, startColor = { 1.0, 0.8, 0.3, 0.9 }, endColor = { 1.0, 0.5, 0.1, 0.0 },
+    blend = "additive", maxParticles = 128 })
+  self.marker:set_active(false)
+end
+
+-- The first active mission and its current objective.
+function Game:current_objective()
+  for _, id in ipairs(missions.active()) do
+    local objective = missions.current(id)
+    if objective then return id, objective end
+  end
+  return nil, nil
+end
+
+function Game:update_missions()
+  for _, event in ipairs(missions.events()) do
+    local info = missions.info(event.mission)
+    local title = info and info.title or event.mission
+    if event.type == "started" then
+      self:say(title, 3.0)
+    elseif event.type == "completed" then
+      self:say(title .. " complete", 3.0)
+      self:ui_sound("ui_select")
+      if self:saving() then save.write("city", { missions = missions.state() }) end
+    elseif event.type == "failed" then
+      self:say(title .. " failed", 3.0)
+    elseif event.type == "unlocked" then
+      missions.start(event.mission)
+    end
+  end
+  local _, objective = self:current_objective()
+  local show = objective ~= nil and objective.position ~= nil
+  if self.marker then
+    self.marker:set_active(show)
+    if show then self.marker:set_world_position(scene.to_scene(objective.position)) end
+  end
 end
 
 -- Per frame ---------------------------------------------------------------------------
@@ -233,6 +307,7 @@ function Game:play(dt)
   if self.driving and input.pressed("horn") then
     audio.play("sounds/horn.wav", { position = self.car:world_position() })
   end
+  self:update_missions()
   self:hud()
 end
 
@@ -402,6 +477,19 @@ function Game:hud()
     for i, line in ipairs(lines) do
       ui.text(line, "bottom_left", 44, 24 + (#lines - i) * 34 + 14, 26, dim)
     end
+  end
+
+  local mission, objective = self:current_objective()
+  if objective then
+    local text = objective.text
+    if objective.position then
+      local metres = vec3.distance(self:focus(), scene.to_scene(objective.position))
+      text = string.format("%s  ·  %d m", text, math.floor(metres + 0.5))
+    elseif objective.kind == "count" then
+      text = string.format("%s  (%d/%d)", text, objective.progress, objective.count)
+    end
+    ui.text(missions.info(mission).title, "top_left", 32, 70, 26, dim)
+    ui.text(text, "top_left", 32, 100, 32, ui.accent())
   end
 
   if self.message and self.message_time > 0.0 then

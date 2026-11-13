@@ -122,6 +122,10 @@ function Autopilot:finish()
   if (self.driven or 0) < 30.0 then table.insert(problems, "the car hardly moved") end
   if g.options.crowd and (people == 0 or walked < 5.0) then table.insert(problems, "no pedestrians moving") end
   if g.options.traffic and (cars == 0 or driven < 20.0) then table.insert(problems, "no traffic moving") end
+  -- The drive is the first mission (docs/design/0024): car, crossing, out.
+  if missions.status("test_drive") ~= "completed" then
+    table.insert(problems, "the test drive mission did not complete (" .. tostring(missions.status("test_drive")) .. ")")
+  end
   autopilot_result = { ok = #problems == 0, message = #problems == 0 and report or table.concat(problems, "; ") .. " (" .. report .. ")" }
   self.phase = "done"
   game.quit()

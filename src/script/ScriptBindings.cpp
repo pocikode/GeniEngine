@@ -1761,6 +1761,247 @@ nlohmann::json ToJson(lua_State *L, int index)
     }
 }
 
+// Missions and saved games (docs/design/0024).
+MissionSystem &Missions()
+{
+    return Engine::GetInstance().GetMissions();
+}
+
+int MissionsLoad(lua_State *L)
+{
+    std::string error;
+    const bool ok = Missions().LoadFile(Engine::GetInstance().GetFileSystem(), luaL_checkstring(L, 1), &error);
+    lua_pushboolean(L, ok);
+    if (!ok)
+    {
+        lua_pushstring(L, error.c_str());
+        return 2;
+    }
+    return 1;
+}
+
+int MissionsStart(lua_State *L)
+{
+    lua_pushboolean(L, Missions().Start(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+int MissionsFail(lua_State *L)
+{
+    lua_pushboolean(L, Missions().Fail(luaL_checkstring(L, 1), luaL_optstring(L, 2, "")));
+    return 1;
+}
+
+int MissionsAbandon(lua_State *L)
+{
+    lua_pushboolean(L, Missions().Abandon(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+int MissionsStatus(lua_State *L)
+{
+    const std::string id = luaL_checkstring(L, 1);
+    if (!Missions().Find(id))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushstring(L, MissionStateName(Missions().GetState(id)));
+    return 1;
+}
+
+void PushObjective(lua_State *L, const ObjectiveDef &objective, int progress, bool done)
+{
+    lua_createtable(L, 0, 6);
+    lua_pushstring(L, objective.id.c_str());
+    lua_setfield(L, -2, "id");
+    lua_pushstring(L, objective.text.c_str());
+    lua_setfield(L, -2, "text");
+    lua_pushstring(
+        L, objective.kind == ObjectiveKind::Reach ? "reach" : objective.kind == ObjectiveKind::Count ? "count" : "custom"
+    );
+    lua_setfield(L, -2, "kind");
+    lua_pushinteger(L, progress);
+    lua_setfield(L, -2, "progress");
+    lua_pushinteger(L, objective.count);
+    lua_setfield(L, -2, "count");
+    lua_pushboolean(L, done);
+    lua_setfield(L, -2, "done");
+    if (objective.kind == ObjectiveKind::Reach && objective.object.empty())
+    {
+        PushVec3(L, objective.position);
+        lua_setfield(L, -2, "position");
+        lua_pushnumber(L, objective.radius);
+        lua_setfield(L, -2, "radius");
+    }
+}
+
+int MissionsInfo(lua_State *L)
+{
+    const std::string id = luaL_checkstring(L, 1);
+    const MissionDef *mission = Missions().Find(id);
+    const MissionStatus *status = Missions().GetStatus(id);
+    if (!mission || !status)
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_createtable(L, 0, 7);
+    lua_pushstring(L, mission->id.c_str());
+    lua_setfield(L, -2, "id");
+    lua_pushstring(L, mission->title.c_str());
+    lua_setfield(L, -2, "title");
+    lua_pushstring(L, mission->description.c_str());
+    lua_setfield(L, -2, "description");
+    lua_pushstring(L, MissionStateName(status->state));
+    lua_setfield(L, -2, "state");
+    lua_pushnumber(L, status->elapsed);
+    lua_setfield(L, -2, "elapsed");
+    lua_pushnumber(L, mission->timeLimit);
+    lua_setfield(L, -2, "time_limit");
+    lua_createtable(L, static_cast<int>(mission->objectives.size()), 0);
+    for (size_t i = 0; i < mission->objectives.size(); ++i)
+    {
+        PushObjective(L, mission->objectives[i], status->progress[i], i < status->current);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    lua_setfield(L, -2, "objectives");
+    return 1;
+}
+
+int MissionsCurrent(lua_State *L)
+{
+    const std::string id = luaL_checkstring(L, 1);
+    const ObjectiveDef *objective = Missions().GetCurrentObjective(id);
+    if (!objective)
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    const MissionStatus *status = Missions().GetStatus(id);
+    PushObjective(L, *objective, status->progress[status->current], false);
+    return 1;
+}
+
+int MissionsProgress(lua_State *L)
+{
+    lua_pushboolean(
+        L, Missions().AddProgress(luaL_checkstring(L, 1), luaL_optstring(L, 2, ""), static_cast<int>(luaL_optinteger(L, 3, 1)))
+    );
+    return 1;
+}
+
+int MissionsComplete(lua_State *L)
+{
+    lua_pushboolean(L, Missions().CompleteObjective(luaL_checkstring(L, 1), luaL_optstring(L, 2, "")));
+    return 1;
+}
+
+void PushStringList(lua_State *L, const std::vector<std::string> &items)
+{
+    lua_createtable(L, static_cast<int>(items.size()), 0);
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        lua_pushstring(L, items[i].c_str());
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+}
+
+int MissionsActive(lua_State *L)
+{
+    PushStringList(L, Missions().GetActive());
+    return 1;
+}
+
+int MissionsList(lua_State *L)
+{
+    PushStringList(L, Missions().GetMissionIds());
+    return 1;
+}
+
+int MissionsEvents(lua_State *L)
+{
+    const std::vector<MissionEvent> events = Missions().TakeEvents();
+    lua_createtable(L, static_cast<int>(events.size()), 0);
+    for (size_t i = 0; i < events.size(); ++i)
+    {
+        lua_createtable(L, 0, 4);
+        lua_pushstring(L, MissionEventName(events[i].type));
+        lua_setfield(L, -2, "type");
+        lua_pushstring(L, events[i].mission.c_str());
+        lua_setfield(L, -2, "mission");
+        lua_pushstring(L, events[i].objective.c_str());
+        lua_setfield(L, -2, "objective");
+        lua_pushstring(L, events[i].reason.c_str());
+        lua_setfield(L, -2, "reason");
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    return 1;
+}
+
+int MissionsSetPlayer(lua_State *L)
+{
+    GameObject *object = lua_isnoneornil(L, 1) ? nullptr : CheckObject(L, 1);
+    Missions().SetPlayer(object ? object->GetID() : 0);
+    return 0;
+}
+
+int MissionsState(lua_State *L)
+{
+    PushJson(L, Missions().SaveState());
+    return 1;
+}
+
+int MissionsRestore(lua_State *L)
+{
+    std::string error;
+    const bool ok = Missions().RestoreState(ToJson(L, 1), &error);
+    lua_pushboolean(L, ok);
+    if (!ok)
+    {
+        lua_pushstring(L, error.c_str());
+        return 2;
+    }
+    return 1;
+}
+
+int SaveWrite(lua_State *L)
+{
+    std::string error;
+    const bool ok = Engine::GetInstance().GetSaveGame().Write(luaL_checkstring(L, 1), ToJson(L, 2), &error);
+    lua_pushboolean(L, ok);
+    if (!ok)
+    {
+        lua_pushstring(L, error.c_str());
+        return 2;
+    }
+    return 1;
+}
+
+int SaveRead(lua_State *L)
+{
+    nlohmann::json document;
+    if (!Engine::GetInstance().GetSaveGame().Read(luaL_checkstring(L, 1), document))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    PushJson(L, document);
+    return 1;
+}
+
+int SaveExists(lua_State *L)
+{
+    lua_pushboolean(L, Engine::GetInstance().GetSaveGame().Exists(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+int SaveDelete(lua_State *L)
+{
+    lua_pushboolean(L, Engine::GetInstance().GetSaveGame().Delete(luaL_checkstring(L, 1)));
+    return 1;
+}
+
 void Register(lua_State *L, ScriptSystem &system)
 {
     (void)system;
@@ -1921,6 +2162,20 @@ void Register(lua_State *L, ScriptSystem &system)
         {"quit", GameQuit}, {"screenshot", GameScreenshot}, {"set_paused", GameSetPaused}, {nullptr, nullptr}
     };
     NewLibrary(L, "game", game);
+
+    const luaL_Reg missions[] = {
+        {"load", MissionsLoad},         {"start", MissionsStart},       {"fail", MissionsFail},
+        {"abandon", MissionsAbandon},   {"status", MissionsStatus},     {"info", MissionsInfo},
+        {"current", MissionsCurrent},   {"progress", MissionsProgress}, {"complete", MissionsComplete},
+        {"active", MissionsActive},     {"list", MissionsList},         {"events", MissionsEvents},
+        {"set_player", MissionsSetPlayer}, {"state", MissionsState},    {"restore", MissionsRestore},
+        {nullptr, nullptr},
+    };
+    NewLibrary(L, "missions", missions);
+    const luaL_Reg save[] = {
+        {"write", SaveWrite}, {"read", SaveRead}, {"exists", SaveExists}, {"delete", SaveDelete}, {nullptr, nullptr}
+    };
+    NewLibrary(L, "save", save);
 }
 
 } // namespace ScriptBindings
