@@ -25,7 +25,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0017 | [2D sprites, tilemaps and physics](0017-2d.md) | M7 | Done |
 | 0018 | [Time of day](0018-time-of-day.md) | After v0.1 | Done |
 | 0019 | [Particles](0019-particles.md) | After v0.1 | Done |
-| 0020 | [Weather](0020-weather.md) | After v0.1 | Accepted |
+| 0020 | [Weather](0020-weather.md) | After v0.1 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

@@ -51,7 +51,7 @@ afternoon and shows the time on its HUD; a screenshot test covers dusk in the me
   the override is cleared after the frame uniforms are written. Removing the component, a
   scene change or leaving play mode returns to the config values with no cleanup code.
 - **Lua** needs no new bindings: `scene.find("Sun"):get("TimeOfDayComponent").time = 21`
-  works through reflection. Geni City adds the component in `game.lua`, starting at 15:00
+  works through reflection. Geni City adds the component in `game.lua`, starting at 16:00
   with a 24-minute day that runs only while playing (stopped on the title and pause
   menus), with `pathYaw` 180 so the afternoon sun reaches its north-south street, and
   shows the clock on the HUD.

@@ -244,6 +244,10 @@ void WeatherComponent::BuildQuads(const glm::vec3 &cameraRight)
             quad.rotation = std::atan2(glm::dot(wind, cameraRight), drop.speed);
             quad.color = rain;
         }
+        // A drop passing the lens would fill the screen: fade those within a few metres.
+        const float distance = glm::length(drop.position - m_viewPosition);
+        const float t = glm::clamp((distance - 0.75f) / 2.25f, 0.0f, 1.0f);
+        quad.color.a *= t * t * (3.0f - 2.0f * t);
     }
 }
 

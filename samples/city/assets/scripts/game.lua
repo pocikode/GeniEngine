@@ -22,6 +22,9 @@ local CAR_START = vec3(802.4, 0.9, 820.0)
 local ENTER_DISTANCE = 3.2
 local START_HOUR = 16.0 -- the game starts in the late afternoon
 local DAY_MINUTES = 24.0 -- real minutes per game day
+-- An evening shower (docs/design/0020), in game hours: clouds build first, then rain.
+local CLOUDS_FROM, CLOUDS_UNTIL = 16.75, 18.75
+local RAIN_FROM, RAIN_UNTIL = 17.0, 18.5
 
 local function flat_distance(a, b)
   return vec3.distance(vec3(a.x, 0, a.z), vec3(b.x, 0, b.z))
@@ -76,6 +79,7 @@ function Game:start()
   -- down the north-south streets, so the start is not in a building's shadow.
   local sun = scene.find("Sun")
   self.clock = sun and sun:add("TimeOfDayComponent", { time = START_HOUR, dayLengthMinutes = 0.0, pathYaw = 180.0 })
+  self.weather = scene.create("Weather"):add("WeatherComponent", { transitionSeconds = 25.0 })
   -- The block's street lights are on all the time in the viewer (it has no clock); in the
   -- game they come on at dusk.
   local city = scene.find("City")
@@ -193,6 +197,7 @@ function Game:update(dt)
     self:title_screen(dt)
   elseif self.state == "playing" then
     self:play(dt)
+    self:update_weather()
   else
     self:pause_screen()
   end
@@ -229,6 +234,18 @@ function Game:play(dt)
     audio.play("sounds/horn.wav", { position = self.car:world_position() })
   end
   self:hud()
+end
+
+-- The weather follows the clock; the component eases between the targets.
+function Game:update_weather()
+  if not self.clock or not self.weather then return end
+  local hour = self.clock.time
+  local cloudy = hour >= CLOUDS_FROM and hour < CLOUDS_UNTIL
+  local raining = hour >= RAIN_FROM and hour < RAIN_UNTIL
+  self.weather.cloudCover = cloudy and 0.85 or 0.0
+  self.weather.fog = raining and 0.3 or 0.0
+  self.weather.precipitation = raining and 0.8 or 0.0
+  self.weather.wind = vec3(1.5, 0.0, 1.0)
 end
 
 function Game:update_sounds()

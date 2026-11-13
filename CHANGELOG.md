@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Weather** (docs/design/0020): `WeatherComponent` (targets `cloudCover`, `fog`,
+  `precipitation`, `snow`, `wind`, eased over `transitionSeconds`) greys the sky, dims the
+  sun, thickens the fog and draws rain or snow in a box that wraps around the camera.
+  `WeatherState` and `ApplyWeather` (`render/Weather.h`); `Renderer::SetWeather` lasts one
+  frame (`GetFrameWeather`). Lua: `snap()`. Geni City has a shower from 17:00 to 18:30;
+  `city --world --weather rain|snow|fog` and the `screenshot_world_rain` test.
 - **Particles** (docs/design/0019): `ParticleEmitterComponent` emits and simulates
   camera-facing particles on the CPU (rate, bursts, duration and loop, point/sphere/box
   shapes, a cone of directions, gravity, drag, floor bounce, size, sRGB colour and atlas
@@ -22,7 +28,7 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
   elevation; midday matches the previous defaults. `EvaluateTimeOfDay` (`render/TimeOfDay.h`)
   is the same mapping as a pure function. `Renderer::SetAtmosphereOverride` replaces the
   config's sky, fog and ambient for one frame (`GetConfigAtmosphere`, `GetFrameAtmosphere`).
-  Geni City starts at 15:00 with a 24-minute day and a clock on the HUD; `city --world
+  Geni City starts at 16:00 with a 24-minute day and a clock on the HUD; `city --world
   --time HOURS` and the `screenshot_world_dusk` test. **Night lights**: `LightComponent`
   property `nightOnly` and `Atmosphere::darkness`; the renderer scales night-only lights by
   the darkness and skips them by day (the metro world's 240 street lights, and the city

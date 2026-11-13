@@ -325,7 +325,8 @@ Done when: a cut-down reference scene runs in Chrome and Safari.
 Chosen by what users ask for, not planned in detail now:
 
 - Open-world layers: traffic and pedestrian simulation, time of day (first version done:
-  docs/design/0018), weather, mission system
+  docs/design/0018, with night lights), weather (first version done: docs/design/0020),
+  mission system
 - Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles (first
   version done: docs/design/0019, CPU-simulated billboards)
 - 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; still
