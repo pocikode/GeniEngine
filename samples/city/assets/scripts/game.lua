@@ -76,6 +76,15 @@ function Game:start()
   -- down the north-south streets, so the start is not in a building's shadow.
   local sun = scene.find("Sun")
   self.clock = sun and sun:add("TimeOfDayComponent", { time = START_HOUR, dayLengthMinutes = 0.0, pathYaw = 180.0 })
+  -- The block's street lights are on all the time in the viewer (it has no clock); in the
+  -- game they come on at dusk.
+  local city = scene.find("City")
+  for _, child in ipairs(city and city:children() or {}) do
+    local light = child:name():find("^StreetLight") and child:get("LightComponent")
+    if light then
+      light.nightOnly = true
+    end
+  end
 
   self.crowd = Crowd.new(self.options.crowd and 24 or 0, 70.0)
   self.traffic = Traffic.new(self.options.traffic and 10 or 0, 140.0)

@@ -254,6 +254,7 @@ int RunWorld(const WorldOptions &options)
     const std::vector<double> times = app->FrameTimes();
     const Geni::StreamingStats stats = engine.GetWorldStreamer().GetStats();
     const Geni::StreamingBudget budget = engine.GetWorldStreamer().GetBudget();
+    const Geni::RenderStats renderStats = engine.GetRenderer().GetRenderStats();
     engine.Destroy();
 
     if (const auto errors = Geni::rhi::GetValidationErrorCount())
@@ -283,6 +284,7 @@ int RunWorld(const WorldOptions &options)
         static_cast<double>(budget.gpuMemoryBytes) / kMiB, stats.peakUpdateMs,
         static_cast<unsigned long long>(stats.lateFrames)
     );
+    std::printf("world: last frame %u clustered lights\n", renderStats.clusteredLights);
 
     if (options.hitchMs > 0.0 && maxMs > options.hitchMs)
     {
