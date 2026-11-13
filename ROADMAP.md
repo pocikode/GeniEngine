@@ -1,6 +1,6 @@
 # GeniEngine Roadmap
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 
 ## Goal
 
@@ -43,7 +43,7 @@ Dates assume about 8 h/week starting November 2026.
 
 ### M0: Foundations (Nov 2026 – Jan 2027, about 80 h)
 
-**Status (2026-11-10):** implemented. Verified locally on macOS and on Linux (Arch, GCC 16, Wayland): `cmake --workflow --preset dev` builds and passes every test. On Linux, GNU ld needs the Bullet libraries listed dependents-first, which `CMakeLists.txt` now does. Open until CI has run green on macOS, Windows and Linux.
+**Status (2026-11-10):** implemented. Verified locally on macOS and on Linux (Arch, GCC 16, Wayland): `cmake --workflow --preset dev` builds and passes every test. On Linux, GNU ld needs the Bullet libraries listed dependents-first, which `CMakeLists.txt` now does. CI ran green on macOS, Windows and Linux on 2026-11-12 (`main`), which closes M0.
 
 Make the project safe to change quickly.
 
@@ -59,7 +59,7 @@ Make the project safe to change quickly.
 
 ### M1: Vulkan backend (Feb – Jul 2027, about 200 h)
 
-**Status (2026-11-10):** implemented; all tests pass locally on macOS (MoltenVK) with validation layers on, and the sandbox matches the screenshots captured from the OpenGL renderer. On Linux, all tests pass in debug and release with zero validation errors on an NVIDIA RTX 4060 Laptop GPU (driver 615.78) and an AMD Radeon 780M (Mesa RADV), and the screenshot tests match the references on both. Known driver issue: on NVIDIA under Wayland, the driver crashes in `vkDestroySwapchainKHR` when a second Vulkan instance was created and destroyed while the engine's was alive. It does not happen under X11 or on RADV. The `gpu rhi` test, which creates its own instance, therefore runs in its own process (`gpu_rhi`); not yet reported to NVIDIA. Open until CI has run green on macOS, Windows and Linux.
+**Status (2026-11-10):** implemented; all tests pass locally on macOS (MoltenVK) with validation layers on, and the sandbox matches the screenshots captured from the OpenGL renderer. On Linux, all tests pass in debug and release with zero validation errors on an NVIDIA RTX 4060 Laptop GPU (driver 615.78) and an AMD Radeon 780M (Mesa RADV), and the screenshot tests match the references on both. Known driver issue: on NVIDIA under Wayland, the driver crashes in `vkDestroySwapchainKHR` when a second Vulkan instance was created and destroyed while the engine's was alive. It does not happen under X11 or on RADV. The `gpu rhi` test, which creates its own instance, therefore runs in its own process (`gpu_rhi`); not yet reported to NVIDIA. CI is green on macOS, Windows and Linux (2026-11-12), but the Windows runners have no Vulkan device, so "renders identically on Windows" stays open until Windows is verified on a real GPU (M7).
 
 Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backend.
 
@@ -75,7 +75,7 @@ Replace direct OpenGL calls with a rendering interface (RHI) and a Vulkan backen
 
 ### M2: Renderer v1 (Aug 2027 – Jan 2028, about 200 h)
 
-**Status (2026-11-10):** implemented; design page `docs/design/0002-renderer-v1.md`. All tests pass locally on macOS (MoltenVK) with validation layers on: the sandbox and the 10,000-object city block render with cascaded shadows, clustered lighting, PBR, HDR and MSAA, and the release benchmark runs at 8.5 ms/frame (118 fps) on an Apple M4. On Linux at 1280×720 the same benchmark runs at 2.7 ms/frame (373 fps) on an NVIDIA RTX 4060 Laptop GPU and 4.4 ms/frame (225 fps) on an AMD Radeon 780M integrated GPU. Open until CI has run green on macOS, Windows and Linux and the budget has been measured on a Windows GPU.
+**Status (2026-11-10):** implemented; design page `docs/design/0002-renderer-v1.md`. All tests pass locally on macOS (MoltenVK) with validation layers on: the sandbox and the 10,000-object city block render with cascaded shadows, clustered lighting, PBR, HDR and MSAA, and the release benchmark runs at 8.5 ms/frame (118 fps) on an Apple M4. On Linux at 1280×720 the same benchmark runs at 2.7 ms/frame (373 fps) on an NVIDIA RTX 4060 Laptop GPU and 4.4 ms/frame (225 fps) on an AMD Radeon 780M integrated GPU. CI is green on macOS, Windows and Linux (2026-11-12); open until the budget has been measured on a Windows GPU.
 
 Make it look modern and scale to many objects.
 
@@ -103,8 +103,8 @@ locally on Linux with validation layers on: job system, asset IDs/manifest/handl
 garbage collection, async loading with material texture dependencies, KTX2 layout and
 per-usage texture formats (sRGB colour, BC5 normal maps), scene save/load and
 step-by-step instantiation, malformed scenes, and component reflection. The runtime no
-longer links cgltf or an image decoder. Open until CI has run green on macOS, Windows
-and Linux, including the new `ktx validate` step.
+longer links cgltf or an image decoder. CI ran green on macOS, Windows and Linux on
+2026-11-12, including the `ktx validate` step, which closes M3.
 
 Everything streaming and the editor depend on.
 
@@ -135,7 +135,8 @@ screenshot of the editor window (`screenshot_editor`). Limits of v1, all in the 
 page: picking is by bounding box, a prefab instance can only override its root's name and
 transform, and overlays are not depth-tested against the scene. Nobody other than the
 author has used the editor yet, and nothing has been laid out in it by hand beyond the
-scripted session. Open until CI has run green on macOS, Windows and Linux.
+scripted session. CI is green on macOS, Windows and Linux (2026-11-12), including
+`editor_smoke` and `screenshot_editor`, which closes M4.
 
 The point where other people can start using the engine.
 
@@ -168,8 +169,9 @@ blocking submit each, which removed 10–30 ms upload stalls. Bullet is gone; th
 falling-crate screenshot was recaptured for Jolt. Tested on macOS (MoltenVK, validation
 layers on) in debug and release: `benchmark_world`, `screenshot_world`, the world cases in
 `geni_tests`, the cooker and editor tests, and the editor smoke session, which now edits a
-region of the metro world. Open until CI has run green on macOS, Windows and Linux, and
-until the flight has been measured on a Windows GPU and the Steam Deck.
+region of the metro world. CI is green on macOS, Windows and Linux (2026-11-12),
+including `benchmark_world` and `screenshot_world`; open until the flight has been
+measured on a Windows GPU and the Steam Deck.
 
 The engine's specialty.
 
@@ -208,8 +210,9 @@ actions, the animation graph, characters, vehicles, casts and kinematic bodies,
 navigation and crowds, audio without a device, Lua bindings and hot reload, and menu
 navigation. Getting-started guide (`docs/getting-started.md`), Lua API reference
 (`docs/scripting.md`), `CONTRIBUTING.md` and `CHANGELOG.md` are written. Tagged **v0.1**
-(2026-11-12). Not done yet: CI green on macOS, Windows and Linux (the run for the M6 commit did not start: the GitHub account is locked over billing); playing it on macOS,
-Windows and the Steam Deck; anyone other than the author playing it; and the public
+(2026-11-12). CI is green on macOS, Windows and Linux since 2026-11-12, including
+`play_city` and `screenshot_play`. Not done yet: playing it on macOS, Windows and the
+Steam Deck; anyone other than the author playing it; and the public
 announcement, which is the author's to make. Known limits, all in `CHANGELOG.md`: pedestrians are
 not physical, traffic is scripted for the metro world's grid, navigation tiles are built
 at load rather than cooked, audio is not compressed per platform.
@@ -239,10 +242,11 @@ forward from "After v0.1" at the author's request (design page `docs/design/0017
 sprites, sprite animation, tilemaps with collision, orthographic cameras, physics in a
 plane, exact colours, and a second sample, **Geni Plains** (`samples/platformer`), with a
 scripted play-through, a screenshot, an editor session and a 10,000-sprite benchmark
-(8.6 ms per frame, release, 1280×720). All 27 CTest tests pass locally on macOS. Not done:
-CI green (still blocked by the GitHub billing lock), Windows and Linux packages run on a
-clean machine, anything on Windows hardware or the Steam Deck, outside users, per-platform
-audio compression and cooked navigation tiles.
+(8.6 ms per frame, release, 1280×720). All 27 CTest tests pass locally on macOS. CI is
+green on macOS, Windows and Linux and all of this is merged to `main` (2026-11-12).
+Not done: Windows and Linux packages run on a clean machine, anything on Windows hardware
+or the Steam Deck, outside users, per-platform audio compression and cooked navigation
+tiles.
 
 Before this work: v0.1 passed all 21 CTest tests locally on macOS and Linux, but CI has
 never run green, nothing has been verified on Windows, the M0–M6 work is still on
@@ -261,10 +265,18 @@ index buffer sat about 3 MB in) draws nothing or garbage there, at any alignment
 allocation on that device only; the world, title and platformer screenshots match the
 references there again and are compared in CI.
 
+CI on `main` (2026-11-12): green on all six jobs. macOS (Paravirtual GPU) and Linux
+(lavapipe) run all 27 tests; Windows has no Vulkan device and runs the 9 that need none.
+The first attempt failed on two runner problems, not code: the Windows packaging job could
+not download GLFW (SSL error), and on a Linux runner about 2.5 times slower than usual
+`benchmark_world` and `play_city` hit their 600 s and 900 s limits. A re-run passed them
+in 215 s and 366 s. If the timeouts recur, raise those limits or shorten the flight on
+Linux.
+
 Turn v0.1 into something other people can ship a desktop game with.
 
 - CI green on macOS, Windows and Linux (resolve the GitHub billing lock first), then
-  merge to `main`
+  merge to `main` (done 2026-11-12; Windows CI has no GPU, so its gpu tests are skipped)
 - Windows verified on a real GPU: tests, screenshots, `benchmark_city` and the
   `benchmark_world` flight, with validation layers on
 - Budgets measured on a mid-range Windows GPU and on the Steam Deck; fix what misses
