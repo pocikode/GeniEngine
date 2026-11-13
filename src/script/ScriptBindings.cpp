@@ -16,6 +16,7 @@
 #include "scene/components/SpriteComponent.h"
 #include "scene/components/ThirdPersonCameraComponent.h"
 #include "scene/components/TilemapComponent.h"
+#include "scene/components/ParticleEmitterComponent.h"
 #include "scene/components/VehicleComponent.h"
 #include "script/ScriptSystem.h"
 #include "ui/GameUI.h"
@@ -705,6 +706,31 @@ int TilemapCellAt(lua_State *L)
     lua_pushinteger(L, cell.x);
     lua_pushinteger(L, cell.y);
     return 2;
+}
+
+// Particles (docs/design/0019). Every setting is a reflected property.
+int EmitterEmit(lua_State *L)
+{
+    CheckTyped<ParticleEmitterComponent>(L, 1)->Emit(static_cast<int>(luaL_checkinteger(L, 2)));
+    return 0;
+}
+
+int EmitterClear(lua_State *L)
+{
+    CheckTyped<ParticleEmitterComponent>(L, 1)->Clear();
+    return 0;
+}
+
+int EmitterRestart(lua_State *L)
+{
+    CheckTyped<ParticleEmitterComponent>(L, 1)->Restart();
+    return 0;
+}
+
+int EmitterCount(lua_State *L)
+{
+    lua_pushinteger(L, CheckTyped<ParticleEmitterComponent>(L, 1)->GetParticleCount());
+    return 1;
 }
 
 int TilemapCellCenter(lua_State *L)
@@ -1827,6 +1853,11 @@ void Register(lua_State *L, ScriptSystem &system)
         {"cell_at", TilemapCellAt}, {"cell_center", TilemapCellCenter}, {nullptr, nullptr},
     };
     AddMethods(L, "TilemapComponent", tilemap);
+    const luaL_Reg emitter[] = {
+        {"emit", EmitterEmit}, {"clear", EmitterClear}, {"restart", EmitterRestart}, {"count", EmitterCount},
+        {nullptr, nullptr},
+    };
+    AddMethods(L, "ParticleEmitterComponent", emitter);
 
     const luaL_Reg log[] = {{"info", LogInfo}, {"warn", LogWarn}, {"error", LogError}, {nullptr, nullptr}};
     NewLibrary(L, "log", log);

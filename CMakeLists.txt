@@ -123,6 +123,7 @@ set(SRC_FILES
   src/scene/components/SpriteComponent.cpp
   src/scene/components/TilemapComponent.cpp
   src/scene/components/TimeOfDayComponent.cpp
+  src/scene/components/ParticleEmitterComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp
