@@ -77,6 +77,8 @@
 #include "scene/components/WeatherComponent.h"
 #include "scene/components/TerrainComponent.h"
 #include "scene/components/FoliageComponent.h"
+#include "scene/components/TimelineComponent.h"
+#include "scene/Timeline.h"
 #include "world/Foliage.h"
 #include "world/Heightfield.h"
 #include "render/Weather.h"

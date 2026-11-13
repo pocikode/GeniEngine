@@ -98,6 +98,7 @@ add methods:
 | `SpriteAnimatorComponent` | `play(first, count, fps, loop)` (the same clip again keeps its place, so call it every frame), `stop()`, `finished()` |
 | `TilemapComponent` | `tile(column, row)` (-1 when empty), `set_tile(column, row, tile)`, `solid(column, row)`, `cell_at(position)` → column, row, `cell_center(column, row)` → vec3 |
 | `ParticleEmitterComponent` | `emit(n)` (spawn n now), `clear()`, `restart()` (clear, rewind, burst again), `count()` |
+| `TimelineComponent` | `play()`, `pause()`, `stop()` (back to the start), `seek(seconds)`, `playing()`, `time()`, `events()` (names fired since the last call) |
 | `WeatherComponent` | `snap()` (jump to the target weather; set `cloudCover`, `fog`, `precipitation`, `snow`, `wind` as properties) |
 | `ScriptComponent` | `instance()`: the other script's instance table |
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scene/Timeline.h"
+
 #include "../core/EditorCamera.h"
 #include "../core/EditorDocument.h"
 #include "../core/Gizmo.h"
@@ -130,6 +132,12 @@ class EditorApp : public Application
     void DrawConsole();
     // A world's cell grid: pick a region and load it (docs/design/0007).
     void DrawWorldPanel();
+    // The Timeline panel (docs/design/0026); EditorTimeline.cpp.
+    void DrawTimelinePanel();
+    // The timeline of the selection or its nearest ancestor that has one.
+    GameObject *FindTimelineOwner(int &componentIndex);
+    // Writes `data` to the timeline's `tracks` through the document (undoable).
+    bool CommitTimeline(GameObject &owner, int componentIndex, const TimelineData &data);
     void ActivateAsset(AssetID id, const glm::vec3 *position = nullptr);
     void DrawPropertyLabel(const char *label);
     bool DrawVec3Row(const char *label, glm::vec3 &value, float speed, float resetValue, bool &released);
@@ -206,6 +214,11 @@ class EditorApp : public Application
     bool m_showAssets = true;
     bool m_showConsole = true;
     bool m_showWorld = true;
+    bool m_showTimeline = true;
+    // Timeline panel: preview playback and the key being dragged.
+    bool m_timelinePreview = false;
+    int m_timelineDragTrack = -1;
+    int m_timelineDragKey = -1;
     int m_focusHierarchy = 0; // frames left to bring the Hierarchy tab to the front
     int m_selectAssetsTab = 0; // frames left to bring the Assets tab to the front
     // Play: paused, and one frame to step while paused.

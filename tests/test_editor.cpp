@@ -10,6 +10,7 @@
 #include "core/EditorDocument.h"
 #include "core/Gizmo.h"
 #include "core/Project.h"
+#include "core/TimelineEditing.h"
 
 #include "assets/AssetManager.h"
 #include "io/FileSystem.h"
@@ -20,6 +21,7 @@
 #include "scene/SceneSerializer.h"
 #include "scene/components/CameraComponent.h"
 #include "scene/components/LightComponent.h"
+#include "scene/components/TimelineComponent.h"
 
 #include <chrono>
 #include <cmath>
@@ -234,6 +236,46 @@ TEST_SUITE("editor commands")
 
 TEST_SUITE("editor document")
 {
+    TEST_CASE("timeline keys are set, moved and removed in order, and undo through the document")
+    {
+        TimelineData data;
+        TimelineKey key;
+        key.time = 2.0f;
+        CHECK(SetTimelineKey(data, "Door", key) == 0);
+        key.time = 1.0f;
+        key.position = glm::vec3(1, 0, 0);
+        SetTimelineKey(data, "Door", key);
+        key.time = 1.0f + TimelineKeySnap * 0.5f; // the same key, replaced
+        key.position = glm::vec3(5, 0, 0);
+        SetTimelineKey(data, "Door", key);
+        REQUIRE(data.transforms[0].keys.size() == 2);
+        CHECK(data.transforms[0].keys[0].position.x == doctest::Approx(5.0f));
+        CHECK(MoveTimelineKey(data, 0, 0, 3.0f) == 1); // now after the key at 2 s
+        CHECK(data.transforms[0].keys[1].time == doctest::Approx(3.0f));
+        CHECK(MoveTimelineKey(data, 0, 0, 3.0f) == 0); // onto it: replaces it
+        CHECK(data.transforms[0].keys.size() == 1);
+        CHECK(RemoveTimelineKey(data, 0, 0));
+        CHECK_FALSE(RemoveTimelineKey(data, 0, 0));
+        CHECK(AddTimelineTrack(data, "Lamp") == 1);
+        CHECK(FindTimelineTrack(data, "Lamp") == 1);
+        CHECK(RemoveTimelineTrack(data, 0));
+        CHECK(FindTimelineTrack(data, "Lamp") == 0);
+
+        RegisterBuiltinComponents();
+        Scene scene;
+        EditorDocument document(scene, nullptr);
+        GameObject *cutscene = document.CreateEmpty("Cutscene");
+        REQUIRE(document.AddComponent(*cutscene, "TimelineComponent"));
+        auto *timeline = cutscene->GetComponent<TimelineComponent>();
+        TimelineData keyed;
+        key.time = 0.5f;
+        SetTimelineKey(keyed, "Lamp", key);
+        REQUIRE(document.SetProperty(*cutscene, 0, "tracks", nlohmann::json(TimelineToJson(keyed).dump())));
+        CHECK(timeline->GetData().transforms.size() == 1);
+        REQUIRE(document.Undo());
+        CHECK(cutscene->GetComponent<TimelineComponent>()->GetData().transforms.empty());
+    }
+
     TEST_CASE("creating, renaming and moving objects undo and redo")
     {
         RegisterBuiltinComponents();

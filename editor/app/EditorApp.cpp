@@ -1,4 +1,5 @@
 #include "EditorApp.h"
+#include "../core/TimelineEditing.h"
 #include "EditorTheme.h"
 
 #include <GLFW/glfw3.h>
@@ -109,6 +110,7 @@ void EditorApp::Update(float deltaTime)
     DrawStatusBar();
     DrawDockSpace();
     DrawWorldPanel();
+    DrawTimelinePanel();
     DrawHierarchy();
     DrawInspector();
     // Console before Assets: of two panels docked together, the one submitted last
@@ -264,7 +266,7 @@ void EditorApp::DrawDockSpace()
         if (m_resetLayout || ImGui::DockBuilderGetNode(dockSpace) == nullptr)
         {
             m_resetLayout = false;
-            m_showHierarchy = m_showInspector = m_showAssets = m_showConsole = m_showWorld = true;
+            m_showHierarchy = m_showInspector = m_showAssets = m_showConsole = m_showWorld = m_showTimeline = true;
             ImGui::DockBuilderRemoveNode(dockSpace);
             ImGui::DockBuilderAddNode(dockSpace, ImGuiDockNodeFlags_DockSpace);
             ImGui::DockBuilderSetNodeSize(dockSpace, viewport->WorkSize);
@@ -277,6 +279,7 @@ void EditorApp::DrawDockSpace()
             ImGui::DockBuilderDockWindow("Inspector", right);
             ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("Console", bottom);
+            ImGui::DockBuilderDockWindow("Timeline", bottom);
             ImGui::DockBuilderFinish(dockSpace);
             // Which of two docked tabs starts in front is otherwise up to submission and
             // focus order, which differs between platforms: choose Assets explicitly.
@@ -462,6 +465,7 @@ void EditorApp::DrawMenuBar()
         ImGui::MenuItem("Assets", nullptr, &m_showAssets);
         ImGui::MenuItem("Console", nullptr, &m_showConsole);
         ImGui::MenuItem("World", nullptr, &m_showWorld, m_document->IsWorldDocument());
+        ImGui::MenuItem("Timeline", nullptr, &m_showTimeline);
         ImGui::Separator();
         bool stats = Engine::GetInstance().GetDebugOverlay().IsVisible();
         if (ImGui::MenuItem("Engine Stats", "F1", &stats))
@@ -1294,6 +1298,50 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
         }
         return m_document->SetProperty(*primary, component, property, value) || fail("the property did not change");
     }
+    if (command == "add")
+    {
+        // add <component type>: on the selection.
+        const std::string type = rest();
+        if (!primary)
+        {
+            return fail("nothing selected");
+        }
+        return m_document->AddComponent(*primary, type) || fail("could not add " + type);
+    }
+    if (command == "timeline-key")
+    {
+        // timeline-key <object> <seconds>: keys the object's transform on the scene's first
+        // timeline (docs/design/0026).
+        std::string name;
+        float seconds = 0.0f;
+        stream >> name >> seconds;
+        GameObject *object = m_scene->FindObject(name);
+        GameObject *owner = nullptr;
+        int componentIndex = -1;
+        m_scene->ForEachComponent<TimelineComponent>([&](TimelineComponent &timeline) {
+            if (!owner)
+            {
+                owner = timeline.GetOwner();
+                const auto &components = owner->GetComponents();
+                for (size_t i = 0; i < components.size(); ++i)
+                {
+                    componentIndex = components[i].get() == &timeline ? static_cast<int>(i) : componentIndex;
+                }
+            }
+        });
+        if (!object || !owner)
+        {
+            return fail("needs an object named " + name + " and a TimelineComponent in the scene");
+        }
+        TimelineData data = owner->GetComponent<TimelineComponent>()->GetData();
+        TimelineKey key;
+        key.time = seconds;
+        key.position = object->GetPosition();
+        key.rotation = object->GetRotation();
+        key.scale = object->GetScale();
+        SetTimelineKey(data, name, key);
+        return CommitTimeline(*owner, componentIndex, data) || fail("the timeline did not change");
+    }
     if (command == "duplicate")
     {
         return !m_document->DuplicateSelection().empty() || fail("nothing to duplicate");
@@ -1393,6 +1441,22 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
     {
         std::string what;
         stream >> what;
+        if (what == "keys")
+        {
+            // expect keys <object> <count>: keys of the object's track on the first timeline.
+            std::string name;
+            long expected = 0;
+            stream >> name >> expected;
+            long actual = 0;
+            m_scene->ForEachComponent<TimelineComponent>([&](TimelineComponent &timeline) {
+                const int track = FindTimelineTrack(timeline.GetData(), name);
+                if (track >= 0 && actual == 0)
+                {
+                    actual = static_cast<long>(timeline.GetData().transforms[static_cast<size_t>(track)].keys.size());
+                }
+            });
+            return actual == expected || fail("expected " + std::to_string(expected) + " keys, found " + std::to_string(actual));
+        }
         if (what == "objects" || what == "selected" || what == "dirty" || what == "children" || what == "components")
         {
             long expected = 0;
