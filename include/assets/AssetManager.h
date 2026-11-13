@@ -6,6 +6,7 @@
 #include "core/Log.h"
 #include "render/SpriteAtlas.h"
 #include "scene/components/AnimationComponent.h"
+#include "world/Heightfield.h"
 #include "world/WorldFormat.h"
 
 #include <atomic>
@@ -57,6 +58,13 @@ class AtlasAsset : public Asset
 {
   public:
     SpriteAtlasData atlas;
+};
+
+// A terrain's height grid (docs/design/0022).
+class HeightfieldAsset : public Asset
+{
+  public:
+    HeightfieldData heights;
 };
 
 struct AssetLoadStats
@@ -125,6 +133,7 @@ class AssetManager
     AssetHandle<SceneAsset> LoadPrefab(AssetID id, bool async = false);
     AssetHandle<WorldAsset> LoadWorld(AssetID id, bool async = false);
     AssetHandle<AtlasAsset> LoadAtlas(AssetID id, bool async = false);
+    AssetHandle<HeightfieldAsset> LoadHeightfield(AssetID id, bool async = false);
 
     // The file of a cooked asset of `type`, for systems that read raw cooked data (a
     // world's navigation tiles); empty when the manifest has no such asset.
@@ -195,6 +204,10 @@ class AssetManager
     );
     void FinishWorld(
         const std::shared_ptr<Detail::AssetSlot<WorldAsset>> &slot, WorldDescription &world, const std::string &source
+    );
+    void FinishHeightfield(
+        const std::shared_ptr<Detail::AssetSlot<HeightfieldAsset>> &slot, HeightfieldData &heights,
+        const std::string &source
     );
     void FinishAtlas(
         const std::shared_ptr<Detail::AssetSlot<AtlasAsset>> &slot, SpriteAtlasData &atlas, const std::string &source

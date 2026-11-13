@@ -2,6 +2,9 @@
 
 #include "glm/ext/vector_float3.hpp"
 
+#include <cstdint>
+#include <vector>
+
 namespace Geni
 {
 
@@ -9,7 +12,9 @@ enum class ColliderType
 {
     Box,
     Sphere,
-    Capsule
+    Capsule,
+    // A grid of heights (terrain, docs/design/0022); static bodies only.
+    HeightField
 };
 
 // The shape of a rigid body, in the owning object's local space: PhysicsManager builds the
@@ -96,6 +101,38 @@ class CapsuleCollider : public Collider
   private:
     float m_radius = 0.5f;
     float m_height = 1.0f;
+};
+
+// A square grid of `samples` x `samples` heights (row-major, rows along +Z, columns along
+// +X), `cellSize` apart, with its first sample at the body's origin. Static bodies only.
+class HeightFieldCollider : public Collider
+{
+  public:
+    HeightFieldCollider(std::vector<float> heights, uint32_t samples, float cellSize)
+        : m_heights(std::move(heights)), m_samples(samples), m_cellSize(cellSize)
+    {
+    }
+    ColliderType GetType() const override
+    {
+        return ColliderType::HeightField;
+    }
+    const std::vector<float> &GetHeights() const
+    {
+        return m_heights;
+    }
+    uint32_t GetSamples() const
+    {
+        return m_samples;
+    }
+    float GetCellSize() const
+    {
+        return m_cellSize;
+    }
+
+  private:
+    std::vector<float> m_heights;
+    uint32_t m_samples = 0;
+    float m_cellSize = 1.0f;
 };
 
 } // namespace Geni

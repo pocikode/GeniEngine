@@ -807,6 +807,23 @@ def checker(x, y):
     return (235, 235, 235) if light else (150, 155, 165)
 
 
+def terrain_fixture():
+    """tests/assets/terrain/small.png: 33 x 33 heights, a ramp up along +X (0 to half
+    height) plus a bump in the middle, for the terrain tests (docs/design/0022)."""
+    import math
+
+    def height(x, y):
+        ramp = 0.5 * x / 32.0
+        bump = 0.5 * math.exp(-((x - 16) ** 2 + (y - 16) ** 2) / 30.0)
+        v = int(round(255 * min(1.0, ramp + bump)))
+        return (v, v, v)
+
+    write_png(ROOT / "tests/assets/terrain/small.png", 33, 33, height)
+    (ROOT / "tests/assets/terrain/small.gterrain").write_text(json.dumps({
+        "format": "geni.terrain", "version": 1, "heightmap": "small.png", "size": 64.0, "height": 16.0,
+        "chunks": 2, "chunkQuads": 16, "rockSlope": 30.0, "snowHeight": 0.8}, indent=2) + "\n")
+
+
 def tone_fixture():
     """tests/assets/sounds/tone_long.wav: 3 s of 440 Hz at 22050 Hz, long enough for the
     cooker to compress it on desktop too (docs/design/0012)."""
@@ -830,6 +847,7 @@ def main():
     tiny_world()
     metro_world()
     tone_fixture()
+    terrain_fixture()
     # M6: the reference game's characters, cars and sounds.
     import gen_game_assets
     gen_game_assets.main()

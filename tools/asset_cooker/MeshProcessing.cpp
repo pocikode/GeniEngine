@@ -56,7 +56,7 @@ void CompactVertices(cooked::CookedMeshData &mesh)
 
 } // namespace
 
-void OptimizeAndBuildLods(cooked::CookedMeshData &mesh)
+void OptimizeAndBuildLods(cooked::CookedMeshData &mesh, bool lockBorder)
 {
     mesh.lods.clear();
     if (!CanProcess(mesh))
@@ -89,7 +89,7 @@ void OptimizeAndBuildLods(cooked::CookedMeshData &mesh)
         float error = 0.0f;
         const size_t count = meshopt_simplify(
             lod.data(), previous.data(), previous.size(), Positions(mesh), VertexCount(mesh), positionsStride, target,
-            0.05f, 0, &error
+            0.05f, lockBorder ? meshopt_SimplifyLockBorder : 0u, &error
         );
         if (count == 0 || count > previous.size() * 4 / 5)
         {

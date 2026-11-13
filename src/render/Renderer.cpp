@@ -31,6 +31,8 @@
 #include "sprite_lit_frag.spv.h"
 #include "sprite_lit_vert.spv.h"
 #include "sprite_vert.spv.h"
+#include "terrain_frag.spv.h"
+#include "terrain_vert.spv.h"
 #include "tonemap_frag.spv.h"
 #include "tonemap_vert.spv.h"
 
@@ -221,11 +223,15 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
         geni_spirv_skinned_vert, sizeof(geni_spirv_skinned_vert), geni_spirv_skinned_frag,
         sizeof(geni_spirv_skinned_frag), "builtin/skinned"
     );
+    m_terrainShader = Shader::Create(
+        geni_spirv_terrain_vert, sizeof(geni_spirv_terrain_vert), geni_spirv_terrain_frag,
+        sizeof(geni_spirv_terrain_frag), "builtin/terrain"
+    );
     m_skyShader = Shader::Create(
         geni_spirv_sky_vert, sizeof(geni_spirv_sky_vert), geni_spirv_sky_frag, sizeof(geni_spirv_sky_frag),
         "builtin/sky"
     );
-    if (!m_defaultShader || !m_skinnedShader || !m_skyShader)
+    if (!m_defaultShader || !m_skinnedShader || !m_skyShader || !m_terrainShader)
     {
         return false;
     }
@@ -322,6 +328,7 @@ void Renderer::Shutdown()
     }
     m_defaultShader.reset();
     m_skinnedShader.reset();
+    m_terrainShader.reset();
     m_skyShader.reset();
     for (auto &entry : m_mainPipelines)
     {

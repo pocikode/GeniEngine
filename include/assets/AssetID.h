@@ -25,7 +25,9 @@ enum class AssetType
     // One platform's cooked variant of a sound (docs/design/0012); source "<path>#<platform>".
     Sound,
     // A packed sprite atlas: its texture and named regions (docs/design/0021).
-    Atlas
+    Atlas,
+    // A terrain's height grid (docs/design/0022).
+    Heightfield
 };
 
 const char *AssetTypeName(AssetType type);

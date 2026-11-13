@@ -61,7 +61,7 @@ struct CookedAnimationData
 
 struct CookedMaterialData
 {
-    // "builtin:default" or "builtin:skinned" for engine shaders, otherwise an asset path
+    // "builtin:default", "builtin:skinned" or "builtin:terrain" for engine shaders, otherwise an asset path
     // for both stages (Shader::Load).
     std::string shader = "builtin:default";
     std::unordered_map<std::string, float> floats;
