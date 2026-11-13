@@ -199,6 +199,11 @@ class Renderer
     {
         return m_skinnedShader;
     }
+    // The terrain shader (docs/design/0022), "builtin:terrain" in cooked materials.
+    const std::shared_ptr<Shader> &GetTerrainShader() const
+    {
+        return m_terrainShader;
+    }
     rhi::SamplerHandle GetDefaultSampler() const
     {
         return m_sampler;
@@ -388,6 +393,7 @@ class Renderer
 
     std::shared_ptr<Shader> m_defaultShader;
     std::shared_ptr<Shader> m_skinnedShader;
+    std::shared_ptr<Shader> m_terrainShader;
     std::shared_ptr<Shader> m_skyShader;
     rhi::ShaderModuleHandle m_shadowVertexModule;
     rhi::ShaderModuleHandle m_shadowSkinnedVertexModule;

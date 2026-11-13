@@ -531,6 +531,30 @@ void AssetManager::FinishWorld(
     m_pending.fetch_sub(1, std::memory_order_acq_rel);
 }
 
+AssetHandle<HeightfieldAsset> AssetManager::LoadHeightfield(AssetID id, bool async)
+{
+    const AssetManifestEntry *entry = FindEntry(id);
+    const bool valid = entry && entry->type == AssetType::Heightfield;
+    return StartLoad<HeightfieldAsset, HeightfieldData>(
+        id, AssetType::Heightfield, valid ? entry->path : std::string(), valid ? entry->source : std::string(), async,
+        &ReadHeightfield, &AssetManager::FinishHeightfield
+    );
+}
+
+void AssetManager::FinishHeightfield(
+    const std::shared_ptr<Detail::AssetSlot<HeightfieldAsset>> &slot, HeightfieldData &heights,
+    const std::string &source
+)
+{
+    auto asset = std::make_shared<HeightfieldAsset>();
+    asset->heights = std::move(heights);
+    asset->SetAssetID(slot->id);
+    asset->SetSourcePath(source);
+    slot->asset = std::move(asset);
+    MarkReady(*slot);
+    m_pending.fetch_sub(1, std::memory_order_acq_rel);
+}
+
 AssetHandle<AtlasAsset> AssetManager::LoadAtlas(AssetID id, bool async)
 {
     const AssetManifestEntry *entry = FindEntry(id);
@@ -738,6 +762,10 @@ void AssetManager::FinishMaterial(
     else if (data.shader == "builtin:skinned")
     {
         shader = m_renderer ? m_renderer->GetSkinnedShader() : nullptr;
+    }
+    else if (data.shader == "builtin:terrain")
+    {
+        shader = m_renderer ? m_renderer->GetTerrainShader() : nullptr;
     }
     else
     {

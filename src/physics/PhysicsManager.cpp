@@ -13,6 +13,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/CastResult.h>
@@ -103,6 +104,39 @@ JPH::ShapeRefC MakeShape(const Collider &collider, const glm::vec3 &scale)
         const float radius = std::max(collider.GetRadius() * std::max(s.x, s.z), 0.001f);
         const float halfHeight = std::max(0.5f * collider.GetHeight() * s.y, 0.001f);
         return new JPH::CapsuleShape(halfHeight, radius);
+    }
+    case ColliderType::HeightField: {
+        const auto &field = static_cast<const HeightFieldCollider &>(collider);
+        const uint32_t samples = field.GetSamples();
+        if (samples < 2 || field.GetHeights().size() < static_cast<size_t>(samples) * samples)
+        {
+            break;
+        }
+        // Jolt needs the sample count to be a multiple of its block size: repeat the last
+        // row and column, which extends the field by at most a few cells.
+        constexpr uint32_t kBlock = 4;
+        const uint32_t padded = (samples + kBlock - 1) / kBlock * kBlock;
+        std::vector<float> heights(static_cast<size_t>(padded) * padded);
+        for (uint32_t z = 0; z < padded; ++z)
+        {
+            for (uint32_t x = 0; x < padded; ++x)
+            {
+                heights[static_cast<size_t>(z) * padded + x] =
+                    field.GetHeights()[static_cast<size_t>(std::min(z, samples - 1)) * samples + std::min(x, samples - 1)];
+            }
+        }
+        const float cell = field.GetCellSize();
+        JPH::HeightFieldShapeSettings settings(
+            heights.data(), JPH::Vec3::sZero(), JPH::Vec3(cell * s.x, s.y, cell * s.z), padded
+        );
+        settings.mBlockSize = kBlock;
+        JPH::ShapeSettings::ShapeResult result = settings.Create();
+        if (result.IsValid())
+        {
+            return result.Get();
+        }
+        GENI_LOG_ERROR("height field: %s", result.GetError().c_str());
+        break;
     }
     }
     return new JPH::SphereShape(0.5f);

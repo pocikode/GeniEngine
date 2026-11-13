@@ -1,0 +1,11 @@
+{
+  "format": "geni.terrain",
+  "version": 1,
+  "heightmap": "small.png",
+  "size": 64.0,
+  "height": 16.0,
+  "chunks": 2,
+  "chunkQuads": 16,
+  "rockSlope": 30.0,
+  "snowHeight": 0.8
+}

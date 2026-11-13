@@ -3,6 +3,7 @@
 #include "AudioCooker.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
+#include "TerrainCooker.h"
 #include "TiledImporter.h"
 #include "WorldCooker.h"
 
@@ -1249,6 +1250,142 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    bool CookTerrain(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        TerrainSource source;
+        std::string message;
+        try
+        {
+            if (!ParseTerrainSource(nlohmann::json::parse(bytes.begin(), bytes.end()), source, &message))
+            {
+                return Fail(relative + ": " + message);
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        const std::string heightmap =
+            Normalize((std::filesystem::path(relative).parent_path() / source.heightmap).generic_string());
+        std::vector<uint8_t> image;
+        if (!ReadFile(options.sourceRoot / heightmap, image))
+        {
+            return Fail(relative + ": cannot read the heightmap " + heightmap);
+        }
+        HeightfieldData grid;
+        if (!BuildTerrainGrid(image, source, grid, &message))
+        {
+            return Fail(heightmap + ": " + message);
+        }
+
+        const std::string root = RootName(relative);
+        const std::string stem = OutputStem(relative);
+        const std::string normalized = Normalize(relative);
+        auto add = [this](AssetID id, AssetType type, const std::string &assetSource, const std::string &path) {
+            ManifestEntry entry;
+            entry.id = id;
+            entry.type = type;
+            entry.source = assetSource;
+            entry.path = path;
+            return AddManifest(std::move(entry));
+        };
+
+        // Heights for collision and queries.
+        std::vector<uint8_t> fieldBytes;
+        WriteHeightfield(grid, fieldBytes);
+        const AssetID fieldID = AssetID::FromName("heightfield:" + root);
+        if (!cooked::WriteFile(options.outputRoot / (stem + ".gheights"), fieldBytes) ||
+            !add(fieldID, AssetType::Heightfield, normalized + "#heights", stem + ".gheights"))
+        {
+            return Fail("cannot write " + stem + ".gheights");
+        }
+
+        // The material: the three colours, linear.
+        auto linear = [](const glm::vec3 &c) {
+            auto channel = [](float v) {
+                return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+            };
+            return glm::vec4(channel(c.r), channel(c.g), channel(c.b), 1.0f);
+        };
+        cooked::CookedMaterialData material;
+        material.shader = "builtin:terrain";
+        material.float4s["uGrass"] = linear(source.grass);
+        material.float4s["uRock"] = linear(source.rock);
+        material.float4s["uSnow"] = linear(source.snow);
+        std::vector<uint8_t> materialBytes;
+        cooked::WriteMaterial(material, materialBytes);
+        const AssetID materialID = AssetID::FromName("material:" + root + ":terrain");
+        if (!cooked::WriteFile(options.outputRoot / (stem + ".gmat"), materialBytes) ||
+            !add(materialID, AssetType::Material, normalized + "#material", stem + ".gmat"))
+        {
+            return Fail("cannot write " + stem + ".gmat");
+        }
+
+        nlohmann::ordered_json nodes = nlohmann::ordered_json::array();
+        auto node = [](const std::string &name, int parent, const glm::vec3 &position) {
+            nlohmann::ordered_json n;
+            n["name"] = name;
+            n["parent"] = parent;
+            n["position"] = {position.x, position.y, position.z};
+            n["rotation"] = {0.0f, 0.0f, 0.0f, 1.0f};
+            n["scale"] = {1.0f, 1.0f, 1.0f};
+            n["active"] = true;
+            n["components"] = nlohmann::ordered_json::array();
+            return n;
+        };
+        auto rootNode = node(std::filesystem::path(relative).stem().string(), -1, glm::vec3(0.0f));
+        nlohmann::ordered_json terrain;
+        terrain["type"] = "TerrainComponent";
+        terrain["properties"] = {{"heights", fieldID.ToHex()}};
+        rootNode["components"].push_back(terrain);
+        nodes.push_back(std::move(rootNode));
+
+        const float chunkSize = source.size / static_cast<float>(source.chunks);
+        for (int z = 0; z < source.chunks; ++z)
+        {
+            for (int x = 0; x < source.chunks; ++x)
+            {
+                const cooked::CookedMeshData mesh = BuildTerrainChunk(grid, source, x, z);
+                std::vector<uint8_t> meshBytes;
+                cooked::WriteMesh(mesh, meshBytes);
+                const std::string key = std::to_string(x) + "_" + std::to_string(z);
+                const std::string path = stem + "_chunk_" + key + ".gmesh";
+                const AssetID meshID = AssetID::FromName("mesh:" + root + ":chunk:" + key);
+                if (!cooked::WriteFile(options.outputRoot / path, meshBytes) ||
+                    !add(meshID, AssetType::Mesh, normalized + "#chunk" + key, path))
+                {
+                    return Fail("cannot write " + path);
+                }
+                auto chunk = node(
+                    "Chunk " + std::to_string(x) + "," + std::to_string(z), 0,
+                    glm::vec3(static_cast<float>(x) * chunkSize, 0.0f, static_cast<float>(z) * chunkSize)
+                );
+                nlohmann::ordered_json component;
+                component["type"] = "MeshComponent";
+                component["properties"] = {{"material", materialID.ToHex()}, {"mesh", meshID.ToHex()}};
+                chunk["components"].push_back(component);
+                nodes.push_back(std::move(chunk));
+            }
+        }
+
+        nlohmann::ordered_json scene;
+        scene["format"] = "geni.scene";
+        scene["version"] = 1;
+        scene["mainCamera"] = -1;
+        scene["nodes"] = std::move(nodes);
+        const std::string text = cooked::FormatSceneText(scene);
+        if (!cooked::WriteFile(options.outputRoot / (stem + ".gscene"), std::vector<uint8_t>(text.begin(), text.end())))
+        {
+            return Fail("cannot write " + stem + ".gscene");
+        }
+        return add(AssetID::FromName("scene:" + root), AssetType::Scene, normalized, stem + ".gscene");
+    }
+
     // A Tiled JSON map becomes a scene: one tilemap per tile layer, one empty object per
     // Tiled object (docs/design/0021). Listed like a glTF's scene, under the .tmj's path.
     bool CookTiledMap(const std::string &relative)
@@ -1752,7 +1889,7 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
                 extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
-                extension == ".wav" || extension == ".gatlas" || extension == ".tmj")
+                extension == ".wav" || extension == ".gatlas" || extension == ".tmj" || extension == ".gterrain")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1814,6 +1951,19 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Terrains: chunk meshes, a material, a height field and a scene (docs/design/0022).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".gterrain")
+            {
+                report(input);
+                if (!CookTerrain(input))
                 {
                     return false;
                 }

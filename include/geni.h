@@ -71,6 +71,8 @@
 #include "scene/components/TimeOfDayComponent.h"
 #include "scene/components/ParticleEmitterComponent.h"
 #include "scene/components/WeatherComponent.h"
+#include "scene/components/TerrainComponent.h"
+#include "world/Heightfield.h"
 #include "render/Weather.h"
 #include "render/SpriteAtlas.h"
 #include "scene/components/VehicleComponent.h"

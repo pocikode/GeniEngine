@@ -13,7 +13,9 @@ namespace Geni::cook
 // appends up to MaxMeshLods - 1 simplified index ranges to the index buffer and fills
 // `mesh.lods`. A mesh that is too small to simplify, or does not shrink, keeps one LOD.
 // Only indexed triangle lists are changed.
-void OptimizeAndBuildLods(cooked::CookedMeshData &mesh);
+// With `lockBorder`, the open edges of the mesh never move (terrain chunks, whose
+// neighbours must keep meeting them at any LOD).
+void OptimizeAndBuildLods(cooked::CookedMeshData &mesh, bool lockBorder = false);
 
 // Simplifies an indexed triangle list in place towards `targetRatio` of its triangles,
 // allowing an error of `targetError` (a fraction of the mesh's extent). Topology-

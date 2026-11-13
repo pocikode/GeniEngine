@@ -75,6 +75,7 @@ void PhysicsComponent::Init()
             collider = std::make_shared<SphereCollider>(m_radius);
             break;
         case ColliderType::Capsule:
+        case ColliderType::HeightField: // terrain owns its own body (TerrainComponent)
             collider = std::make_shared<CapsuleCollider>(m_radius, m_height);
             break;
         }

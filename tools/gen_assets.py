@@ -12,6 +12,7 @@ produces identical files.
 import base64
 import json
 import math
+import random
 import struct
 import zlib
 from pathlib import Path
@@ -807,6 +808,82 @@ def checker(x, y):
     return (235, 235, 235) if light else (150, 155, 165)
 
 
+def terrain_fixture():
+    """tests/assets/terrain/small.png: 33 x 33 heights, a ramp up along +X (0 to half
+    height) plus a bump in the middle, for the terrain tests (docs/design/0022)."""
+    import math
+
+    def height(x, y):
+        ramp = 0.5 * x / 32.0
+        bump = 0.5 * math.exp(-((x - 16) ** 2 + (y - 16) ** 2) / 30.0)
+        v = int(round(255 * min(1.0, ramp + bump)))
+        return (v, v, v)
+
+    write_png(ROOT / "tests/assets/terrain/small.png", 33, 33, height)
+    (ROOT / "tests/assets/terrain/small.gterrain").write_text(json.dumps({
+        "format": "geni.terrain", "version": 1, "heightmap": "small.png", "size": 64.0, "height": 16.0,
+        "chunks": 2, "chunkQuads": 16, "rockSlope": 30.0, "snowHeight": 0.8}, indent=2) + "\n")
+
+
+def write_png16_grey(path, width, height, value):
+    """Writes a 16-bit greyscale PNG. `value(x, y)` returns 0..1."""
+
+    def chunk(tag, data):
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    raw = bytearray()
+    for y in range(height):
+        raw.append(0)
+        for x in range(width):
+            raw += struct.pack(">H", max(0, min(65535, int(round(value(x, y) * 65535.0)))))
+    data = b"\x89PNG\r\n\x1a\n"
+    data += chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 16, 0, 0, 0, 0))
+    data += chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+    data += chunk(b"IEND", b"")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    print("wrote", path.relative_to(ROOT))
+
+
+def city_terrain():
+    """samples/city/assets/terrain/hills: 512 m of rolling hills with a ridge, for
+    `city --terrain` (docs/design/0022). Fractal value noise from a fixed seed."""
+    import math
+    size = 257
+    rng = random.Random(22)
+    lattice = [[rng.random() for _ in range(65)] for _ in range(65)]
+
+    def smooth(t):
+        return t * t * (3.0 - 2.0 * t)
+
+    def noise(x, y):
+        xi, yi = int(x) % 64, int(y) % 64
+        fx, fy = smooth(x - int(x)), smooth(y - int(y))
+        a = lattice[yi][xi] + (lattice[yi][xi + 1] - lattice[yi][xi]) * fx
+        b = lattice[yi + 1][xi] + (lattice[yi + 1][xi + 1] - lattice[yi + 1][xi]) * fx
+        return a + (b - a) * fy
+
+    def height(x, y):
+        u, v = x / (size - 1), y / (size - 1)
+        total, amplitude, frequency = 0.0, 0.5, 4.0
+        for _ in range(5):
+            total += amplitude * noise(u * frequency, v * frequency)
+            amplitude *= 0.5
+            frequency *= 2.0
+        ridge = math.exp(-((v - 0.78) ** 2) / 0.01) * (0.35 + 0.3 * u)
+        valley = 0.25 * math.exp(-((u - 0.3) ** 2) / 0.02)
+        return max(0.0, min(1.0, 0.75 * total + 0.75 * ridge - valley))
+
+    folder = ROOT / "samples/city/assets/terrain"
+    write_png16_grey(folder / "hills.png", size, size, height)
+    (folder / "hills.gterrain").write_text(json.dumps({
+        "format": "geni.terrain", "version": 1, "heightmap": "hills.png", "size": 512.0, "height": 70.0,
+        "chunks": 8, "chunkQuads": 32, "rockSlope": 32.0, "snowHeight": 0.78, "uvScale": 0.25,
+        "colors": {"grass": [0.33, 0.47, 0.22], "rock": [0.45, 0.42, 0.38], "snow": [0.93, 0.95, 0.98]}},
+        indent=2) + "\n")
+
+
 def tone_fixture():
     """tests/assets/sounds/tone_long.wav: 3 s of 440 Hz at 22050 Hz, long enough for the
     cooker to compress it on desktop too (docs/design/0012)."""
@@ -830,6 +907,8 @@ def main():
     tiny_world()
     metro_world()
     tone_fixture()
+    terrain_fixture()
+    city_terrain()
     # M6: the reference game's characters, cars and sounds.
     import gen_game_assets
     gen_game_assets.main()

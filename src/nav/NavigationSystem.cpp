@@ -71,6 +71,7 @@ void NavGeometry::AddColliders(GameObject &root)
                 case ColliderType::Sphere:
                     size = glm::vec3(2.0f * physics->GetRadius());
                     break;
+                case ColliderType::HeightField:
                 case ColliderType::Capsule:
                     size = glm::vec3(
                         2.0f * physics->GetRadius(), physics->GetHeight() + 2.0f * physics->GetRadius(),

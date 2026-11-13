@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Terrain** (docs/design/0022): a `.gterrain` (8- or 16-bit heightmap PNG, size, height,
+  chunks, grass/rock/snow colours) cooks into chunk meshes whose LODs keep their borders
+  (no cracks), a `builtin:terrain` material, a `heightfield` asset and a scene.
+  `TerrainComponent` answers `GetHeight`/`GetNormal` and owns a Jolt height-field body
+  (`HeightFieldCollider`, `ColliderType::HeightField`). `OptimizeAndBuildLods` can lock
+  borders. Geni City: `city --terrain [--time H] [--weather W]` and `screenshot_terrain`.
 - **Sprite atlases, Tiled maps and lit sprites** (docs/design/0021). A `.gatlas` lists
   images that the cooker packs into one sprite texture (asset type `atlas`,
   `AssetManager::LoadAtlas`, `SpriteAtlasData`); `SpriteComponent` properties `atlas` and

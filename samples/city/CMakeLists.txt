@@ -3,7 +3,7 @@
 # `city` runs the reference game's first block: a cooked scene with 10,000 buildings
 # (nine meshes, one per material), 100 point lights and a sun. Interactive when run
 # normally; --budget-ms turns it into the CI performance check.
-geni_add_sample(city main.cpp WorldMode.cpp PlayMode.cpp)
+geni_add_sample(city main.cpp WorldMode.cpp PlayMode.cpp TerrainMode.cpp)
 # One command for a distributable build (docs/design/0016): cmake --build <dir> --target package_city
 geni_add_package(city NAME "Geni City")
 
@@ -107,6 +107,20 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.04
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_world_rain PROPERTIES LABELS "gpu" TIMEOUT 300)
+  # The terrain view (docs/design/0022): cooked hills with LODs, slope and height colours,
+  # a 10:30 sun and fog.
+  add_test(NAME screenshot_terrain
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--terrain"
+             -DFRAMES=10
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/terrain_hills.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.02
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_terrain PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
 
 if(GENI_BUILD_TESTS)

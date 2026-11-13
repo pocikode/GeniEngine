@@ -99,6 +99,7 @@ set(SRC_FILES
   src/render/TimeOfDay.cpp
   src/render/Weather.cpp
   src/render/SpriteAtlas.cpp
+  src/world/Heightfield.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
@@ -128,6 +129,7 @@ set(SRC_FILES
   src/scene/components/TimeOfDayComponent.cpp
   src/scene/components/ParticleEmitterComponent.cpp
   src/scene/components/WeatherComponent.cpp
+  src/scene/components/TerrainComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp
@@ -165,6 +167,7 @@ geni_embed_shaders(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite_lit.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/terrain.slang
 )
 
 # glm
