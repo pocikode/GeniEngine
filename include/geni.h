@@ -28,6 +28,8 @@
 #include "nav/NavMeshBuilder.h"
 #include "game/MissionSystem.h"
 #include "game/SaveGame.h"
+#include "game/TrafficSystem.h"
+#include "world/RoadNetwork.h"
 #include "physics/CharacterController.h"
 #include "physics/Collider.h"
 #include "physics/PhysicsManager.h"

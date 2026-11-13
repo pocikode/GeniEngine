@@ -143,6 +143,11 @@ class SceneSerializer
     static GameObject *InstantiatePrefab(
         Scene &scene, AssetID prefab, SerializationContext &context, GameObject *parent = nullptr
     );
+    // A cooked model's scene (a .gltf path) or a prefab (.gprefab), as one root object at
+    // `position` (scene space) turned `yawRadians` about +Y: what Lua's scene.spawn does.
+    static GameObject *Spawn(
+        Scene &scene, const std::string &path, const glm::vec3 &position, float yawRadians, std::string *error = nullptr
+    );
     // Rebuilds what an instance got from its prefab (after the prefab file changed).
     static bool RefreshPrefabInstance(GameObject &instance, SerializationContext &context);
     // Turns an instance into plain objects: its contents stay, the link to the prefab goes.

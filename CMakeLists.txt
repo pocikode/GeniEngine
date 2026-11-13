@@ -86,6 +86,7 @@ set(SRC_FILES
   src/nav/NavMeshBuilder.cpp
   src/game/MissionSystem.cpp
   src/game/SaveGame.cpp
+  src/game/TrafficSystem.cpp
   src/script/ScriptSystem.cpp
   src/script/ScriptBindings.cpp
   src/ui/GameUI.cpp
@@ -103,6 +104,7 @@ set(SRC_FILES
   src/render/SpriteAtlas.cpp
   src/world/Heightfield.cpp
   src/world/Foliage.cpp
+  src/world/RoadNetwork.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp

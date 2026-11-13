@@ -1,12 +1,14 @@
 #include "scene/SceneSerializer.h"
 #include "assets/AssetManager.h"
 #include "assets/CookedFormats.h"
+#include "core/Engine.h"
 #include "core/Log.h"
 #include "scene/BuiltinComponents.h"
 #include "scene/GameObject.h"
 #include "scene/Scene.h"
 
 #include <algorithm>
+#include <glm/gtc/quaternion.hpp>
 #include <fstream>
 #include <memory>
 #include <unordered_map>
@@ -360,6 +362,54 @@ bool SceneSerializer::SavePrefab(GameObject &root, const std::filesystem::path &
         return false;
     }
     return WriteTextFile(path, cooked::FormatSceneText(SaveSubtree({&root}, false, "geni.prefab")), error);
+}
+
+GameObject *SceneSerializer::Spawn(
+    Scene &scene, const std::string &path, const glm::vec3 &position, float yawRadians, std::string *error
+)
+{
+    AssetManager &assets = Engine::GetInstance().GetAssetManager();
+    SerializationContext context{&scene, &assets};
+    GameObject *root = nullptr;
+    const bool prefab = path.size() > 8 && path.compare(path.size() - 8, 8, ".gprefab") == 0;
+    if (prefab)
+    {
+        root = InstantiatePrefab(scene, assets.FindBySource(AssetType::Prefab, path), context, nullptr);
+    }
+    else
+    {
+        auto document = assets.LoadScene(assets.FindBySource(AssetType::Scene, path), false);
+        if (!document.IsReady())
+        {
+            if (error)
+            {
+                *error = "'" + path + "' is not a cooked scene or model";
+            }
+            return nullptr;
+        }
+        std::vector<GameObject *> roots;
+        if (!InstantiateSubtree(scene, document->document, context, nullptr, &roots, error) || roots.empty())
+        {
+            return nullptr;
+        }
+        root = roots.front();
+        // Several roots: keep them under the first so the caller gets one object.
+        for (size_t i = 1; i < roots.size(); ++i)
+        {
+            roots[i]->SetParent(root);
+        }
+    }
+    if (!root)
+    {
+        if (error && error->empty())
+        {
+            *error = "could not instantiate '" + path + "'";
+        }
+        return nullptr;
+    }
+    root->SetPosition(position);
+    root->SetRotation(glm::angleAxis(yawRadians, glm::vec3(0.0f, 1.0f, 0.0f)));
+    return root;
 }
 
 GameObject *SceneSerializer::InstantiatePrefab(

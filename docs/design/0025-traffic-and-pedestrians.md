@@ -1,6 +1,6 @@
 # 0025: Traffic and pedestrians
 
-Milestone: After v0.1 (open-world layers) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (open-world layers) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
@@ -66,5 +66,7 @@ capsules that cars stop for and the player's car bumps into.
 
 ## To verify
 
-- Building the 125 x 125 grid at start (time and memory). Default: build lazily-computed
-  conflicts; measure with `play_city`.
+- Building the 125 x 125 grid takes about 0.5 s in a debug build (246,508 lanes), once,
+  when the game starts traffic; conflicts and the spatial lane index are built lazily.
+  Spawning picks lanes near the focus from 64 m buckets (`RoadNetwork::LanesNear`); random
+  lanes from the whole world almost never landed in range.

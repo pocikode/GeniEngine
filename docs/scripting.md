@@ -166,6 +166,13 @@ objective), `start(id)`, `fail(id, reason)`, `abandon(id)`, `progress(id, object
 `reason`), `set_player(object)` (what reach objectives check), `state()` and
 `restore(table)`.
 
+**traffic** ([0025](design/0025-traffic-and-pedestrians.md)): `start{models, count,
+radius, cruise_min, cruise_max, seed, grid = {origin_x, origin_z, columns, rows, spacing,
+half_width, lane_offset, height, speed}}` (or `roads = "path.groads"` instead of `grid`),
+`stop()`, `stats()` (cars, metres driven), `keep_clear(world position, radius)` (no car
+spawns there), `set_focus(object or nil)` (cars live around it; default: the camera),
+`running()`.
+
 **save**: `write(name, table)`, `read(name)` (a table or `nil`), `exists(name)`,
 `delete(name)`. Files are JSON in the user's data folder under `EngineConfig::gameName`;
 names are letters, digits, `-`, `_` and `.`.

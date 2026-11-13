@@ -6,6 +6,7 @@
 #include "core/JobSystem.h"
 #include "game/MissionSystem.h"
 #include "game/SaveGame.h"
+#include "game/TrafficSystem.h"
 #include "graphics/Texture.h"
 #include "input/InputActions.h"
 #include "input/InputManager.h"
@@ -178,6 +179,10 @@ class Engine
     {
         return m_saveGame;
     }
+    TrafficSystem &GetTraffic()
+    {
+        return m_traffic;
+    }
     GameUI &GetGameUI()
     {
         return m_gameUI;
@@ -265,6 +270,7 @@ class Engine
     ScriptSystem m_scripts;
     MissionSystem m_missions;
     SaveGame m_saveGame;
+    TrafficSystem m_traffic;
     GameUI m_gameUI;
     DebugOverlay m_debugOverlay;
     FixedTimestep m_fixedTimestep;
