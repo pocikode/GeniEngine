@@ -335,7 +335,8 @@ Chosen by what users ask for, not planned in detail now:
   sprites, a Tiled importer and cooker-packed atlases done: docs/design/0021)
 - Networking and multiplayer
 - Plugin system and package distribution
-- Visual tools: material editor (first version done: docs/design/0027), animation graph editor, timeline for cutscenes (first
+- Visual tools: material editor (first version done: docs/design/0027), animation graph editor
+  (first version done: docs/design/0028), timeline for cutscenes (first
   version done: docs/design/0026)
 
 ## Not in scope

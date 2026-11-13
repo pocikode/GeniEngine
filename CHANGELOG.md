@@ -6,6 +6,12 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Animation graph editor** (docs/design/0028): an Animation Graph panel opens `.animgraph`
+  files from the Assets browser: states as boxes (dragged; positions kept under
+  `"editor"`), transitions as arrows, the selection edited on the side (clip, loop, speed,
+  initial state; conditions as text, duration, exit time), states and transitions added
+  and deleted, checked by the runtime parser, saved, reverted and undone.
+  `AnimGraphDocument` in editor core; script commands `animgraph PATH`, `expect states N`.
 - **Material editor** (docs/design/0027): `.mat` files cook into materials meshes can
   use; the editor's Material panel edits them with live preview, saves and undoes;
   "Make Material Editable" copies a glTF material into a `.mat`, cooks just that file and

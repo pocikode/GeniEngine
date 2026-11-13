@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene/Timeline.h"
+#include "../core/AnimGraphEditing.h"
 #include "../core/MaterialEditing.h"
 
 #include "../core/EditorCamera.h"
@@ -149,6 +150,12 @@ class EditorApp : public Application
     // Writes materials/<object>.mat from a mesh's cooked material and assigns it once cooked.
     bool MakeEditableMaterial(GameObject &object, int componentIndex);
     void UpdatePendingMaterial();
+    // The Animation Graph panel (docs/design/0028); EditorAnimGraph.cpp.
+    void DrawAnimGraphPanel();
+    bool OpenAnimGraph(const std::string &path);
+    bool SaveAnimGraph();
+    // Records the document before an edit, for the panel's undo.
+    void RememberAnimGraph();
     // Buttons under a MeshComponent's properties.
     void DrawMeshMaterialActions(GameObject &object, int componentIndex);
     void ActivateAsset(AssetID id, const glm::vec3 *position = nullptr);
@@ -229,6 +236,17 @@ class EditorApp : public Application
     bool m_showWorld = true;
     bool m_showTimeline = true;
     bool m_showMaterial = false;
+    bool m_showAnimGraph = false;
+    std::string m_graphPath;
+    AnimGraphDocument m_graph;
+    nlohmann::ordered_json m_graphSaved;
+    std::vector<nlohmann::ordered_json> m_graphHistory;
+    std::string m_graphState;      // the selected state
+    int m_graphTransition = -1;    // the selected transition
+    std::string m_graphDragging;   // the state being dragged
+    glm::vec2 m_graphPan{0.0f};
+    char m_graphConditions[256] = "";
+    char m_graphName[64] = "";
     int m_scriptRetries = 0;
     std::string m_materialPath;
     MaterialSource m_material;

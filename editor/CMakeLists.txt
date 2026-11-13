@@ -12,6 +12,7 @@ add_library(geni_editor_core STATIC
   core/Project.cpp
   core/TimelineEditing.cpp
   core/MaterialEditing.cpp
+  core/AnimGraphEditing.cpp
 )
 target_include_directories(geni_editor_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(geni_editor_core PUBLIC GeniEngine)
@@ -28,6 +29,7 @@ if(GENI_ENABLE_IMGUI)
     app/EditorViewport.cpp
     app/EditorTimeline.cpp
     app/EditorMaterial.cpp
+    app/EditorAnimGraph.cpp
   )
   target_link_libraries(geni_editor PRIVATE geni_editor_core)
   set_target_properties(geni_editor PROPERTIES ENABLE_EXPORTS ON)
