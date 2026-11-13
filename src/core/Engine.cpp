@@ -189,6 +189,7 @@ bool Engine::Init(const EngineConfig &config)
         return id.IsValid() ? m_assetManager.FindCookedFile(id, AssetType::Sound) : std::filesystem::path();
     });
     m_scripts.Init(config.scripting, &m_fileSystem);
+    m_saveGame.Init(config.gameName, config.saveFolder);
 
     m_fixedTimestep = FixedTimestep(config.fixedTimestep, config.maxFixedStepsPerFrame);
     m_frameStats = FrameStats();
@@ -366,6 +367,11 @@ void Engine::Simulate(double frameSeconds)
         GENI_PROFILE_SCOPE("Application::Update");
         m_application->Update(static_cast<float>(frameSeconds));
     }
+    // Reach checks and time limits against this frame's positions (docs/design/0024).
+    if (!m_physicsPaused)
+    {
+        m_missions.Update(static_cast<float>(frameSeconds), m_currentScene.get());
+    }
 
     // The listener is the camera the frame renders with.
     if (m_audio.IsInitialized())
@@ -535,6 +541,7 @@ void Engine::Destroy()
     // Scripts' destroy hooks run while the scene goes, so Lua outlives it.
     m_currentScene.reset();
     m_scripts.Shutdown();
+    m_missions.Clear();
     m_audio.Shutdown();
     m_gameUI.Shutdown();
     m_renderQueue.Clear();

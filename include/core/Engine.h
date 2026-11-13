@@ -4,6 +4,8 @@
 #include "core/DebugOverlay.h"
 #include "core/FixedTimestep.h"
 #include "core/JobSystem.h"
+#include "game/MissionSystem.h"
+#include "game/SaveGame.h"
 #include "graphics/Texture.h"
 #include "input/InputActions.h"
 #include "input/InputManager.h"
@@ -36,6 +38,10 @@ struct EngineConfig
     int width = 1280;
     int height = 720;
     std::string title = "GeniEngine";
+    // Names the save folder (docs/design/0024): <user data>/<gameName>/saves.
+    std::string gameName = "GeniGame";
+    // Replaces that folder when not empty (tests, portable builds).
+    std::string saveFolder;
     // false creates a hidden window: used by tests and CI smoke runs.
     bool visible = true;
     bool vsync = true;
@@ -164,6 +170,14 @@ class Engine
     {
         return m_scripts;
     }
+    MissionSystem &GetMissions()
+    {
+        return m_missions;
+    }
+    SaveGame &GetSaveGame()
+    {
+        return m_saveGame;
+    }
     GameUI &GetGameUI()
     {
         return m_gameUI;
@@ -249,6 +263,8 @@ class Engine
     AudioSystem m_audio;
     NavigationSystem m_navigation;
     ScriptSystem m_scripts;
+    MissionSystem m_missions;
+    SaveGame m_saveGame;
     GameUI m_gameUI;
     DebugOverlay m_debugOverlay;
     FixedTimestep m_fixedTimestep;
