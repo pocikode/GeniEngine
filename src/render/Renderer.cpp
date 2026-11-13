@@ -693,6 +693,17 @@ bool Renderer::EnsureClusterCapacity(
     return frame.lightsBuffer.IsValid() && frame.clusterGridBuffer.IsValid() && frame.clusterIndicesBuffer.IsValid();
 }
 
+Atmosphere Renderer::GetConfigAtmosphere() const
+{
+    Atmosphere atmosphere;
+    atmosphere.skyZenith = m_config.skyZenith;
+    atmosphere.skyHorizon = m_config.skyHorizon;
+    atmosphere.fogColor = m_config.fogColor;
+    atmosphere.fogDensity = m_config.fogDensity;
+    atmosphere.ambientIntensity = m_config.ambientIntensity;
+    return atmosphere;
+}
+
 uint64_t Renderer::Align(uint64_t size) const
 {
     return (size + m_alignment - 1) / m_alignment * m_alignment;
@@ -816,9 +827,12 @@ void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, con
         uniforms.sunDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         uniforms.sunColor = glm::vec4(0.0f);
     }
-    uniforms.skyZenith = glm::vec4(m_config.skyZenith, m_config.ambientIntensity);
-    uniforms.skyHorizon = glm::vec4(m_config.skyHorizon, m_config.fogDensity);
-    uniforms.fogColor = glm::vec4(m_config.fogColor, m_config.tonemapper == Tonemapper::None ? 1.0f : 0.0f);
+    m_frameAtmosphere = m_hasAtmosphereOverride ? m_atmosphereOverride : GetConfigAtmosphere();
+    m_hasAtmosphereOverride = false;
+    const Atmosphere &atmosphere = m_frameAtmosphere;
+    uniforms.skyZenith = glm::vec4(atmosphere.skyZenith, atmosphere.ambientIntensity);
+    uniforms.skyHorizon = glm::vec4(atmosphere.skyHorizon, atmosphere.fogDensity);
+    uniforms.fogColor = glm::vec4(atmosphere.fogColor, m_config.tonemapper == Tonemapper::None ? 1.0f : 0.0f);
     for (uint32_t i = 0; i < Cascades; ++i)
     {
         // The cascades are fitted with OpenGL-style depth; the RHI clips at 0..1.
@@ -1190,7 +1204,7 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
     pass.depthStore = rhi::StoreOp::DontCare;
     // Without a sky the clear colour is what shows; it is given in sRGB.
     const glm::vec3 clear =
-        m_config.sky ? m_config.skyHorizon : glm::vec3(SrgbToLinear(glm::vec4(m_config.clearColor, 1.0f)));
+        m_config.sky ? m_frameAtmosphere.skyHorizon : glm::vec3(SrgbToLinear(glm::vec4(m_config.clearColor, 1.0f)));
     pass.clearColor[0] = clear.x;
     pass.clearColor[1] = clear.y;
     pass.clearColor[2] = clear.z;

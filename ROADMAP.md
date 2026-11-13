@@ -324,7 +324,8 @@ Done when: a cut-down reference scene runs in Chrome and Safari.
 
 Chosen by what users ask for, not planned in detail now:
 
-- Open-world layers: traffic and pedestrian simulation, time of day, weather, mission system
+- Open-world layers: traffic and pedestrian simulation, time of day (first version done:
+  docs/design/0018), weather, mission system
 - Rendering: global illumination, GPU-driven culling, terrain, vegetation, particles
 - 2D rendering, sprites and tilemaps (first version done in M7: docs/design/0017; still
   open: lit sprites, a Tiled importer, sprite atlases packed by the cooker)
@@ -345,7 +346,7 @@ Each has a default so work is never blocked. Change them before the milestone th
 | Decision | Default | Needed by |
 |---|---|---|
 | Scripting language | Decided in M6: Lua 5.4, compiled as C++, hand-written bindings (`docs/design/0013-lua-scripting.md`) | M6 |
-| Scene model: keep `GameObject`/`Component` or move to an ECS | Decide from M2 profiling data | M3 |
+| Scene model: keep `GameObject`/`Component` or move to an ECS | Decided in M3: keep `GameObject`/`Component` with dense per-type indexes, no ECS (`docs/design/0005-scene-storage-and-serialization.md`) | M3 |
 | Shader language: GLSL or Slang | Decided before M3: Slang, compiled offline to SPIR-V by a pinned `slangc`; the same sources compile to WGSL for the later web backend (`docs/design/0003-slang-shaders.md`) | M3 |
 | Anti-aliasing: MSAA or TAA | Decided in M2: 4x MSAA, configurable (`docs/design/0002-renderer-v1.md`); TAA revisited with M5 camera-relative rendering | M2 |
 | Licence and contribution terms | Decided in M6: keep the MIT licence; contributions are under the same terms (`CONTRIBUTING.md`) | M6 |

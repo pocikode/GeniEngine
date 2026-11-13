@@ -23,6 +23,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0015 | [Game UI](0015-game-ui.md) | M6 | Done |
 | 0016 | [Packaging a game build](0016-packaging.md) | M7 | Accepted |
 | 0017 | [2D sprites, tilemaps and physics](0017-2d.md) | M7 | Done |
+| 0018 | [Time of day](0018-time-of-day.md) | After v0.1 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

@@ -76,6 +76,20 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.02
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_world PROPERTIES LABELS "gpu" TIMEOUT 300)
+  # The same view at 17:45 with a stopped TimeOfDayComponent (docs/design/0018): low sun,
+  # sunset sky and fog.
+  add_test(NAME screenshot_world_dusk
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--world;--route;--speed;0;--distance;1200;--time;17.75"
+             -DFRAMES=10
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/world_metro_dusk.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.02
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_world_dusk PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
 
 if(GENI_BUILD_TESTS)

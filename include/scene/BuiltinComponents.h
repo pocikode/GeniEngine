@@ -26,6 +26,7 @@ void LinkNavAgentComponent();
 void LinkScriptComponent();
 void LinkSpriteComponent();
 void LinkTilemapComponent();
+void LinkTimeOfDayComponent();
 
 inline void RegisterBuiltinComponents()
 {
@@ -47,6 +48,7 @@ inline void RegisterBuiltinComponents()
     LinkScriptComponent();
     LinkSpriteComponent();
     LinkTilemapComponent();
+    LinkTimeOfDayComponent();
 }
 
 } // namespace Geni

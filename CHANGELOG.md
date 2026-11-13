@@ -6,6 +6,14 @@ Follows the [API stability policy](docs/api-policy.md) from this release on.
 
 ### Added
 
+- **Time of day** (docs/design/0018): `TimeOfDayComponent` on the object with the
+  directional light runs a clock (`time` in hours, `dayLengthMinutes`, 0 stops it) and
+  drives the sun, a moon at night, and the sky, fog and ambient colours, keyed on sun
+  elevation; midday matches the previous defaults. `EvaluateTimeOfDay` (`render/TimeOfDay.h`)
+  is the same mapping as a pure function. `Renderer::SetAtmosphereOverride` replaces the
+  config's sky, fog and ambient for one frame (`GetConfigAtmosphere`, `GetFrameAtmosphere`).
+  Geni City starts at 15:00 with a 24-minute day and a clock on the HUD; `city --world
+  --time HOURS` and the `screenshot_world_dusk` test.
 - **2D** (docs/design/0017): `SpriteComponent` (texture, size, pivot, sRGB tint, atlas
   frames, flips, sort layer, linear or nearest filtering), `SpriteAnimatorComponent`
   (frame clips at a rate, looping or one-shot) and `TilemapComponent` (a tileset grid,

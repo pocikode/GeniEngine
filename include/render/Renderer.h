@@ -5,6 +5,7 @@
 #include "render/Mesh.h"
 #include "render/RenderQueue.h"
 #include "render/ShaderInterface.h"
+#include "render/TimeOfDay.h"
 #include "render/Sprite.h"
 #include "rhi/Handle.h"
 #include "rhi/Types.h"
@@ -144,6 +145,21 @@ class Renderer
     {
         m_config.sky = sky;
         m_config.clearColor = clearColor;
+    }
+    // Replaces the config's sky, fog and ambient values for the next RenderFrame only
+    // (docs/design/0018). Whoever drives them sets them every frame; when nobody does,
+    // the config values come back on their own.
+    void SetAtmosphereOverride(const Atmosphere &atmosphere)
+    {
+        m_atmosphereOverride = atmosphere;
+        m_hasAtmosphereOverride = true;
+    }
+    // The config's sky, fog and ambient values.
+    Atmosphere GetConfigAtmosphere() const;
+    // What the last RenderFrame used.
+    const Atmosphere &GetFrameAtmosphere() const
+    {
+        return m_frameAtmosphere;
     }
 
     // The HDR targets take the viewport's size and the tonemap pass draws into its
@@ -385,6 +401,9 @@ class Renderer
 
     bool m_hasSun = false;
     LightData m_sun;
+    Atmosphere m_atmosphereOverride;
+    bool m_hasAtmosphereOverride = false;
+    Atmosphere m_frameAtmosphere;
     CascadeSetup m_cascades;
     std::vector<ShaderInterface::GpuLight> m_clusteredLights;
     std::vector<ShaderInterface::ClusterRange> m_clusters;
