@@ -4,6 +4,7 @@
 #include "assets/AssetManifest.h"
 #include "assets/CookedFormats.h"
 #include "core/Log.h"
+#include "render/SpriteAtlas.h"
 #include "scene/components/AnimationComponent.h"
 #include "world/WorldFormat.h"
 
@@ -49,6 +50,13 @@ class WorldAsset : public Asset
 {
   public:
     WorldDescription description;
+};
+
+// A packed sprite atlas (docs/design/0021).
+class AtlasAsset : public Asset
+{
+  public:
+    SpriteAtlasData atlas;
 };
 
 struct AssetLoadStats
@@ -116,6 +124,7 @@ class AssetManager
     // A .gprefab document (the scene format with one root).
     AssetHandle<SceneAsset> LoadPrefab(AssetID id, bool async = false);
     AssetHandle<WorldAsset> LoadWorld(AssetID id, bool async = false);
+    AssetHandle<AtlasAsset> LoadAtlas(AssetID id, bool async = false);
 
     // The file of a cooked asset of `type`, for systems that read raw cooked data (a
     // world's navigation tiles); empty when the manifest has no such asset.
@@ -186,6 +195,9 @@ class AssetManager
     );
     void FinishWorld(
         const std::shared_ptr<Detail::AssetSlot<WorldAsset>> &slot, WorldDescription &world, const std::string &source
+    );
+    void FinishAtlas(
+        const std::shared_ptr<Detail::AssetSlot<AtlasAsset>> &slot, SpriteAtlasData &atlas, const std::string &source
     );
 
     // A material whose object exists but whose textures are still loading.

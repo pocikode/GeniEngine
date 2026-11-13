@@ -44,6 +44,8 @@ add_library(geni_cook STATIC
   asset_cooker/MeshProcessing.cpp
   asset_cooker/WorldCooker.cpp
   asset_cooker/AudioCooker.cpp
+  asset_cooker/AtlasCooker.cpp
+  asset_cooker/TiledImporter.cpp
   ${PROJECT_SOURCE_DIR}/src/world/WorldFormat.cpp
   ${PROJECT_SOURCE_DIR}/src/nav/NavMeshBuilder.cpp
   asset_cooker/Ktx2Writer.cpp
@@ -88,7 +90,7 @@ function(geni_cook_assets target source_dir output_dir)
     "${source_dir}/*.png" "${source_dir}/*.jpg" "${source_dir}/*.jpeg"
     "${source_dir}/*.bin" "${source_dir}/*.meta"
     "${source_dir}/*.gscene" "${source_dir}/*.gprefab" "${source_dir}/*.gworld"
-    "${source_dir}/*.wav")
+    "${source_dir}/*.wav" "${source_dir}/*.gatlas" "${source_dir}/*.tmj" "${source_dir}/*.tsj")
   set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}_assets.stamp")
   add_custom_command(OUTPUT "${stamp}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${source_dir}" "${output_dir}"

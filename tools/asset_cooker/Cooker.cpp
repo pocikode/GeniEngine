@@ -1,7 +1,9 @@
 #include "Cooker.h"
+#include "AtlasCooker.h"
 #include "AudioCooker.h"
 #include "MeshProcessing.h"
 #include "TextureCooker.h"
+#include "TiledImporter.h"
 #include "WorldCooker.h"
 
 #include "assets/AssetID.h"
@@ -1247,6 +1249,246 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    // A Tiled JSON map becomes a scene: one tilemap per tile layer, one empty object per
+    // Tiled object (docs/design/0021). Listed like a glTF's scene, under the .tmj's path.
+    bool CookTiledMap(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        TiledMap map;
+        std::string message;
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            auto readJson = [this](const std::string &path, nlohmann::json &out) {
+                std::vector<uint8_t> fileBytes;
+                if (!ReadFile(options.sourceRoot / path, fileBytes))
+                {
+                    return false;
+                }
+                out = nlohmann::json::parse(fileBytes.begin(), fileBytes.end(), nullptr, false);
+                return !out.is_discarded();
+            };
+            if (!ImportTiledMap(document, Normalize(relative), readJson, map, &message))
+            {
+                return Fail(relative + ": " + message);
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        for (const auto &warning : map.warnings)
+        {
+            std::printf("note: %s: %s\n", relative.c_str(), warning.c_str());
+        }
+
+        auto node = [](const std::string &name, int parent, float x, float y, bool active) {
+            nlohmann::ordered_json n;
+            n["name"] = name;
+            n["parent"] = parent;
+            n["position"] = {x, y, 0.0f};
+            n["rotation"] = {0.0f, 0.0f, 0.0f, 1.0f};
+            n["scale"] = {1.0f, 1.0f, 1.0f};
+            n["active"] = active;
+            n["components"] = nlohmann::ordered_json::array();
+            return n;
+        };
+        nlohmann::ordered_json nodes = nlohmann::ordered_json::array();
+        nodes.push_back(node(std::filesystem::path(relative).stem().string(), -1, 0.0f, 0.0f, true));
+        for (size_t i = 0; i < map.layers.size(); ++i)
+        {
+            const TiledTileLayer &layer = map.layers[i];
+            AssetID tileset;
+            if (!layer.image.empty())
+            {
+                std::vector<uint8_t> imageBytes;
+                if (!ReadFile(options.sourceRoot / layer.image, imageBytes))
+                {
+                    return Fail(relative + ": cannot read the tileset image " + layer.image);
+                }
+                const std::string logical = "texture:" + RootName(layer.image) + UsageSuffix(TextureUsage::Sprite);
+                if (!CookImageBytes(
+                        imageBytes, logical, Normalize(layer.image) + UsageSuffix(TextureUsage::Sprite),
+                        OutputStem(layer.image) + "_sprite", TextureUsage::Sprite
+                    ))
+                {
+                    return false;
+                }
+                tileset = AssetID::FromName(logical);
+            }
+            std::string tiles;
+            for (int row = 0; row < layer.height; ++row)
+            {
+                for (int column = 0; column < layer.width; ++column)
+                {
+                    const size_t index = static_cast<size_t>(row) * layer.width + column;
+                    tiles += (column ? "," : "") + std::to_string(index < layer.tiles.size() ? layer.tiles[index] : -1);
+                }
+                tiles += row + 1 < layer.height ? "\n" : "";
+            }
+            nlohmann::ordered_json properties;
+            properties["collision"] = layer.collision;
+            properties["color"] = {1.0f, 1.0f, 1.0f, layer.opacity};
+            properties["filter"] = "nearest";
+            properties["height"] = layer.height;
+            properties["layer"] = static_cast<int>(i);
+            properties["lit"] = false;
+            properties["solidTiles"] = FormatTileList(layer.solidTiles);
+            properties["tileSize"] = {1.0f, 1.0f};
+            properties["tiles"] = tiles;
+            properties["tileset"] = tileset.IsValid() ? tileset.ToHex() : std::string();
+            properties["tilesetColumns"] = layer.columns;
+            properties["tilesetRows"] = layer.rows;
+            properties["width"] = layer.width;
+            nlohmann::ordered_json component;
+            component["type"] = "TilemapComponent";
+            component["properties"] = std::move(properties);
+            auto layerNode = node(layer.name, 0, 0.0f, 0.0f, layer.visible);
+            layerNode["components"].push_back(std::move(component));
+            nodes.push_back(std::move(layerNode));
+        }
+        // Objects at their bottom-left corner; Tiled's Y points down, the map's up.
+        for (const TiledObject &object : map.objects)
+        {
+            nodes.push_back(node(object.name, 0, object.x, -object.y, true));
+        }
+
+        nlohmann::ordered_json scene;
+        scene["format"] = "geni.scene";
+        scene["version"] = 1;
+        scene["mainCamera"] = -1;
+        scene["nodes"] = std::move(nodes);
+        const std::string text = cooked::FormatSceneText(scene);
+        const std::string path = OutputStem(relative) + ".gscene";
+        if (!cooked::WriteFile(options.outputRoot / path, std::vector<uint8_t>(text.begin(), text.end())))
+        {
+            return Fail("cannot write " + path);
+        }
+        ManifestEntry entry;
+        entry.id = AssetID::FromName("scene:" + RootName(relative));
+        entry.type = AssetType::Scene;
+        entry.source = Normalize(relative);
+        entry.path = path;
+        return AddManifest(std::move(entry));
+    }
+
+    // A .gatlas lists images; they are packed into one sprite texture, and the atlas asset
+    // names each image's rectangle (docs/design/0021).
+    bool CookAtlas(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        std::vector<AtlasImage> images;
+        int padding = 1;
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            if (document.value("format", std::string()) != "geni.atlas" || document.value("version", 0) != 1)
+            {
+                return Fail(relative + ": not a version 1 geni.atlas file");
+            }
+            padding = std::clamp(document.value("padding", 1), 0, 16);
+            const std::filesystem::path folder = std::filesystem::path(relative).parent_path();
+            for (const auto &item : document.at("images"))
+            {
+                const std::string imagePath = Normalize((folder / item.get<std::string>()).generic_string());
+                std::vector<uint8_t> fileBytes;
+                if (!ReadFile(options.sourceRoot / imagePath, fileBytes))
+                {
+                    return Fail(relative + ": cannot read " + imagePath);
+                }
+                AtlasImage image;
+                image.name = std::filesystem::path(imagePath).stem().string();
+                std::string message;
+                if (!DecodeImageRgba(fileBytes, image.rgba, image.width, image.height, &message))
+                {
+                    return Fail(imagePath + ": " + message);
+                }
+                for (const auto &other : images)
+                {
+                    if (other.name == image.name)
+                    {
+                        return Fail(relative + ": two images are named " + image.name);
+                    }
+                }
+                images.push_back(std::move(image));
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        if (images.empty())
+        {
+            return Fail(relative + ": no images");
+        }
+        int width = 0;
+        int height = 0;
+        if (!PackAtlas(images, padding, 4096, width, height))
+        {
+            return Fail(relative + ": the images do not fit in 4096 x 4096");
+        }
+        const std::vector<uint8_t> pixels = ComposeAtlas(images, padding, width, height);
+
+        const std::string normalized = Normalize(relative);
+        const std::string stem = "cooked/" + normalized.substr(0, normalized.size() - 7); // drop ".gatlas"
+        CookedTextureFiles files;
+        std::string message;
+        if (!CookSpriteRgba(pixels, width, height, stem, options.outputRoot, files, &message))
+        {
+            return Fail(relative + ": " + message);
+        }
+        ManifestEntry texture;
+        texture.id = AssetID::FromName("texture:atlas:" + RootName(relative));
+        texture.type = AssetType::Texture;
+        texture.source = normalized + "#texture";
+        texture.path = files.rgba8;
+        if (!AddManifest(std::move(texture)))
+        {
+            return false;
+        }
+
+        nlohmann::ordered_json atlas;
+        atlas["format"] = "geni.atlas.cooked";
+        atlas["version"] = 1;
+        atlas["texture"] = AssetID::FromName("texture:atlas:" + RootName(relative)).ToHex();
+        atlas["width"] = width;
+        atlas["height"] = height;
+        nlohmann::ordered_json regions = nlohmann::ordered_json::object();
+        std::vector<const AtlasImage *> sorted;
+        for (const auto &image : images)
+        {
+            sorted.push_back(&image);
+        }
+        std::sort(sorted.begin(), sorted.end(), [](const AtlasImage *a, const AtlasImage *b) {
+            return a->name < b->name;
+        });
+        for (const AtlasImage *image : sorted)
+        {
+            regions[image->name] = {image->x, image->y, image->width, image->height};
+        }
+        atlas["regions"] = std::move(regions);
+        const std::string text = atlas.dump(1) + "\n";
+        const std::string atlasPath = stem + ".gatlas.json";
+        if (!cooked::WriteFile(options.outputRoot / atlasPath, std::vector<uint8_t>(text.begin(), text.end())))
+        {
+            return Fail("cannot write " + atlasPath);
+        }
+        ManifestEntry entry;
+        entry.id = AssetID::FromName("atlas:" + RootName(relative));
+        entry.type = AssetType::Atlas;
+        entry.source = normalized;
+        entry.path = atlasPath;
+        return AddManifest(std::move(entry));
+    }
+
     // A WAV becomes cooked/audio/<platform>/<path>.gsnd for each platform: the same PCM, or
     // IMA ADPCM (ShouldCompress). Files that are not 16-bit PCM are copied as they are.
     bool CookSound(const std::string &relative)
@@ -1510,7 +1752,7 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
                 extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
-                extension == ".wav")
+                extension == ".wav" || extension == ".gatlas" || extension == ".tmj")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1572,6 +1814,32 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Tiled maps become scenes (docs/design/0021).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".tmj")
+            {
+                report(input);
+                if (!CookTiledMap(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Sprite atlases (docs/design/0021).
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".gatlas")
+            {
+                report(input);
+                if (!CookAtlas(input))
                 {
                     return false;
                 }

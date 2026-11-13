@@ -5,9 +5,9 @@
 #include "render/Mesh.h"
 #include "render/RenderQueue.h"
 #include "render/ShaderInterface.h"
+#include "render/Sprite.h"
 #include "render/TimeOfDay.h"
 #include "render/Weather.h"
-#include "render/Sprite.h"
 #include "rhi/Handle.h"
 #include "rhi/Types.h"
 #include <array>
@@ -284,6 +284,7 @@ class Renderer
     {
         rhi::BindGroupHandle group;
         SpriteBlend blend = SpriteBlend::Alpha;
+        bool lit = false;
         uint32_t firstQuad = 0;
         uint32_t quadCount = 0;
     };
@@ -364,7 +365,7 @@ class Renderer
     rhi::PipelineHandle GetShadowPipeline(const Mesh &mesh, bool skinned);
     rhi::PipelineHandle GetSkyPipeline();
     rhi::PipelineHandle GetTonemapPipeline();
-    rhi::PipelineHandle GetSpritePipeline(SpriteBlend blend = SpriteBlend::Alpha);
+    rhi::PipelineHandle GetSpritePipeline(SpriteBlend blend = SpriteBlend::Alpha, bool lit = false);
 
     void BuildVertexInput(
         const Mesh &mesh, rhi::VertexLayoutDesc &layout, const std::vector<uint32_t> *shaderInputs
@@ -400,8 +401,10 @@ class Renderer
     // 2D (docs/design/0017).
     rhi::ShaderModuleHandle m_spriteVertexModule;
     rhi::ShaderModuleHandle m_spriteFragmentModule;
-    rhi::PipelineHandle m_spritePipeline;
-    rhi::PipelineHandle m_spriteAdditivePipeline;
+    rhi::ShaderModuleHandle m_spriteLitVertexModule;
+    rhi::ShaderModuleHandle m_spriteLitFragmentModule;
+    // [blend][lit] (docs/design/0019, 0021).
+    rhi::PipelineHandle m_spritePipelines[2][2];
     // Back-to-front order of one alpha-blended billboard command's quads (reused).
     std::vector<std::pair<float, uint32_t>> m_billboardOrder;
     rhi::SamplerHandle m_spriteLinearSampler;

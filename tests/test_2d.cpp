@@ -4,8 +4,10 @@
 #include "TestEngine.h"
 #include "TestImage.h"
 
+#include "assets/AssetManager.h"
 #include "core/Engine.h"
 #include "graphics/Texture.h"
+#include "io/FileSystem.h"
 #include "physics/PhysicsManager.h"
 #include "physics/RigidBody.h"
 #include "render/RenderQueue.h"
@@ -17,6 +19,7 @@
 #include "scene/Scene.h"
 #include "scene/SceneSerializer.h"
 #include "scene/components/CameraComponent.h"
+#include "scene/components/LightComponent.h"
 #include "scene/components/PhysicsComponent.h"
 #include "scene/components/SpriteComponent.h"
 #include "scene/components/TilemapComponent.h"
@@ -100,6 +103,84 @@ TEST_SUITE("2d")
         CHECK(Near(sprite->GetQuad().color.r, 0.214f, 1e-3f));
         CHECK(Near(sprite->GetQuad().color.g, 1.0f));
         CHECK(Near(sprite->GetQuad().color.a, 0.25f));
+    }
+
+    TEST_CASE("a sprite shows its atlas region, cut into frames")
+    {
+        Geni::FileSystem files;
+        files.SetAssetsFolder(GENI_TEST_ASSETS_DIR);
+        Geni::AssetManager assets;
+        assets.Init(&files, nullptr, nullptr);
+        const Geni::AssetID atlasID = assets.FindBySource(Geni::AssetType::Atlas, "textures/test.gatlas");
+        REQUIRE(atlasID.IsValid());
+        auto atlas = assets.LoadAtlas(atlasID);
+        REQUIRE(atlas.IsReady());
+        // checker.png is 16 x 16 with 1 pixel of padding in a 64 x 64 atlas.
+        CHECK(atlas->atlas.width == 64);
+        REQUIRE(atlas->atlas.regions.count("checker") == 1);
+        CHECK(atlas->atlas.regions.at("checker") == glm::ivec4(1, 1, 16, 16));
+
+        Geni::SpriteComponent sprite;
+        sprite.SetAtlasID(atlasID);
+        sprite.SetRegion("checker");
+        Geni::SerializationContext context;
+        context.assets = &assets;
+        sprite.ResolveAssets(context);
+        CHECK(sprite.HasAtlasRegion());
+        sprite.SetColumns(2);
+        sprite.SetFrame(1);
+        sprite.BuildQuad();
+        CHECK(Near2(sprite.GetQuad().uvTopLeft, glm::vec2(9.0f, 1.0f) / 64.0f));
+        CHECK(Near2(sprite.GetQuad().uvBottomRight, glm::vec2(17.0f, 17.0f) / 64.0f));
+
+        sprite.SetRegion("missing");
+        CHECK_FALSE(sprite.HasAtlasRegion());
+        assets.Shutdown();
+    }
+
+    TEST_CASE("a Tiled map cooks into tilemaps with colliders and named objects")
+    {
+        PhysicsWorld physics;
+        Geni::FileSystem files;
+        files.SetAssetsFolder(GENI_TEST_ASSETS_DIR);
+        Geni::AssetManager assets;
+        assets.Init(&files, nullptr, nullptr);
+        const Geni::AssetID id = assets.FindBySource(Geni::AssetType::Scene, "maps/test.tmj");
+        REQUIRE(id.IsValid());
+        auto cooked = assets.LoadScene(id);
+        REQUIRE(cooked.IsReady());
+
+        Geni::Scene scene;
+        Geni::SerializationContext context{&scene, &assets};
+        std::string error;
+        REQUIRE_MESSAGE(Geni::SceneSerializer::Instantiate(scene, *cooked.Get(), context, &error), error);
+        Geni::GameObject *ground = scene.FindObject("Ground");
+        REQUIRE(ground);
+        auto *map = ground->GetComponent<Geni::TilemapComponent>();
+        REQUIRE(map);
+        CHECK(map->GetWidth() == 4);
+        CHECK(map->GetHeight() == 3);
+        CHECK(map->GetTilesetColumns() == 2);
+        CHECK(map->GetTile(1, 1) == 2);
+        CHECK(map->GetTile(0, 2) == 1);
+        CHECK(map->GetTile(3, 2) == 1); // a flipped tile, drawn unflipped
+        CHECK(map->GetTile(0, 0) == Geni::TilemapComponent::EmptyTile);
+        CHECK(map->GetCollision());
+        CHECK(map->IsSolid(0, 2));
+        CHECK_FALSE(map->IsSolid(1, 1));
+        CHECK(map->GetTilesetID().IsValid());
+
+        Geni::GameObject *decor = scene.FindObject("Decor");
+        REQUIRE(decor);
+        CHECK_FALSE(decor->IsActive());
+        CHECK(decor->GetComponent<Geni::TilemapComponent>()->GetColor().a == doctest::Approx(0.5f));
+
+        // (16, 8) pixels on an 8-pixel grid: two tiles right, one down.
+        Geni::GameObject *spawn = scene.FindObject("Spawn");
+        REQUIRE(spawn);
+        CHECK(Near(spawn->GetPosition(), glm::vec3(2.0f, -1.0f, 0.0f)));
+        scene.Clear();
+        assets.Shutdown();
     }
 
     TEST_CASE("sprites submit one command each, with world bounds and their layer")
@@ -492,6 +573,81 @@ TEST_SUITE("gpu 2d")
         const glm::ivec3 shaded = image.At(cx - quarter, cy);
         CHECK(shaded.x > 130);
         CHECK(shaded.x < 160);
+
+        renderer.SetTonemapper(before.tonemapper);
+        renderer.SetExposure(before.exposure);
+        renderer.SetBackground(before.sky, before.clearColor);
+        app.sceneToUpdate = nullptr;
+        GeniTest::ResetScene();
+    }
+
+    TEST_CASE("lit sprites take the scene's lights; unlit ones keep their colours")
+    {
+        auto &app = GeniTest::RequireEngine();
+        auto &engine = Geni::Engine::GetInstance();
+        auto &renderer = engine.GetRenderer();
+        auto *scene = GeniTest::ResetScene();
+        app.sceneToUpdate = scene;
+        const Geni::RendererConfig before = renderer.GetConfig();
+        renderer.SetTonemapper(Geni::Tonemapper::None);
+        renderer.SetExposure(1.0f);
+        renderer.SetBackground(false, glm::vec3(0.0f));
+
+        auto *camera = scene->CreateObject("camera");
+        camera->SetPosition(glm::vec3(0.0f, 0.0f, 10.0f));
+        auto *cameraComponent = new Geni::CameraComponent();
+        cameraComponent->SetProjection(Geni::CameraProjection::Orthographic);
+        cameraComponent->SetOrthoSize(4.0f);
+        camera->AddComponent(cameraComponent);
+        scene->SetMainCamera(camera);
+
+        // Three grey squares: lit near a lamp (left), lit far from it (middle), unlit (right).
+        const float xs[3] = {-2.0f, 0.0f, 2.0f};
+        for (int i = 0; i < 3; ++i)
+        {
+            auto *object = scene->CreateObject("square" + std::to_string(i));
+            object->SetPosition(glm::vec3(xs[i], 0.0f, 0.0f));
+            auto *sprite = new Geni::SpriteComponent();
+            sprite->SetColor(glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+            sprite->SetLit(i < 2);
+            object->AddComponent(sprite);
+        }
+        auto *lamp = scene->CreateObject("lamp");
+        lamp->SetPosition(glm::vec3(-2.0f, 0.0f, 0.5f));
+        auto *light = new Geni::LightComponent();
+        light->SetIntensity(3.0f);
+        light->SetRange(1.5f);
+        lamp->AddComponent(light);
+
+        const auto path = std::filesystem::temp_directory_path() / "geni_test_lit_sprites.ppm";
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        const bool overlayVisible = engine.GetDebugOverlay().IsVisible();
+        engine.GetDebugOverlay().SetVisible(false);
+        const auto errorsBefore = Geni::rhi::GetValidationErrorCount();
+        // No ambient: only the lamp lights the lit squares.
+        Geni::Atmosphere dark;
+        dark.ambientIntensity = 0.0f;
+        renderer.SetAtmosphereOverride(dark);
+        engine.GetRenderQueue().Clear();
+        engine.RequestScreenshot(path.string());
+        CHECK(engine.Tick());
+        engine.GetDebugOverlay().SetVisible(overlayVisible);
+        CHECK(Geni::rhi::GetValidationErrorCount() == errorsBefore);
+        // Lit and unlit squares cannot share a batch.
+        CHECK(renderer.GetRenderStats().spriteBatches == 2);
+
+        Image image;
+        REQUIRE(ReadPpm(path, image));
+        std::filesystem::remove(path, ec);
+        const int cy = image.height / 2;
+        const int unit = image.height / 4;
+        const glm::ivec3 nearLamp = image.At(image.width / 2 - 2 * unit, cy);
+        const glm::ivec3 farFromLamp = image.At(image.width / 2, cy);
+        const glm::ivec3 unlit = image.At(image.width / 2 + 2 * unit, cy);
+        CHECK(nearLamp.x > 40);
+        CHECK(farFromLamp.x < 5);
+        CHECK(NearColor(unlit, glm::ivec3(128, 128, 128), 2));
 
         renderer.SetTonemapper(before.tonemapper);
         renderer.SetExposure(before.exposure);

@@ -1,0 +1,14 @@
+{ "type": "map", "orientation": "orthogonal", "infinite": false,
+  "width": 4, "height": 3, "tilewidth": 8, "tileheight": 8,
+  "tilesets": [ { "firstgid": 1, "source": "tiles.tsj" } ],
+  "layers": [
+    { "type": "tilelayer", "name": "Ground", "width": 4, "height": 3, "visible": true, "opacity": 1,
+      "properties": [ { "name": "collision", "type": "bool", "value": true } ],
+      "data": [ 0, 0, 0, 0,
+                0, 3, 0, 0,
+                2, 2, 2, 2147483650 ] },
+    { "type": "tilelayer", "name": "Decor", "width": 4, "height": 3, "visible": false, "opacity": 0.5,
+      "data": [ 4, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0 ] },
+    { "type": "objectgroup", "name": "Spawns",
+      "objects": [ { "name": "Spawn", "type": "player", "x": 16, "y": 8, "width": 0, "height": 0 } ] }
+  ] }

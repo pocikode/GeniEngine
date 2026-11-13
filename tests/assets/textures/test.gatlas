@@ -1,0 +1,6 @@
+{
+  "format": "geni.atlas",
+  "version": 1,
+  "padding": 1,
+  "images": ["checker.png"]
+}

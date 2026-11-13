@@ -410,6 +410,37 @@ std::vector<std::vector<uint8_t>> BuildMipChain(
     return levels;
 }
 
+bool DecodeImageRgba(
+    const std::vector<uint8_t> &fileBytes, std::vector<uint8_t> &rgba, int &width, int &height, std::string *error
+)
+{
+    int channels = 0;
+    unsigned char *decoded =
+        stbi_load_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width, &height, &channels, 0);
+    if (!decoded)
+    {
+        SetError(error, "cannot decode image");
+        return false;
+    }
+    rgba = ToRgba(decoded, width, height, channels);
+    stbi_image_free(decoded);
+    return true;
+}
+
+bool CookSpriteRgba(
+    const std::vector<uint8_t> &rgba, int width, int height, const std::string &outputStem,
+    const std::filesystem::path &outputRoot, CookedTextureFiles &out, std::string *error
+)
+{
+    std::vector<std::vector<uint8_t>> levels{rgba};
+    std::vector<uint8_t> file;
+    WriteKtx2(Ktx2Format::RGBA8Srgb, static_cast<uint32_t>(width), static_cast<uint32_t>(height), levels, file);
+    out.rgba8 = outputStem + "_rgba8.ktx2";
+    out.bc.clear();
+    out.astc.clear();
+    return WriteRelative(outputRoot, out.rgba8, file, error);
+}
+
 bool CookTexture(
     const std::vector<uint8_t> &fileBytes, const std::string &outputStem, const std::filesystem::path &outputRoot,
     const TextureCookSettings &settings, CookedTextureFiles &out, std::string *error

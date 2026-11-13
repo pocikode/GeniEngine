@@ -64,6 +64,19 @@ bool CookTexture(
     const TextureCookSettings &settings, CookedTextureFiles &out, std::string *error = nullptr
 );
 
+// Decodes an image to RGBA8 (stb_image).
+bool DecodeImageRgba(
+    const std::vector<uint8_t> &fileBytes, std::vector<uint8_t> &rgba, int &width, int &height,
+    std::string *error = nullptr
+);
+
+// Writes RGBA8 pixels as a sprite texture (one level, sRGB, no BC/ASTC), as CookTexture
+// does for TextureUsage::Sprite. Used for packed atlases.
+bool CookSpriteRgba(
+    const std::vector<uint8_t> &rgba, int width, int height, const std::string &outputStem,
+    const std::filesystem::path &outputRoot, CookedTextureFiles &out, std::string *error = nullptr
+);
+
 // The mip chain CookTexture encodes, base level first, as RGBA8 (sRGB-encoded for
 // Color). Exposed for tests.
 std::vector<std::vector<uint8_t>> BuildMipChain(

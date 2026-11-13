@@ -456,19 +456,18 @@ class PlatformerApp : public Geni::Application
         const Geni::SpriteComponent *coinSprite =
             m_coins.empty() ? nullptr : m_coins.front()->GetComponent<Geni::SpriteComponent>();
         auto *group = m_scene->CreateObject("Benchmark");
+        Geni::SerializationContext context{m_scene, &Geni::Engine::GetInstance().GetAssetManager()};
         for (int i = 0; i < count; ++i)
         {
             auto *object = m_scene->CreateObject("Bench", group);
             auto *sprite = new Geni::SpriteComponent();
             if (coinSprite)
             {
+                // The coin's region of the level's sprite atlas.
+                sprite->SetAtlasID(coinSprite->GetAtlasID());
+                sprite->SetRegion(coinSprite->GetRegion());
                 sprite->SetTextureID(coinSprite->GetTextureID());
-                if (auto *texture = coinSprite->GetTexture())
-                {
-                    sprite->SetTexture(
-                        Geni::Engine::GetInstance().GetAssetManager().LoadTexture(texture->GetAssetID())
-                    );
-                }
+                sprite->ResolveAssets(context);
             }
             sprite->SetColumns(6);
             sprite->SetSize(glm::vec2(0.4f));

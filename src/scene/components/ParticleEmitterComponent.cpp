@@ -421,6 +421,7 @@ void ParticleEmitterComponent::Submit()
     // Half the box diagonal plus a rotated quad's half-diagonal; never 0 (never culled).
     command.boundsRadius = glm::length(high - low) * 0.5f + largest * 0.7072f + 1e-3f;
     command.layer = m_layer;
+    command.lit = m_lit;
     Engine::GetInstance().GetRenderQueue().SubmitSprites(command);
 }
 
@@ -472,6 +473,7 @@ const bool s_registered = RegisterComponentType<ParticleEmitterComponent>(
             {{SpriteFilter::Linear, "linear"}, {SpriteFilter::Nearest, "nearest"}}
         ),
         IntProperty<P>("layer", &P::GetLayer, &P::SetLayer),
+        BoolProperty<P>("lit", &P::GetLit, &P::SetLit),
         BoolProperty<P>("worldSpace", &P::GetWorldSpace, &P::SetWorldSpace),
     }
 );

@@ -98,6 +98,7 @@ set(SRC_FILES
   src/render/Shader.cpp
   src/render/TimeOfDay.cpp
   src/render/Weather.cpp
+  src/render/SpriteAtlas.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
@@ -163,6 +164,7 @@ geni_embed_shaders(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sky.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/tonemap.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite_lit.slang
 )
 
 # glm

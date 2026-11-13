@@ -113,6 +113,15 @@ class TilemapComponent : public Component
         return m_color;
     }
     void SetColor(const glm::vec4 &color);
+    // Lit by the scene's lights (docs/design/0021); off: colours exactly as painted.
+    bool GetLit() const
+    {
+        return m_lit;
+    }
+    void SetLit(bool lit)
+    {
+        m_lit = lit;
+    }
     int GetLayer() const
     {
         return m_layer;
@@ -182,6 +191,7 @@ class TilemapComponent : public Component
     std::vector<int> m_tiles;
     glm::vec4 m_color{1.0f};
     int m_layer = 0;
+    bool m_lit = false;
     SpriteFilter m_filter = SpriteFilter::Nearest;
 
     bool m_collision = false;

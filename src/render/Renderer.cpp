@@ -28,6 +28,8 @@
 #include "sky_frag.spv.h"
 #include "sky_vert.spv.h"
 #include "sprite_frag.spv.h"
+#include "sprite_lit_frag.spv.h"
+#include "sprite_lit_vert.spv.h"
 #include "sprite_vert.spv.h"
 #include "tonemap_frag.spv.h"
 #include "tonemap_vert.spv.h"
@@ -250,6 +252,14 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     m_spriteFragmentModule = m_device->CreateShaderModule(
         {rhi::ShaderStage::Fragment, geni_spirv_sprite_frag, sizeof(geni_spirv_sprite_frag), "builtin/sprite.frag"}
     );
+    m_spriteLitVertexModule = m_device->CreateShaderModule(
+        {rhi::ShaderStage::Vertex, geni_spirv_sprite_lit_vert, sizeof(geni_spirv_sprite_lit_vert),
+         "builtin/sprite_lit.vert"}
+    );
+    m_spriteLitFragmentModule = m_device->CreateShaderModule(
+        {rhi::ShaderStage::Fragment, geni_spirv_sprite_lit_frag, sizeof(geni_spirv_sprite_lit_frag),
+         "builtin/sprite_lit.frag"}
+    );
     rhi::SamplerDesc spriteSampler;
     spriteSampler.addressU = rhi::AddressMode::ClampToEdge;
     spriteSampler.addressV = rhi::AddressMode::ClampToEdge;
@@ -265,8 +275,9 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
         whiteDesc.debugName = "sprite white";
         m_spriteWhiteTexture = m_device->CreateTexture(whiteDesc, levels);
     }
-    if (!m_spriteVertexModule.IsValid() || !m_spriteFragmentModule.IsValid() || !m_spriteLinearSampler.IsValid() ||
-        !m_spriteNearestSampler.IsValid() || !m_spriteWhiteTexture.IsValid())
+    if (!m_spriteVertexModule.IsValid() || !m_spriteFragmentModule.IsValid() || !m_spriteLitVertexModule.IsValid() ||
+        !m_spriteLitFragmentModule.IsValid() || !m_spriteLinearSampler.IsValid() || !m_spriteNearestSampler.IsValid() ||
+        !m_spriteWhiteTexture.IsValid())
     {
         return false;
     }
@@ -294,7 +305,8 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     }
 
     if (!GetSkyPipeline().IsValid() || !GetTonemapPipeline().IsValid() || !GetSpritePipeline().IsValid() ||
-        !GetSpritePipeline(SpriteBlend::Additive).IsValid())
+        !GetSpritePipeline(SpriteBlend::Additive).IsValid() || !GetSpritePipeline(SpriteBlend::Alpha, true).IsValid() ||
+        !GetSpritePipeline(SpriteBlend::Additive, true).IsValid())
     {
         return false;
     }
@@ -323,12 +335,17 @@ void Renderer::Shutdown()
     m_shadowPipelines.clear();
     m_device->DestroyPipeline(m_skyPipeline);
     m_device->DestroyPipeline(m_tonemapPipeline);
-    m_device->DestroyPipeline(m_spritePipeline);
-    m_device->DestroyPipeline(m_spriteAdditivePipeline);
+    for (auto &byBlend : m_spritePipelines)
+    {
+        for (auto &pipeline : byBlend)
+        {
+            m_device->DestroyPipeline(pipeline);
+            pipeline = {};
+        }
+    }
     m_skyPipeline = {};
     m_tonemapPipeline = {};
-    m_spritePipeline = {};
-    m_spriteAdditivePipeline = {};
+
     for (auto &entry : m_spriteGroups)
     {
         m_device->DestroyBindGroup(entry.second.group);
@@ -346,6 +363,10 @@ void Renderer::Shutdown()
     m_spriteNearestSampler = {};
     m_device->DestroyShaderModule(m_spriteVertexModule);
     m_device->DestroyShaderModule(m_spriteFragmentModule);
+    m_device->DestroyShaderModule(m_spriteLitVertexModule);
+    m_device->DestroyShaderModule(m_spriteLitFragmentModule);
+    m_spriteLitVertexModule = {};
+    m_spriteLitFragmentModule = {};
     m_spriteVertexModule = {};
     m_spriteFragmentModule = {};
 
@@ -713,9 +734,7 @@ uint64_t Renderer::Align(uint64_t size) const
     return (size + m_alignment - 1) / m_alignment * m_alignment;
 }
 
-void Renderer::PrepareFrame(
-    FrameResources &frame, const CameraData &camera, const std::vector<LightData> &sceneLights
-)
+void Renderer::PrepareFrame(FrameResources &frame, const CameraData &camera, const std::vector<LightData> &sceneLights)
 {
     m_renderOrigin = camera.position;
     m_frameAtmosphere = m_hasAtmosphereOverride ? m_atmosphereOverride : GetConfigAtmosphere();
@@ -1018,16 +1037,16 @@ rhi::PipelineHandle Renderer::GetSkyPipeline()
     return m_skyPipeline;
 }
 
-rhi::PipelineHandle Renderer::GetSpritePipeline(SpriteBlend blend)
+rhi::PipelineHandle Renderer::GetSpritePipeline(SpriteBlend blend, bool lit)
 {
-    rhi::PipelineHandle &pipeline = blend == SpriteBlend::Additive ? m_spriteAdditivePipeline : m_spritePipeline;
+    rhi::PipelineHandle &pipeline = m_spritePipelines[blend == SpriteBlend::Additive ? 1 : 0][lit ? 1 : 0];
     if (pipeline.IsValid())
     {
         return pipeline;
     }
     rhi::PipelineDesc desc;
-    desc.vertexShader = m_spriteVertexModule;
-    desc.fragmentShader = m_spriteFragmentModule;
+    desc.vertexShader = lit ? m_spriteLitVertexModule : m_spriteVertexModule;
+    desc.fragmentShader = lit ? m_spriteLitFragmentModule : m_spriteFragmentModule;
     desc.vertexLayout.buffers.push_back({0, static_cast<uint32_t>(sizeof(SpriteVertex)), rhi::VertexStepMode::Vertex});
     desc.vertexLayout.attributes.push_back({0, rhi::VertexFormat::Float4, 0, 0});
     desc.vertexLayout.attributes.push_back({1, rhi::VertexFormat::Float2, 16, 0});
@@ -1044,7 +1063,8 @@ rhi::PipelineHandle Renderer::GetSpritePipeline(SpriteBlend blend)
     desc.targets.depthFormat = m_device->GetDepthFormat();
     desc.targets.sampleCount = m_config.msaaSamples;
     desc.bindGroupLayouts = {m_frameLayout, m_tonemapLayout};
-    desc.debugName = blend == SpriteBlend::Additive ? "sprite additive" : "sprite";
+    desc.debugName = blend == SpriteBlend::Additive ? (lit ? "sprite lit additive" : "sprite additive")
+                                                    : (lit ? "sprite lit" : "sprite");
     pipeline = m_device->CreatePipeline(desc);
     return pipeline;
 }
@@ -1699,9 +1719,9 @@ bool Renderer::PrepareSprites(
             continue;
         }
         if (m_spriteBatches.empty() || m_spriteBatches.back().group != group ||
-            m_spriteBatches.back().blend != command.blend)
+            m_spriteBatches.back().blend != command.blend || m_spriteBatches.back().lit != command.lit)
         {
-            m_spriteBatches.push_back({group, command.blend, written, 0});
+            m_spriteBatches.push_back({group, command.blend, command.lit, written, 0});
         }
 
         if (command.billboard)
@@ -1782,13 +1802,14 @@ void Renderer::WriteBillboards(
 
 void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
 {
-    if (m_spriteBatches.empty() || !m_spritePipeline.IsValid() || !frame.spriteVertexBuffer.IsValid() ||
+    if (m_spriteBatches.empty() || !m_spritePipelines[0][0].IsValid() || !frame.spriteVertexBuffer.IsValid() ||
         !m_spriteIndexBuffer.IsValid())
     {
         return;
     }
     SpriteBlend bound = SpriteBlend::Alpha;
-    cmd.SetPipeline(m_spritePipeline);
+    bool boundLit = false;
+    cmd.SetPipeline(m_spritePipelines[0][0]);
     cmd.SetBindGroup(FrameSet, frame.frameGroup);
     cmd.SetVertexBuffer(0, frame.spriteVertexBuffer);
     cmd.SetIndexBuffer(m_spriteIndexBuffer, rhi::IndexFormat::Uint32);
@@ -1798,10 +1819,11 @@ void Renderer::RenderSprites(rhi::CommandList &cmd, FrameResources &frame)
         {
             continue;
         }
-        if (batch.blend != bound)
+        if (batch.blend != bound || batch.lit != boundLit)
         {
             bound = batch.blend;
-            cmd.SetPipeline(bound == SpriteBlend::Additive ? m_spriteAdditivePipeline : m_spritePipeline);
+            boundLit = batch.lit;
+            cmd.SetPipeline(m_spritePipelines[bound == SpriteBlend::Additive ? 1 : 0][boundLit ? 1 : 0]);
             // A new pipeline may disturb earlier bindings on some backends; bind them again.
             cmd.SetBindGroup(FrameSet, frame.frameGroup);
         }
