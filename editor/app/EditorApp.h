@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene/Timeline.h"
+#include "../core/MaterialEditing.h"
 
 #include "../core/EditorCamera.h"
 #include "../core/EditorDocument.h"
@@ -138,6 +139,18 @@ class EditorApp : public Application
     GameObject *FindTimelineOwner(int &componentIndex);
     // Writes `data` to the timeline's `tracks` through the document (undoable).
     bool CommitTimeline(GameObject &owner, int componentIndex, const TimelineData &data);
+    // The Material panel (docs/design/0027); EditorMaterial.cpp.
+    void DrawMaterialPanel();
+    // Opens a .mat (path relative to the assets folder) in the Material panel.
+    bool OpenMaterial(const std::string &path);
+    bool SaveMaterial();
+    // Applies the panel's values to the loaded Material, so the viewport shows them.
+    void ApplyMaterialLive();
+    // Writes materials/<object>.mat from a mesh's cooked material and assigns it once cooked.
+    bool MakeEditableMaterial(GameObject &object, int componentIndex);
+    void UpdatePendingMaterial();
+    // Buttons under a MeshComponent's properties.
+    void DrawMeshMaterialActions(GameObject &object, int componentIndex);
     void ActivateAsset(AssetID id, const glm::vec3 *position = nullptr);
     void DrawPropertyLabel(const char *label);
     bool DrawVec3Row(const char *label, glm::vec3 &value, float speed, float resetValue, bool &released);
@@ -215,6 +228,20 @@ class EditorApp : public Application
     bool m_showConsole = true;
     bool m_showWorld = true;
     bool m_showTimeline = true;
+    bool m_showMaterial = false;
+    int m_scriptRetries = 0;
+    std::string m_materialPath;
+    MaterialSource m_material;
+    nlohmann::json m_materialSaved;
+    std::vector<nlohmann::json> m_materialHistory;
+    struct PendingMaterialAssign
+    {
+        uint64_t object = 0;
+        int component = -1;
+        std::string path;
+        double since = 0.0;
+    };
+    std::vector<PendingMaterialAssign> m_pendingMaterials;
     // Timeline panel: preview playback and the key being dragged.
     bool m_timelinePreview = false;
     int m_timelineDragTrack = -1;

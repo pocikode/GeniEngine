@@ -82,6 +82,15 @@ undo
 expect objects 10104
 expect dirty 0
 
+# Material editor (docs/design/0027): an editable copy of a building's glTF material is
+# cooked and assigned; undo puts the glTF material back.
+select Block
+make-material
+wait-material
+expect material materials/Block.mat
+undo
+expect dirty 0
+
 # Play in editor: the scene simulates, then comes back as it was.
 select Ground
 play

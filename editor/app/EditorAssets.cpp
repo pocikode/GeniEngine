@@ -217,7 +217,11 @@ void EditorApp::ActivateAsset(AssetID id, const glm::vec3 *position)
 void EditorApp::OpenAssetFile(const AssetFile &file)
 {
     const Icon icon = FileIcon(file.path);
-    if (icon == Icon::Scene || icon == Icon::Prefab)
+    if (std::filesystem::path(file.path).extension() == ".mat")
+    {
+        OpenMaterial(file.path);
+    }
+    else if (icon == Icon::Scene || icon == Icon::Prefab)
     {
         RequestAction(PendingAction::OpenScene, file.path);
     }

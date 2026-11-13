@@ -212,6 +212,38 @@ std::vector<std::string> Project::ListAssets(const std::string &extension) const
     return paths;
 }
 
+bool Project::CookFiles(const std::vector<std::string> &inputs, std::string *output)
+{
+    if (m_config.cooker.empty() || inputs.empty())
+    {
+        return false;
+    }
+    std::vector<std::string> arguments = {"--source-root", m_config.assets.string(), "--output-root",
+                                          m_config.cooked.string()};
+    for (const std::string &input : inputs)
+    {
+        arguments.push_back("--input");
+        arguments.push_back(input);
+    }
+    std::string text;
+    m_cooking->store(true);
+    const int code = RunProcess(m_config.cooker, arguments, &text);
+    m_cooking->store(false);
+    if (output)
+    {
+        *output = text;
+    }
+    if (code != 0)
+    {
+        return false;
+    }
+    if (m_assets)
+    {
+        m_assets->ReloadManifest();
+    }
+    return true;
+}
+
 bool Project::Cook(std::string *output)
 {
     if (m_config.cooker.empty())

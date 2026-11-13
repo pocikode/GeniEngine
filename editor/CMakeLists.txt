@@ -11,6 +11,7 @@ add_library(geni_editor_core STATIC
   core/Gizmo.cpp
   core/Project.cpp
   core/TimelineEditing.cpp
+  core/MaterialEditing.cpp
 )
 target_include_directories(geni_editor_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(geni_editor_core PUBLIC GeniEngine)
@@ -26,6 +27,7 @@ if(GENI_ENABLE_IMGUI)
     app/EditorTheme.cpp
     app/EditorViewport.cpp
     app/EditorTimeline.cpp
+    app/EditorMaterial.cpp
   )
   target_link_libraries(geni_editor PRIVATE geni_editor_core)
   set_target_properties(geni_editor PROPERTIES ENABLE_EXPORTS ON)

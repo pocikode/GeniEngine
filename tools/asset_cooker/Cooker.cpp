@@ -269,8 +269,44 @@ struct Cooker::Impl
         return stem + suffix;
     }
 
+    // A partial cook keeps what the previous manifest lists for the files it did not cook,
+    // so cooking one new file (the editor's Make Material Editable) does not hide the rest.
+    void KeepPreviousEntries()
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.outputRoot / "cooked_manifest.json", bytes))
+        {
+            return;
+        }
+        const Json previous = Json::parse(bytes.begin(), bytes.end(), nullptr, false);
+        if (previous.is_discarded() || !previous.contains("assets"))
+        {
+            return;
+        }
+        for (const auto &item : previous["assets"])
+        {
+            ManifestEntry entry;
+            entry.id = AssetID::FromHex(item.value("id", std::string()));
+            if (!entry.id.IsValid() || ids.count(entry.id.value))
+            {
+                continue;
+            }
+            entry.type = AssetTypeFromName(item.value("type", std::string()));
+            entry.source = item.value("source", std::string());
+            entry.path = item.value("path", std::string());
+            entry.bc = item.value("bc", std::string());
+            entry.astc = item.value("astc", std::string());
+            ids.insert(entry.id.value);
+            manifest.push_back(std::move(entry));
+        }
+    }
+
     bool WriteManifest()
     {
+        if (!fullCook)
+        {
+            KeepPreviousEntries();
+        }
         std::sort(manifest.begin(), manifest.end(), [](const ManifestEntry &a, const ManifestEntry &b) {
             return a.id.value < b.id.value;
         });
@@ -1250,6 +1286,101 @@ struct Cooker::Impl
     // A source .gscene or .gprefab (docs/design/0006): checked, listed in the manifest
     // under its own path and, when the output is another folder, copied there as it is.
     // Text scenes are the runtime format, so there is nothing to convert.
+    // A .mat (a shader and parameters, Material::Load's format) becomes a cooked material
+    // that meshes can use (docs/design/0027).
+    bool CookMaterialFile(const std::string &relative)
+    {
+        std::vector<uint8_t> bytes;
+        if (!ReadFile(options.sourceRoot / relative, bytes))
+        {
+            return Fail("cannot read " + relative);
+        }
+        cooked::CookedMaterialData material;
+        try
+        {
+            const auto document = nlohmann::json::parse(bytes.begin(), bytes.end());
+            const auto shader = document.value("shader", nlohmann::json("builtin:default"));
+            if (shader.is_string())
+            {
+                material.shader = shader.get<std::string>();
+            }
+            else
+            {
+                const std::string vertex = shader.value("vertex", std::string());
+                const std::string fragment = shader.value("fragment", vertex);
+                if (vertex.empty() || vertex != fragment)
+                {
+                    // Still loadable by path (Material::Load); a cooked material names one file.
+                    std::printf("note: %s not cooked: its stages use different .slang files\n", relative.c_str());
+                    return true;
+                }
+                material.shader = vertex;
+            }
+            const auto params = document.value("params", nlohmann::json::object());
+            // Named: items() of a temporary would outlive the object it walks.
+            const auto floats = params.value("float", nlohmann::json::object());
+            const auto float2s = params.value("float2", nlohmann::json::object());
+            const auto float4s = params.value("float4", nlohmann::json::object());
+            for (const auto &[name, value] : floats.items())
+            {
+                material.floats[name] = value.get<float>();
+            }
+            for (const auto &[name, value] : float2s.items())
+            {
+                material.float2s[name] = glm::vec2(value.at(0).get<float>(), value.at(1).get<float>());
+            }
+            for (const auto &[name, value] : float4s.items())
+            {
+                material.float4s[name] = glm::vec4(value.at(0).get<float>(), value.at(1).get<float>(),
+                                                   value.at(2).get<float>(), value.at(3).get<float>());
+            }
+            for (const auto &texture : params.value("textures", nlohmann::json::array()))
+            {
+                const std::string name = texture.at("name").get<std::string>();
+                const std::string image = Normalize(texture.at("path").get<std::string>());
+                SourceMeta meta;
+                ReadMeta(image, meta);
+                std::string lower = name;
+                std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+                const TextureUsage usage = meta.hasUsage ? meta.usage
+                                           : lower.find("normal") != std::string::npos ? TextureUsage::Normal
+                                                                                       : TextureUsage::Color;
+                std::vector<uint8_t> imageBytes;
+                if (!ReadFile(options.sourceRoot / image, imageBytes))
+                {
+                    return Fail(relative + ": cannot read the texture " + image);
+                }
+                const std::string logical = "texture:" + RootName(image) + UsageSuffix(usage);
+                const std::string stem =
+                    OutputStem(image) + (usage == TextureUsage::Color ? "" : std::string("_") + TextureUsageName(usage));
+                if (!CookImageBytes(imageBytes, logical, Normalize(image) + UsageSuffix(usage), stem, usage))
+                {
+                    return false;
+                }
+                material.textures[name] = AssetID::FromName(logical);
+            }
+        }
+        catch (const std::exception &e)
+        {
+            return Fail(relative + ": " + e.what());
+        }
+        std::vector<uint8_t> out;
+        cooked::WriteMaterial(material, out);
+        const std::string path = OutputStem(relative) + ".gmat";
+        if (!cooked::WriteFile(options.outputRoot / path, out))
+        {
+            return Fail("cannot write " + path);
+        }
+        ManifestEntry entry;
+        entry.id = AssetID::FromName("material:" + RootName(relative));
+        entry.type = AssetType::Material;
+        entry.source = Normalize(relative);
+        entry.path = path;
+        return AddManifest(std::move(entry));
+    }
+
     bool CookTerrain(const std::string &relative)
     {
         std::vector<uint8_t> bytes;
@@ -1921,7 +2052,8 @@ struct Cooker::Impl
             });
             if (extension == ".gltf" || extension == ".glb" || extension == ".png" || extension == ".jpg" ||
                 extension == ".jpeg" || extension == ".gscene" || extension == ".gprefab" || extension == ".gworld" ||
-                extension == ".wav" || extension == ".gatlas" || extension == ".tmj" || extension == ".gterrain")
+                extension == ".wav" || extension == ".gatlas" || extension == ".tmj" || extension == ".gterrain" ||
+                extension == ".mat")
             {
                 inputs.push_back(
                     Normalize(std::filesystem::relative(it->path(), options.sourceRoot, ec).generic_string())
@@ -1983,6 +2115,19 @@ struct Cooker::Impl
             {
                 report(input);
                 if (!CookImageFile(input))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Material files (docs/design/0027): after the images they use.
+        for (const auto &input : inputs)
+        {
+            if (std::filesystem::path(input).extension().string() == ".mat")
+            {
+                report(input);
+                if (!CookMaterialFile(input))
                 {
                     return false;
                 }

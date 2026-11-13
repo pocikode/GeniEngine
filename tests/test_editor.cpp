@@ -10,6 +10,7 @@
 #include "core/EditorDocument.h"
 #include "core/Gizmo.h"
 #include "core/Project.h"
+#include "core/MaterialEditing.h"
 #include "core/TimelineEditing.h"
 
 #include "assets/AssetManager.h"
@@ -236,6 +237,61 @@ TEST_SUITE("editor commands")
 
 TEST_SUITE("editor document")
 {
+    TEST_CASE("a material file loads with every standard parameter, edits and saves back")
+    {
+        MaterialSource source;
+        REQUIRE(source.Load(nlohmann::json::parse(R"({
+            "shader": "builtin:default",
+            "params": { "float2": { "uMetallicRoughness": [0.5, 0.25] },
+                        "textures": [ { "name": "baseColorTexture", "path": "textures/brick.png" } ] } })")));
+        // Listed although the file leaves them out, with glTF defaults.
+        REQUIRE(source.Find("uBaseColorFactor"));
+        CHECK(source.Find("uBaseColorFactor")->value == glm::vec4(1.0f));
+        CHECK(source.Find("emissiveTexture"));
+        // The float2 lands in the standard float4 member.
+        CHECK(source.Find("uMetallicRoughness")->kind == MaterialParamKind::Float4);
+        CHECK(source.Find("uMetallicRoughness")->value.y == doctest::Approx(0.25f));
+        CHECK(source.Find("baseColorTexture")->texture == "textures/brick.png");
+
+        CHECK(source.Set("uBaseColorFactor", MaterialParamKind::Float4, glm::vec4(1, 0, 0, 1)));
+        CHECK_FALSE(source.Set("baseColorTexture", MaterialParamKind::Float, glm::vec4(1)));
+        CHECK(source.SetTexture("normalTexture", "textures/brick_n.png"));
+        const nlohmann::json saved = source.ToJson();
+        CHECK(saved["shader"] == "builtin:default");
+        CHECK(saved["params"]["float4"]["uBaseColorFactor"][1] == 0.0);
+        CHECK(saved["params"]["textures"].size() == 2);
+        MaterialSource again;
+        REQUIRE(again.Load(saved));
+        CHECK(again.Find("normalTexture")->texture == "textures/brick_n.png");
+
+        // A custom shader keeps only what the file has, and names its .slang for both stages.
+        MaterialSource custom;
+        REQUIRE(custom.Load(nlohmann::json::parse(
+            R"({"shader": {"vertex": "shaders/water.slang", "fragment": "shaders/water.slang"},
+                "params": {"float": {"uSpeed": 2}}})"
+        )));
+        CHECK_FALSE(custom.IsStandard());
+        CHECK(custom.params.size() == 1);
+        CHECK(custom.ToJson()["shader"]["fragment"] == "shaders/water.slang");
+    }
+
+    TEST_CASE("an editable copy of a cooked material keeps its values and texture paths")
+    {
+        cooked::CookedMaterialData cooked;
+        cooked.shader = "builtin:default";
+        cooked.float4s["uBaseColorFactor"] = glm::vec4(0.2f, 0.4f, 0.6f, 1.0f);
+        cooked.float4s["uMetallicRoughness"] = glm::vec4(1.0f, 0.3f, 0.0f, 0.0f);
+        cooked.textures["baseColorTexture"] = AssetID::FromName("texture:a");
+        cooked.textures["normalTexture"] = AssetID::FromName("texture:missing");
+        const MaterialSource source = MaterialSource::FromCooked(cooked, [](AssetID id) {
+            return id == AssetID::FromName("texture:a") ? std::string("textures/a.png") : std::string();
+        });
+        CHECK(source.Find("uBaseColorFactor")->value.z == doctest::Approx(0.6f));
+        CHECK(source.Find("uMetallicRoughness")->value.y == doctest::Approx(0.3f));
+        CHECK(source.Find("baseColorTexture")->texture == "textures/a.png");
+        CHECK(source.Find("normalTexture")->texture.empty()); // unknown image: left empty
+    }
+
     TEST_CASE("timeline keys are set, moved and removed in order, and undo through the document")
     {
         TimelineData data;

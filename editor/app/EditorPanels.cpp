@@ -969,6 +969,10 @@ void EditorApp::DrawComponent(GameObject &object, int index, bool editable)
             ImGui::EndDisabled();
             ImGui::EndTable();
         }
+        if (editable && component.GetTypeID() == MeshComponent::TypeID())
+        {
+            DrawMeshMaterialActions(object, index);
+        }
     }
     ImGui::PopID();
 }

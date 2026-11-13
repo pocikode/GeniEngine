@@ -264,6 +264,9 @@ TEST_SUITE("cooker")
         partial.inputs = {"textures/checker.png"};
         REQUIRE_MESSAGE(Geni::cook::Cooker().Run(partial, &error), error);
         CHECK(std::filesystem::exists(output / "cooked" / "models" / "hierarchy.gscene"));
+        // ...nor drop them from the manifest: more than the one image's entries remain.
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        CHECK(nlohmann::json::parse(manifestFile)["assets"].size() > 10);
     }
     TEST_CASE("scenes and prefabs saved by the editor are listed in the manifest as they are")
     {
@@ -776,5 +779,59 @@ TEST_SUITE("cooker")
         REQUIRE(Geni::ReadFoliage(bytes, read));
         CHECK(read.size() == instances.size());
         CHECK(read.back().yaw == instances.back().yaw);
+    }
+
+    TEST_CASE("a .mat cooks into a material with its parameters and textures")
+    {
+        const auto source = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "mat_source";
+        const auto output = std::filesystem::path(GENI_COOKER_TEST_OUTPUT) / "mat_output";
+        std::filesystem::remove_all(source);
+        std::filesystem::remove_all(output);
+        std::filesystem::create_directories(source / "materials");
+        std::filesystem::create_directories(source / "textures");
+        std::filesystem::copy_file(
+            std::filesystem::path(GENI_COOKER_TEST_SOURCE) / "textures" / "checker.png",
+            source / "textures" / "checker.png"
+        );
+        std::ofstream(source / "materials" / "red.mat") << R"({
+            "shader": "builtin:default",
+            "params": { "float4": { "uBaseColorFactor": [1, 0, 0, 1] }, "float2": { "uMetallicRoughness": [0, 0.4] },
+                        "textures": [ { "name": "baseColorTexture", "path": "textures/checker.png" },
+                                      { "name": "normalTexture", "path": "textures/checker.png" } ] } })";
+        // Two stages in two files: left to Material::Load, not cooked.
+        std::ofstream(source / "materials" / "split.mat")
+            << R"({"shader": {"vertex": "a.slang", "fragment": "b.slang"}})";
+
+        Geni::cook::CookOptions options;
+        options.sourceRoot = source;
+        options.outputRoot = output;
+        options.cookAll = true;
+        std::string error;
+        REQUIRE_MESSAGE(Geni::cook::Cooker().Run(options, &error), error);
+        std::ifstream manifestFile(output / "cooked_manifest.json");
+        const auto manifest = nlohmann::json::parse(manifestFile);
+        nlohmann::json red;
+        int normals = 0;
+        for (const auto &asset : manifest["assets"])
+        {
+            if (asset["source"] == "materials/red.mat")
+            {
+                red = asset;
+            }
+            normals += asset["source"] == "textures/checker.png#normal" ? 1 : 0;
+            CHECK(asset["source"] != "materials/split.mat");
+        }
+        REQUIRE(red.is_object());
+        CHECK(red["type"] == "material");
+        CHECK(red["id"] == Geni::AssetID::FromName("material:materials/red.mat").ToHex());
+        CHECK(normals == 1); // the normal map slot cooked the image as a normal map
+        std::vector<uint8_t> bytes;
+        REQUIRE(Geni::cooked::ReadFile(output / red["path"].get<std::string>(), bytes));
+        Geni::cooked::CookedMaterialData material;
+        REQUIRE(Geni::cooked::ReadMaterial(bytes, material));
+        CHECK(material.shader == "builtin:default");
+        CHECK(material.float4s["uBaseColorFactor"].x == doctest::Approx(1.0f));
+        CHECK(material.float2s["uMetallicRoughness"].y == doctest::Approx(0.4f));
+        CHECK(material.textures.size() == 2);
     }
 }
