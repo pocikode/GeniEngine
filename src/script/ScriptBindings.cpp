@@ -17,6 +17,7 @@
 #include "scene/components/ThirdPersonCameraComponent.h"
 #include "scene/components/TilemapComponent.h"
 #include "scene/components/ParticleEmitterComponent.h"
+#include "scene/components/WeatherComponent.h"
 #include "scene/components/VehicleComponent.h"
 #include "script/ScriptSystem.h"
 #include "ui/GameUI.h"
@@ -731,6 +732,13 @@ int EmitterCount(lua_State *L)
 {
     lua_pushinteger(L, CheckTyped<ParticleEmitterComponent>(L, 1)->GetParticleCount());
     return 1;
+}
+
+// Weather (docs/design/0020): the targets are reflected properties.
+int WeatherSnap(lua_State *L)
+{
+    CheckTyped<WeatherComponent>(L, 1)->Snap();
+    return 0;
 }
 
 int TilemapCellCenter(lua_State *L)
@@ -1858,6 +1866,8 @@ void Register(lua_State *L, ScriptSystem &system)
         {nullptr, nullptr},
     };
     AddMethods(L, "ParticleEmitterComponent", emitter);
+    const luaL_Reg weather[] = {{"snap", WeatherSnap}, {nullptr, nullptr}};
+    AddMethods(L, "WeatherComponent", weather);
 
     const luaL_Reg log[] = {{"info", LogInfo}, {"warn", LogWarn}, {"error", LogError}, {nullptr, nullptr}};
     NewLibrary(L, "log", log);

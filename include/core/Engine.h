@@ -195,6 +195,10 @@ class Engine
     {
         return m_hasViewOverride;
     }
+    const ViewOverride &GetViewOverride() const
+    {
+        return m_viewOverride;
+    }
     // A directional light used only while the scene has none of its own, so an unlit
     // scene opened in a tool is still readable (the editor's preview sun). Off by default.
     void SetFallbackSun(const LightData &sun);

@@ -28,6 +28,7 @@ void LinkSpriteComponent();
 void LinkTilemapComponent();
 void LinkTimeOfDayComponent();
 void LinkParticleEmitterComponent();
+void LinkWeatherComponent();
 
 inline void RegisterBuiltinComponents()
 {
@@ -51,6 +52,7 @@ inline void RegisterBuiltinComponents()
     LinkTilemapComponent();
     LinkTimeOfDayComponent();
     LinkParticleEmitterComponent();
+    LinkWeatherComponent();
 }
 
 } // namespace Geni

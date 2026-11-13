@@ -6,6 +6,7 @@
 #include "render/RenderQueue.h"
 #include "render/ShaderInterface.h"
 #include "render/TimeOfDay.h"
+#include "render/Weather.h"
 #include "render/Sprite.h"
 #include "rhi/Handle.h"
 #include "rhi/Types.h"
@@ -154,6 +155,18 @@ class Renderer
     {
         m_atmosphereOverride = atmosphere;
         m_hasAtmosphereOverride = true;
+    }
+    // Weather for the next RenderFrame only (docs/design/0020), applied on top of the
+    // atmosphere: cloud cover dims the sun and greys the sky, fog thickens.
+    void SetWeather(const WeatherState &weather)
+    {
+        m_weather = weather;
+        m_hasWeather = true;
+    }
+    // What the last RenderFrame used (clear when nobody set it).
+    const WeatherState &GetFrameWeather() const
+    {
+        return m_frameWeather;
     }
     // The config's sky, fog and ambient values.
     Atmosphere GetConfigAtmosphere() const;
@@ -415,6 +428,9 @@ class Renderer
     Atmosphere m_atmosphereOverride;
     bool m_hasAtmosphereOverride = false;
     Atmosphere m_frameAtmosphere;
+    WeatherState m_weather;
+    bool m_hasWeather = false;
+    WeatherState m_frameWeather;
     // This frame's lights with night-only ones scaled by the darkness (reused).
     std::vector<LightData> m_frameLights;
     CascadeSetup m_cascades;
