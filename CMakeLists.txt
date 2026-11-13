@@ -176,6 +176,7 @@ geni_embed_shaders(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/sprite_lit.slang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/terrain.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders/cull.slang
 )
 
 # glm

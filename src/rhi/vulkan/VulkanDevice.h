@@ -64,6 +64,7 @@ struct PipelineRecord
 {
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 };
 
 class VulkanDevice;
@@ -90,12 +91,16 @@ class VulkanCommandList final : public CommandList
         uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance
     ) override;
     void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstInstance) override;
+    void Dispatch(uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ) override;
+    void ComputeToDrawBarrier() override;
+    void DrawIndexedIndirect(BufferHandle buffer, uint64_t offset) override;
 
   private:
     friend class VulkanDevice;
     VulkanDevice *m_device = nullptr;
     VkCommandBuffer m_cmd = VK_NULL_HANDLE;
     VkPipelineLayout m_layout = VK_NULL_HANDLE;
+    VkPipelineBindPoint m_bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     bool m_inRenderPass = false;
     // True once any render pass has run this frame (the backbuffer image is then in
     // PRESENT_SRC layout).
@@ -132,6 +137,7 @@ class VulkanDevice final : public Device
     void DestroyBindGroup(BindGroupHandle group) override;
 
     PipelineHandle CreatePipeline(const PipelineDesc &desc) override;
+    PipelineHandle CreateComputePipeline(const ComputePipelineDesc &desc) override;
     void DestroyPipeline(PipelineHandle pipeline) override;
 
     CommandList *BeginFrame() override;

@@ -18,6 +18,7 @@
 #include <limits>
 
 // Built-in shaders, compiled at build time (geni_embed_shaders in CMakeLists.txt).
+#include "cull_comp.spv.h"
 #include "default_frag.spv.h"
 #include "default_vert.spv.h"
 #include "shadow_frag.spv.h"
@@ -258,6 +259,25 @@ bool Renderer::Init(rhi::Device *device, const RendererConfig &config)
     m_spriteFragmentModule = m_device->CreateShaderModule(
         {rhi::ShaderStage::Fragment, geni_spirv_sprite_frag, sizeof(geni_spirv_sprite_frag), "builtin/sprite.frag"}
     );
+    // GPU culling (docs/design/0029): params, candidates, visible matrices, indirect args.
+    m_cullModule = m_device->CreateShaderModule(
+        {rhi::ShaderStage::Compute, geni_spirv_cull_comp, sizeof(geni_spirv_cull_comp), "builtin/cull.comp"}
+    );
+    {
+        rhi::BindGroupLayoutDesc layout;
+        layout.entries = {
+            {0, rhi::BindingType::UniformBuffer, rhi::ShaderStage::Compute},
+            {1, rhi::BindingType::StorageBuffer, rhi::ShaderStage::Compute},
+            {2, rhi::BindingType::StorageBufferReadWrite, rhi::ShaderStage::Compute},
+            {3, rhi::BindingType::StorageBufferReadWrite, rhi::ShaderStage::Compute},
+        };
+        m_cullLayout = m_device->CreateBindGroupLayout(layout);
+        rhi::ComputePipelineDesc pipeline;
+        pipeline.shader = m_cullModule;
+        pipeline.bindGroupLayouts = {m_cullLayout};
+        pipeline.debugName = "cull";
+        m_cullPipeline = m_device->CreateComputePipeline(pipeline);
+    }
     m_spriteLitVertexModule = m_device->CreateShaderModule(
         {rhi::ShaderStage::Vertex, geni_spirv_sprite_lit_vert, sizeof(geni_spirv_sprite_lit_vert),
          "builtin/sprite_lit.vert"}
@@ -370,6 +390,12 @@ void Renderer::Shutdown()
     m_spriteNearestSampler = {};
     m_device->DestroyShaderModule(m_spriteVertexModule);
     m_device->DestroyShaderModule(m_spriteFragmentModule);
+    m_device->DestroyPipeline(m_cullPipeline);
+    m_device->DestroyBindGroupLayout(m_cullLayout);
+    m_device->DestroyShaderModule(m_cullModule);
+    m_cullPipeline = {};
+    m_cullLayout = {};
+    m_cullModule = {};
     m_device->DestroyShaderModule(m_spriteLitVertexModule);
     m_device->DestroyShaderModule(m_spriteLitFragmentModule);
     m_spriteLitVertexModule = {};
@@ -412,6 +438,14 @@ void Renderer::DestroyFrameResources(FrameResources &frame)
     m_device->DestroyBindGroup(frame.tonemapGroup);
     m_device->DestroyBindGroup(frame.frameGroup);
     m_device->DestroyBindGroup(frame.drawGroup);
+    m_device->DestroyBindGroup(frame.cullGroup);
+    m_device->DestroyBuffer(frame.cullParams);
+    m_device->DestroyBuffer(frame.cullInput);
+    m_device->DestroyBuffer(frame.cullVisible);
+    m_device->DestroyBuffer(frame.cullArgs);
+    frame.cullGroup = {};
+    frame.cullParams = frame.cullInput = frame.cullVisible = frame.cullArgs = {};
+    frame.cullCapacity = frame.cullGroupCapacity = 0;
     frame.tonemapGroup = {};
     frame.frameGroup = {};
     frame.drawGroup = {};
@@ -1250,6 +1284,155 @@ void Renderer::RenderShadows(rhi::CommandList &cmd, std::vector<DrawItem> &caste
     }
 }
 
+bool Renderer::PrepareGpuCulling(
+    rhi::CommandList &cmd, FrameResources &frame, std::vector<DrawItem> &items, const CameraData &camera
+)
+{
+    GENI_PROFILE_SCOPE("Renderer::PrepareGpuCulling");
+    // Groups: runs of indexed, non-skinned items that RenderMain would merge into one draw.
+    std::vector<rhi::DrawIndexedIndirectArgs> args;
+    for (size_t i = 0; i < items.size();)
+    {
+        DrawItem &first = items[i];
+        if (first.skinned || first.indexCount == 0)
+        {
+            first.cullGroup = -1;
+            ++i;
+            continue;
+        }
+        size_t count = 1;
+        while (i + count < items.size())
+        {
+            const DrawItem &next = items[i + count];
+            if (next.skinned || next.indexCount == 0 || next.mesh != first.mesh || next.material != first.material ||
+                next.lod != first.lod)
+            {
+                break;
+            }
+            ++count;
+        }
+        rhi::DrawIndexedIndirectArgs draw;
+        draw.indexCount = first.indexCount;
+        draw.firstIndex = first.firstIndex;
+        for (size_t k = 0; k < count; ++k)
+        {
+            items[i + k].cullGroup = static_cast<int32_t>(args.size());
+        }
+        args.push_back(draw);
+        i += count;
+    }
+    if (args.empty())
+    {
+        return true;
+    }
+
+    // Buffers sized for this frame (grown, never shrunk).
+    struct CullInstance
+    {
+        glm::mat4 model;
+        glm::vec4 sphere;
+        uint32_t group;
+        uint32_t base;
+        uint32_t pad[2];
+    };
+    static_assert(sizeof(CullInstance) == 96, "cull instance stride");
+    const uint64_t count = items.size();
+    if (count > frame.cullCapacity || args.size() > frame.cullGroupCapacity || !frame.cullParams.IsValid())
+    {
+        const uint64_t capacity = std::max<uint64_t>(std::max<uint64_t>(frame.cullCapacity * 2, count), 1024);
+        const uint64_t groups = std::max<uint64_t>(std::max<uint64_t>(frame.cullGroupCapacity * 2, args.size()), 64);
+        m_device->DestroyBindGroup(frame.cullGroup);
+        m_device->DestroyBuffer(frame.cullParams);
+        m_device->DestroyBuffer(frame.cullInput);
+        m_device->DestroyBuffer(frame.cullVisible);
+        m_device->DestroyBuffer(frame.cullArgs);
+        frame.cullParams =
+            m_device->CreateBuffer({128, rhi::BufferUsage::Uniform, rhi::MemoryUsage::CpuToGpu, "cull params"});
+        frame.cullInput = m_device->CreateBuffer(
+            {capacity * sizeof(CullInstance), rhi::BufferUsage::Storage, rhi::MemoryUsage::CpuToGpu, "cull input"}
+        );
+        frame.cullVisible = m_device->CreateBuffer(
+            {capacity * kInstanceStride, rhi::BufferUsage::Storage | rhi::BufferUsage::Vertex,
+             rhi::MemoryUsage::GpuOnly, "cull visible"}
+        );
+        frame.cullArgs = m_device->CreateBuffer(
+            {groups * sizeof(rhi::DrawIndexedIndirectArgs), rhi::BufferUsage::Storage | rhi::BufferUsage::Indirect,
+             rhi::MemoryUsage::CpuToGpu, "cull args"}
+        );
+        if (!frame.cullParams.IsValid() || !frame.cullInput.IsValid() || !frame.cullVisible.IsValid() ||
+            !frame.cullArgs.IsValid())
+        {
+            frame.cullCapacity = frame.cullGroupCapacity = 0;
+            return false;
+        }
+        rhi::BindGroupDesc group;
+        group.layout = m_cullLayout;
+        group.entries.push_back({0, frame.cullParams, 0, 128});
+        group.entries.push_back({1, frame.cullInput, 0, capacity * sizeof(CullInstance)});
+        group.entries.push_back({2, frame.cullVisible, 0, capacity * kInstanceStride});
+        group.entries.push_back({3, frame.cullArgs, 0, groups * sizeof(rhi::DrawIndexedIndirectArgs)});
+        frame.cullGroup = m_device->CreateBindGroup(group);
+        frame.cullCapacity = capacity;
+        frame.cullGroupCapacity = groups;
+        if (!frame.cullGroup.IsValid())
+        {
+            return false;
+        }
+    }
+
+    // Planes of the camera-relative frustum: everything uploaded is relative to the camera.
+    const glm::mat4 relativeView = camera.viewMatrix * glm::translate(glm::mat4(1.0f), m_renderOrigin);
+    const Frustum frustum = Frustum::FromViewProjection(kDepthZeroToOne * camera.projectionMatrix * relativeView);
+    struct
+    {
+        glm::vec4 planes[6];
+        uint32_t count;
+        uint32_t pad[3];
+    } params{};
+    for (int p = 0; p < 6; ++p)
+    {
+        params.planes[p] = frustum.GetPlane(p);
+    }
+    params.count = static_cast<uint32_t>(count);
+    std::memcpy(m_device->MapBuffer(frame.cullParams), &params, sizeof(params));
+    std::memcpy(m_device->MapBuffer(frame.cullArgs), args.data(), args.size() * sizeof(rhi::DrawIndexedIndirectArgs));
+
+    auto *input = static_cast<CullInstance *>(m_device->MapBuffer(frame.cullInput));
+    uint32_t groupBase = 0;
+    int32_t currentGroup = -1;
+    uint32_t candidates = 0;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        const DrawItem &item = items[i];
+        CullInstance &out = input[i];
+        out.model = RelativeTo(item.command->modelMatrix, m_renderOrigin);
+        if (item.cullGroup < 0)
+        {
+            // Drawn by the CPU path: a negative radius tells the shader to skip it.
+            out.sphere = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
+            out.group = 0;
+            out.base = 0;
+            continue;
+        }
+        if (item.cullGroup != currentGroup)
+        {
+            currentGroup = item.cullGroup;
+            groupBase = item.instanceIndex;
+        }
+        out.sphere = glm::vec4(item.center - m_renderOrigin, item.radius);
+        out.group = static_cast<uint32_t>(item.cullGroup);
+        out.base = groupBase;
+        ++candidates;
+    }
+
+    cmd.SetPipeline(m_cullPipeline);
+    cmd.SetBindGroup(0, frame.cullGroup);
+    cmd.Dispatch(static_cast<uint32_t>((count + 63) / 64));
+    cmd.ComputeToDrawBarrier();
+    m_stats.gpuCullCandidates = candidates;
+    return true;
+}
+
 void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &items)
 {
     FrameResources &frame = m_frames[m_device->GetFrameSlot()];
@@ -1329,11 +1512,27 @@ void Renderer::RenderMain(rhi::CommandList &cmd, const std::vector<DrawItem> &it
         while (i + count < items.size())
         {
             const DrawItem &next = items[i + count];
-            if (next.skinned || next.mesh != item.mesh || next.material != item.material || next.lod != item.lod)
+            if (next.skinned || next.mesh != item.mesh || next.material != item.material || next.lod != item.lod ||
+                next.cullGroup != item.cullGroup)
             {
                 break;
             }
             ++count;
+        }
+        if (item.cullGroup >= 0)
+        {
+            // The compute pass wrote this group's visible matrices from its first slot and
+            // its instance count into the indirect arguments (docs/design/0029).
+            const uint32_t offset = item.boneOffset;
+            cmd.SetBindGroup(DrawSet, frame.drawGroup, &offset, 1);
+            cmd.SetVertexBuffer(1, frame.cullVisible, static_cast<uint64_t>(item.instanceIndex) * kInstanceStride);
+            cmd.DrawIndexedIndirect(
+                frame.cullArgs, static_cast<uint64_t>(item.cullGroup) * sizeof(rhi::DrawIndexedIndirectArgs)
+            );
+            ++m_stats.mainDraws;
+            m_stats.instances += static_cast<uint32_t>(count);
+            i += count;
+            continue;
         }
         const uint32_t offset = item.boneOffset;
         cmd.SetBindGroup(DrawSet, frame.drawGroup, &offset, 1);
@@ -1494,9 +1693,12 @@ bool Renderer::RenderScene(
     const Frustum cameraFrustum = Frustum::FromViewProjection(viewProjection);
     std::vector<DrawItem> items;
     items.reserve(all.size());
+    const bool gpuCulling = m_config.gpuCulling && m_cullPipeline.IsValid();
     for (const auto &item : all)
     {
-        if (item.radius > 0.0f && !cameraFrustum.IntersectsSphere(item.center, item.radius))
+        // With GPU culling, indexed static meshes are tested by the compute pass instead.
+        const bool onGpu = gpuCulling && !item.skinned && item.indexCount > 0;
+        if (!onGpu && item.radius > 0.0f && !cameraFrustum.IntersectsSphere(item.center, item.radius))
         {
             ++m_stats.culled;
             continue;
@@ -1540,6 +1742,14 @@ bool Renderer::RenderScene(
         items[i].instanceIndex = static_cast<uint32_t>(i);
         const glm::mat4 model = RelativeTo(items[i].command->modelMatrix, m_renderOrigin);
         std::memcpy(instanceBase + i * kInstanceStride, &model, kInstanceStride);
+    }
+
+    if (gpuCulling && !PrepareGpuCulling(cmd, frame, items, camera))
+    {
+        for (auto &item : items)
+        {
+            item.cullGroup = -1;
+        }
     }
 
     if (!PrepareSprites(frame, sprites, camera))

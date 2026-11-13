@@ -69,6 +69,20 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.02
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_city PROPERTIES LABELS "gpu" TIMEOUT 300)
+  # The same frame with camera culling on the GPU (docs/design/0029): the picture must not
+  # change.
+  add_test(NAME screenshot_city_gpu_culling
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--gpu-culling"
+             -DFRAMES=60
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/city_f60.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.02
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_city_gpu_culling PROPERTIES LABELS "gpu" TIMEOUT 300)
 
   # The world from 600 m south-west of its centre, looking at downtown: full cells near
   # the camera, HLOD cells behind them, mesh LODs, camera-relative rendering. The camera
