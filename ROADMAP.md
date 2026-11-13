@@ -270,8 +270,8 @@ CI on `main` (2026-11-12): green on all six jobs. macOS (Paravirtual GPU) and Li
 The first attempt failed on two runner problems, not code: the Windows packaging job could
 not download GLFW (SSL error), and on a Linux runner about 2.5 times slower than usual
 `benchmark_world` and `play_city` hit their 600 s and 900 s limits. A re-run passed them
-in 215 s and 366 s. If the timeouts recur, raise those limits or shorten the flight on
-Linux.
+in 215 s and 366 s. The limits are now 1500 s and 2000 s and the test jobs 75 minutes
+(2026-11-13), enough for a runner 2.5 times slower than usual.
 
 Turn v0.1 into something other people can ship a desktop game with.
 
