@@ -22,7 +22,7 @@
 //
 // World mode (ROADMAP M5): city --world [FILE] [--route] [--speed M/S] [--distance M]
 //             [--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--time HOURS]
-//             [--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]
+//             [--weather rain|snow|fog] [--frames N] [--hidden] [--width W] [--height H] [--screenshot FILE]
 //   streams worlds/metro/metro.gworld (or FILE) around a flying camera; see WorldMode.cpp.
 //
 // The game (ROADMAP M6): city --play [--autopilot] [--no-crowd] [--no-traffic]
@@ -125,8 +125,7 @@ class CityApp : public Geni::Application
                 return false;
             }
             Geni::SerializationContext context{m_scene, &assets};
-            m_instantiation =
-                std::make_unique<Geni::SceneInstantiation>(*m_scene, m_sceneAsset->document, context);
+            m_instantiation = std::make_unique<Geni::SceneInstantiation>(*m_scene, m_sceneAsset->document, context);
         }
 
         if (m_instantiation->GetStatus() == Geni::SceneInstantiation::Status::InProgress)
@@ -294,6 +293,10 @@ int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
         {
             options.timeOfDay = std::strtod(argv[++i], nullptr);
         }
+        else if (std::strcmp(arg, "--weather") == 0 && hasValue)
+        {
+            options.weather = argv[++i];
+        }
         else if (std::strcmp(arg, "--frames") == 0 && hasValue)
         {
             options.frames = std::strtol(argv[++i], nullptr, 10);
@@ -318,7 +321,8 @@ int ParseWorldOptions(int argc, char **argv, WorldOptions &options)
         {
             GENI_LOG_ERROR(
                 "Unknown argument '%s'. Usage: city --world [FILE] [--route] [--speed M/S] [--distance M] "
-                "[--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--time HOURS] [--frames N] [--hidden] "
+                "[--altitude M] [--hitch-ms MS] [--platform desktop|mobile|web] [--time HOURS] [--weather "
+                "rain|snow|fog] [--frames N] [--hidden] "
                 "[--width W] [--height H] [--screenshot FILE]",
                 arg
             );
@@ -501,20 +505,20 @@ int main(int argc, char **argv)
     {
         const double fps = meanMs > 0.0 ? 1000.0 / meanMs : 0.0;
         std::printf(
-            "city: %.2f ms/frame (%.1f fps) over %ld measured frames; %zu objects, %zu lights; budget %.2f ms\n", meanMs,
-            fps, std::max(0L, options.frames - options.warmup), objectCount, lightCount, options.budgetMs
+            "city: %.2f ms/frame (%.1f fps) over %ld measured frames; %zu objects, %zu lights; budget %.2f ms\n",
+            meanMs, fps, std::max(0L, options.frames - options.warmup), objectCount, lightCount, options.budgetMs
         );
         if (options.budgetMs > 0.0 && meanMs > options.budgetMs)
         {
             GENI_LOG_ERROR("city block over budget: %.2f ms > %.2f ms", meanMs, options.budgetMs);
             return 4;
         }
-        std::printf("city: slowest frame while loading %.2f ms; budget %.2f ms\n", slowestLoadingMs, options.loadBudgetMs);
+        std::printf(
+            "city: slowest frame while loading %.2f ms; budget %.2f ms\n", slowestLoadingMs, options.loadBudgetMs
+        );
         if (options.loadBudgetMs > 0.0 && slowestLoadingMs > options.loadBudgetMs)
         {
-            GENI_LOG_ERROR(
-                "city block loading hitch: %.2f ms > %.2f ms", slowestLoadingMs, options.loadBudgetMs
-            );
+            GENI_LOG_ERROR("city block loading hitch: %.2f ms > %.2f ms", slowestLoadingMs, options.loadBudgetMs);
             return 5;
         }
     }

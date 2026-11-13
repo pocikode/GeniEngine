@@ -96,6 +96,7 @@ set(SRC_FILES
   src/render/Renderer.cpp
   src/render/Shader.cpp
   src/render/TimeOfDay.cpp
+  src/render/Weather.cpp
   src/render/ShaderReflection.cpp
   src/scene/GameObject.cpp
   src/scene/Scene.cpp
@@ -124,6 +125,7 @@ set(SRC_FILES
   src/scene/components/TilemapComponent.cpp
   src/scene/components/TimeOfDayComponent.cpp
   src/scene/components/ParticleEmitterComponent.cpp
+  src/scene/components/WeatherComponent.cpp
   src/world/WorldFormat.cpp
   src/world/WorldStreamer.cpp
   src/io/FileSystem.cpp

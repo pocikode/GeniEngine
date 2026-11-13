@@ -62,6 +62,37 @@ class WorldApp : public Geni::Application
             clock->SetDayLengthMinutes(0.0f);
             sun->AddComponent(clock);
         }
+        if (!m_options.weather.empty())
+        {
+            Geni::WeatherState state;
+            if (m_options.weather == "rain")
+            {
+                state.cloudCover = 0.85f;
+                state.fog = 0.3f;
+                state.precipitation = 0.8f;
+                state.wind = glm::vec3(2.0f, 0.0f, 1.0f);
+            }
+            else if (m_options.weather == "snow")
+            {
+                state.cloudCover = 0.6f;
+                state.fog = 0.2f;
+                state.precipitation = 0.7f;
+                state.snow = true;
+            }
+            else if (m_options.weather == "fog")
+            {
+                state.cloudCover = 0.3f;
+                state.fog = 1.0f;
+            }
+            else
+            {
+                GENI_LOG_ERROR("--weather must be rain, snow or fog");
+                return false;
+            }
+            auto *weather = new Geni::WeatherComponent();
+            weather->SetTarget(state);
+            m_scene->CreateObject("Weather")->AddComponent(weather);
+        }
 
         auto &streamer = engine.GetWorldStreamer();
         const Geni::WorldDescription &world = *streamer.GetDescription();

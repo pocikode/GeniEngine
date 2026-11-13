@@ -26,6 +26,8 @@ struct WorldOptions
     // Hours (0..24): a stopped TimeOfDayComponent on the sun (docs/design/0018). Negative:
     // the world's authored sun.
     double timeOfDay = -1.0;
+    // A WeatherComponent preset (docs/design/0020): rain, snow or fog; empty: clear.
+    std::string weather;
 };
 
 int RunWorld(const WorldOptions &options);

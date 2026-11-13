@@ -23,6 +23,7 @@ add_executable(geni_tests
   test_2d.cpp
   test_time_of_day.cpp
   test_particles.cpp
+  test_weather.cpp
 )
 geni_embed_shaders(geni_tests
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders

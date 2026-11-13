@@ -90,6 +90,21 @@ if(GENI_BUILD_TESTS)
              -DMAX_FRACTION=0.02
              -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
   set_tests_properties(screenshot_world_dusk PROPERTIES LABELS "gpu" TIMEOUT 300)
+  # The same view in rain (docs/design/0020): overcast sky, fog, and rain drawn around the
+  # camera. Thin streaks rasterise slightly differently between GPUs, hence the looser
+  # pixel fraction.
+  add_test(NAME screenshot_world_rain
+           COMMAND ${CMAKE_COMMAND}
+             -DSAMPLE=$<TARGET_FILE:city>
+             "-DSAMPLE_ARGS=--world;--route;--speed;0;--distance;1200;--weather;rain"
+             -DFRAMES=10
+             -DREFERENCE=${PROJECT_SOURCE_DIR}/tests/reference/world_metro_rain.png
+             -DCOMPARE=$<TARGET_FILE:image_compare>
+             -DOUT_DIR=${CMAKE_BINARY_DIR}/screenshots
+             -DTOLERANCE=12
+             -DMAX_FRACTION=0.04
+             -P ${PROJECT_SOURCE_DIR}/tests/run_screenshot.cmake)
+  set_tests_properties(screenshot_world_rain PROPERTIES LABELS "gpu" TIMEOUT 300)
 endif()
 
 if(GENI_BUILD_TESTS)

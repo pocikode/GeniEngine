@@ -720,6 +720,9 @@ void Renderer::PrepareFrame(
     m_renderOrigin = camera.position;
     m_frameAtmosphere = m_hasAtmosphereOverride ? m_atmosphereOverride : GetConfigAtmosphere();
     m_hasAtmosphereOverride = false;
+    m_frameWeather = m_hasWeather ? m_weather : WeatherState();
+    m_hasWeather = false;
+    const float sunScale = ApplyWeather(m_frameWeather, m_frameAtmosphere);
 
     // Night-only lights follow the darkness; at zero they are left out of the cluster grid.
     const float darkness = glm::clamp(m_frameAtmosphere.darkness, 0.0f, 1.0f);
@@ -730,6 +733,10 @@ void Renderer::PrepareFrame(
         if (!light.nightOnly)
         {
             m_frameLights.push_back(light);
+            if (light.type == LightType::Directional)
+            {
+                m_frameLights.back().color *= sunScale;
+            }
         }
         else if (darkness > 0.0f)
         {

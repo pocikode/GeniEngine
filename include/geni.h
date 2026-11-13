@@ -69,6 +69,8 @@
 #include "scene/components/TilemapComponent.h"
 #include "scene/components/TimeOfDayComponent.h"
 #include "scene/components/ParticleEmitterComponent.h"
+#include "scene/components/WeatherComponent.h"
+#include "render/Weather.h"
 #include "scene/components/VehicleComponent.h"
 #include "script/ScriptSystem.h"
 #include "ui/GameUI.h"
