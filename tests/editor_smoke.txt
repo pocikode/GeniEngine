@@ -91,6 +91,10 @@ expect material materials/Block.mat
 undo
 expect dirty 0
 
+# Animation graph editor (docs/design/0028).
+animgraph animations/character.animgraph
+expect states 2
+
 # Play in editor: the scene simulates, then comes back as it was.
 select Ground
 play

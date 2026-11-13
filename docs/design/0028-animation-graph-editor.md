@@ -1,6 +1,6 @@
 # 0028: Animation graph editor
 
-Milestone: After v0.1 (visual tools) · Status: Accepted · Last updated: 2026-11-13
+Milestone: After v0.1 (visual tools) · Status: Done · Last updated: 2026-11-13
 
 ## Problem
 
@@ -28,7 +28,7 @@ file saves, reverts and undoes. Unit tests cover the editing logic.
   one are laid out in a row. `Validate` runs `AnimationGraph::Parse` and returns its error.
 - **Animation Graph panel** (`EditorAnimGraph.cpp`, Window menu): a canvas drawn with
   ImGui draw lists (no node-editor library is vendored): boxes, arrows with arrowheads
-  (from "Any" for transitions with `from: "any"`), pan with the middle or right mouse.
+  (from "Any" for transitions with `from: "*"`), pan with the middle or right mouse.
   The right column edits the selection. Save, Revert, Undo (a history of the document's
   JSON); the parser's error is shown in red and Save is refused while there is one.
 

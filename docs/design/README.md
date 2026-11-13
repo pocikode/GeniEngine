@@ -33,7 +33,7 @@ One page per major system, written **before** the system is built (ROADMAP rule 
 | 0025 | [Traffic and pedestrians](0025-traffic-and-pedestrians.md) | After v0.1 | Done |
 | 0026 | [Timeline for cutscenes](0026-timeline.md) | After v0.1 | Done |
 | 0027 | [Material editor](0027-material-editor.md) | After v0.1 | Done |
-| 0028 | [Animation graph editor](0028-animation-graph-editor.md) | After v0.1 | Accepted |
+| 0028 | [Animation graph editor](0028-animation-graph-editor.md) | After v0.1 | Done |
 
 Status is one of: **Proposed** (written, not yet started), **Accepted** (work started; changes to the page need a reason), **Done** (shipped; the page describes what exists), **Superseded** (replaced; link to the replacement).
 

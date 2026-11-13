@@ -10,6 +10,7 @@
 #include "core/EditorDocument.h"
 #include "core/Gizmo.h"
 #include "core/Project.h"
+#include "core/AnimGraphEditing.h"
 #include "core/MaterialEditing.h"
 #include "core/TimelineEditing.h"
 
@@ -237,6 +238,55 @@ TEST_SUITE("editor commands")
 
 TEST_SUITE("editor document")
 {
+    TEST_CASE("an animation graph edits stay consistent and valid")
+    {
+        AnimGraphDocument graph;
+        REQUIRE(graph.Load(nlohmann::ordered_json::parse(R"({
+            "parameters": { "speed": 0.0, "grounded": true, "jump": "trigger" },
+            "initial": "move",
+            "states": { "move": { "clip": "Walk" }, "jump": { "clip": "Jump", "loop": false } },
+            "transitions": [ { "from": "move", "to": "jump", "when": [["jump"]], "duration": 0.08 } ],
+            "custom": 42 })")));
+        CHECK(graph.Validate().empty());
+        CHECK(graph.GetStates() == std::vector<std::string>{"move", "jump"});
+
+        // Renaming follows into transitions, the initial state and positions.
+        graph.SetPosition("move", glm::vec2(10, 20));
+        REQUIRE(graph.RenameState("move", "locomotion"));
+        CHECK(graph.GetInitial() == "locomotion");
+        CHECK(graph.GetTransitions()[0].from == "locomotion");
+        CHECK(graph.GetPosition("locomotion") == glm::vec2(10, 20));
+        CHECK_FALSE(graph.RenameState("jump", "locomotion"));
+
+        const int back = graph.AddTransition("jump", "locomotion");
+        REQUIRE(back == 1);
+        AnimTransitionView view = graph.GetTransitions()[1];
+        view.conditions = "grounded == true; speed > 0.5";
+        view.exitTime = 0.35f;
+        REQUIRE(graph.SetTransition(back, view));
+        CHECK(graph.GetTransitions()[1].conditions == "grounded == true; speed > 0.5");
+        CHECK(graph.Validate().empty());
+        view.conditions = "speed >";
+        std::string error;
+        CHECK_FALSE(graph.SetTransition(back, view, &error));
+        CHECK_FALSE(error.empty());
+        CHECK(graph.AddTransition("locomotion", "locomotion") < 0);
+        CHECK(graph.AddTransition("*", "jump") == 2);
+
+        // A state without a clip is caught by the runtime's parser.
+        REQUIRE(graph.AddState("crouch", ""));
+        CHECK_FALSE(graph.Validate().empty());
+        REQUIRE(graph.SetStateClip("crouch", "Crouch"));
+        CHECK(graph.Validate().empty());
+
+        // Removing a state removes its transitions; the last state cannot go.
+        REQUIRE(graph.RemoveState("jump"));
+        CHECK(graph.GetTransitions().empty());
+        CHECK(graph.GetJson()["custom"] == 42); // fields the editor does not know survive
+        REQUIRE(graph.RemoveState("crouch"));
+        CHECK_FALSE(graph.RemoveState("locomotion"));
+    }
+
     TEST_CASE("a material file loads with every standard parameter, edits and saves back")
     {
         MaterialSource source;

@@ -221,6 +221,10 @@ void EditorApp::OpenAssetFile(const AssetFile &file)
     {
         OpenMaterial(file.path);
     }
+    else if (std::filesystem::path(file.path).extension() == ".animgraph")
+    {
+        OpenAnimGraph(file.path);
+    }
     else if (icon == Icon::Scene || icon == Icon::Prefab)
     {
         RequestAction(PendingAction::OpenScene, file.path);

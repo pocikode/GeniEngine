@@ -112,6 +112,7 @@ void EditorApp::Update(float deltaTime)
     DrawWorldPanel();
     DrawTimelinePanel();
     DrawMaterialPanel();
+    DrawAnimGraphPanel();
     UpdatePendingMaterial();
     DrawHierarchy();
     DrawInspector();
@@ -470,6 +471,7 @@ void EditorApp::DrawMenuBar()
         ImGui::MenuItem("World", nullptr, &m_showWorld, m_document->IsWorldDocument());
         ImGui::MenuItem("Timeline", nullptr, &m_showTimeline);
         ImGui::MenuItem("Material", nullptr, &m_showMaterial, !m_materialPath.empty());
+        ImGui::MenuItem("Animation Graph", nullptr, &m_showAnimGraph, !m_graphPath.empty());
         ImGui::Separator();
         bool stats = Engine::GetInstance().GetDebugOverlay().IsVisible();
         if (ImGui::MenuItem("Engine Stats", "F1", &stats))
@@ -1302,6 +1304,11 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
         }
         return m_document->SetProperty(*primary, component, property, value) || fail("the property did not change");
     }
+    if (command == "animgraph")
+    {
+        // animgraph <path>: opens a graph in the Animation Graph panel.
+        return OpenAnimGraph(rest()) || fail("could not open the graph");
+    }
     if (command == "make-material")
     {
         // make-material: an editable .mat for the selection's first MeshComponent.
@@ -1478,6 +1485,17 @@ bool EditorApp::RunScriptCommand(const std::string &line, std::string &error)
     {
         std::string what;
         stream >> what;
+        if (what == "states")
+        {
+            // expect states <count>: of the graph open in the Animation Graph panel, which
+            // must also be valid.
+            long expected = 0;
+            stream >> expected;
+            const long actual = static_cast<long>(m_graph.GetStates().size());
+            const std::string problem = m_graph.Validate();
+            return (actual == expected && problem.empty()) ||
+                   fail("expected " + std::to_string(expected) + " valid states, found " + std::to_string(actual) + " " + problem);
+        }
         if (what == "material")
         {
             // expect material <source path>: the selection's first mesh uses that material.
